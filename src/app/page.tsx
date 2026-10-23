@@ -1,10 +1,11 @@
 import { connection } from "next/server";
-import { getDashboardData } from "@/app/actions";
+import { getDashboardData, getSubjectStats } from "@/app/actions";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import {
   ReadingWithSubject,
   SpacedReviewWithReading,
   Deliverable,
+  SubjectStat,
 } from "@/types/database";
 
 export const instant = false;
@@ -17,22 +18,30 @@ export default async function HomePage() {
   let tier4: ReadingWithSubject[] = [];
   let readingDeliverableMap: Record<string, string> = {};
   let allDeliverables: Deliverable[] = [];
+  let subjectStats: SubjectStat[] = [];
   let connectionError: string | null = null;
 
   try {
-    const data = await getDashboardData();
+    const [data, stats] = await Promise.all([
+      getDashboardData(),
+      getSubjectStats(),
+    ]);
+
     tier1 = (data.tier1 as unknown as SpacedReviewWithReading[]) || [];
     tier2 = (data.tier2 as unknown as ReadingWithSubject[]) || [];
     tier3 = (data.tier3 as unknown as ReadingWithSubject[]) || [];
     tier4 = (data.tier4 as unknown as ReadingWithSubject[]) || [];
     readingDeliverableMap = data.readingDeliverableMap || {};
     allDeliverables = data.allDeliverables || [];
+    subjectStats = stats || [];
+
     if (data.schemaError) {
       connectionError = data.schemaError;
     }
   } catch (err: unknown) {
     console.warn("Aviso ao carregar dados do Dashboard Cascata:", err);
-    connectionError = err instanceof Error ? err.message : "Falha na conexão com o banco.";
+    connectionError =
+      err instanceof Error ? err.message : "Falha na conexão com o banco.";
   }
 
   return (
@@ -43,7 +52,11 @@ export default async function HomePage() {
             <strong>Aviso de Banco:</strong> {connectionError}.
           </span>
           <span className="text-muted-foreground">
-            Execute o script atualizado em <code className="bg-amber-100 dark:bg-amber-900/40 px-1 py-0.5 rounded font-mono">supabase/schema.sql</code> no SQL Editor do Supabase para criar as tabelas e recarregar o schema cache.
+            Execute o script atualizado em{" "}
+            <code className="bg-amber-100 dark:bg-amber-900/40 px-1 py-0.5 rounded font-mono">
+              supabase/schema.sql
+            </code>{" "}
+            no SQL Editor do Supabase.
           </span>
         </div>
       )}
@@ -54,6 +67,7 @@ export default async function HomePage() {
         tier4={tier4}
         readingDeliverableMap={readingDeliverableMap}
         allDeliverables={allDeliverables}
+        subjectStats={subjectStats}
       />
     </div>
   );

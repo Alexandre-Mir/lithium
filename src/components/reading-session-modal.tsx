@@ -34,7 +34,7 @@ export function ReadingSessionModal({
   const [loading, setLoading] = useState(false);
   const [newSpeedResult, setNewSpeedResult] = useState<number | null>(null);
 
-  // Timer embutido (Pomodoro / Cronômetro opcional)
+  // Timer embutido
   const [timerRunning, setTimerRunning] = useState(false);
   const [secondsElapsed, setSecondsElapsed] = useState(0);
 
@@ -44,7 +44,6 @@ export function ReadingSessionModal({
       interval = setInterval(() => {
         setSecondsElapsed((prev) => {
           const next = prev + 1;
-          // Atualiza durationMinutes a cada minuto
           if (next % 60 === 0) {
             setDurationMinutes(Math.max(1, Math.floor(next / 60)));
           }
@@ -57,7 +56,6 @@ export function ReadingSessionModal({
     };
   }, [timerRunning]);
 
-  // Reset ao abrir
   useEffect(() => {
     if (isOpen) {
       setDurationMinutes(25);
@@ -88,7 +86,7 @@ export function ReadingSessionModal({
     const pages = typeof pagesRead === "number" ? pagesRead : 0;
 
     if (duration <= 0 || pages <= 0) {
-      alert("Por favor, preencha valores válidos de duração e páginas lidas.");
+      alert("Preencha valores válidos de duração e páginas.");
       return;
     }
 
@@ -104,7 +102,7 @@ export function ReadingSessionModal({
       onSuccess?.();
       setTimeout(() => {
         onClose();
-      }, 1600);
+      }, 1500);
     } catch (err) {
       console.error(err);
       alert("Erro ao registrar sessão de leitura.");
@@ -115,7 +113,6 @@ export function ReadingSessionModal({
 
   if (!reading) return null;
 
-  // Cálculo prévio da velocidade instantânea desta sessão
   const previewSpeed =
     typeof durationMinutes === "number" &&
     typeof pagesRead === "number" &&
@@ -125,13 +122,13 @@ export function ReadingSessionModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md rounded-md border border-gray-200 dark:border-gray-800">
         <DialogHeader>
-          <div className="flex items-center gap-2 text-indigo-600 font-semibold text-xs tracking-wider uppercase mb-1">
-            <Zap className="w-4 h-4 text-amber-500" />
-            Sessão de Calibração Cognitiva
+          <div className="flex items-center gap-1.5 text-gray-500 font-mono text-[11px] uppercase tracking-wider mb-1">
+            <Zap className="w-3.5 h-3.5 text-indigo-500" />
+            Calibração Cognitiva
           </div>
-          <DialogTitle className="text-xl font-bold">
+          <DialogTitle className="text-base font-bold">
             Registrar Sessão de Leitura
           </DialogTitle>
           <DialogDescription className="line-clamp-1 text-xs">
@@ -140,40 +137,39 @@ export function ReadingSessionModal({
         </DialogHeader>
 
         {newSpeedResult !== null ? (
-          <div className="py-6 flex flex-col items-center justify-center text-center space-y-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800">
-            <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center animate-bounce">
-              <Check className="w-6 h-6" />
+          <div className="py-4 flex flex-col items-center justify-center text-center space-y-2 bg-emerald-50 dark:bg-emerald-950/40 rounded border border-emerald-200 dark:border-emerald-800">
+            <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+              <Check className="w-4 h-4" />
             </div>
-            <h4 className="font-bold text-emerald-900 dark:text-emerald-100 text-lg">
-              Velocidade Calibrada!
+            <h4 className="font-bold text-xs text-emerald-900 dark:text-emerald-100">
+              Velocidade Atualizada!
             </h4>
-            <p className="text-xs text-emerald-700 dark:text-emerald-300 max-w-xs">
-              Nova taxa calculada:{" "}
-              <strong className="font-mono text-base">{newSpeedResult} páginas/hora</strong>.
-              As projeções do seu Dashboard e Biblioteca foram atualizadas em tempo real.
+            <p className="text-xs text-emerald-700 dark:text-emerald-300">
+              Nova velocidade média calibrada:{" "}
+              <strong className="font-mono">{newSpeedResult} p/h</strong>
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Cronômetro Opcional */}
-            <div className="rounded-xl border bg-muted/30 p-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="font-mono text-2xl font-black text-slate-800 dark:text-slate-100 tracking-wider">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            {/* Cronômetro Flat */}
+            <div className="rounded border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="font-mono text-xl font-bold text-gray-900 dark:text-gray-100">
                   {formatTimer(secondsElapsed)}
                 </div>
-                <span className="text-xs text-muted-foreground">Cronômetro</span>
+                <span className="text-[11px] text-gray-500 font-mono">Cronômetro</span>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 {!timerRunning ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => setTimerRunning(true)}
-                    className="text-emerald-600 hover:text-emerald-700"
+                    className="h-7 text-xs rounded border-gray-300 dark:border-gray-700"
                   >
-                    <Play className="w-3.5 h-3.5 mr-1" /> Iniciar
+                    <Play className="w-3 h-3 mr-1 text-emerald-600" /> Iniciar
                   </Button>
                 ) : (
                   <Button
@@ -181,8 +177,9 @@ export function ReadingSessionModal({
                     size="sm"
                     variant="destructive"
                     onClick={handleStopAndFill}
+                    className="h-7 text-xs rounded"
                   >
-                    <Pause className="w-3.5 h-3.5 mr-1" /> Pausar & Usar
+                    <Pause className="w-3 h-3 mr-1" /> Usar tempo
                   </Button>
                 )}
                 {secondsElapsed > 0 && !timerRunning && (
@@ -191,19 +188,19 @@ export function ReadingSessionModal({
                     size="icon-sm"
                     variant="ghost"
                     onClick={() => setSecondsElapsed(0)}
+                    className="h-7 w-7"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
+                    <RotateCcw className="w-3 h-3" />
                   </Button>
                 )}
               </div>
             </div>
 
             {/* Inputs de Duração e Páginas */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="duration" className="text-xs font-semibold flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                  Tempo Gasto (minutos)
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="duration" className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  Tempo (minutos)
                 </Label>
                 <Input
                   id="duration"
@@ -214,13 +211,12 @@ export function ReadingSessionModal({
                   onChange={(e) =>
                     setDurationMinutes(e.target.value ? parseInt(e.target.value) : "")
                   }
-                  className="font-mono"
+                  className="font-mono text-xs h-8 rounded border-gray-300 dark:border-gray-700"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="pages" className="text-xs font-semibold flex items-center gap-1">
-                  <BookOpen className="w-3.5 h-3.5 text-muted-foreground" />
+              <div className="space-y-1">
+                <Label htmlFor="pages" className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                   Páginas Lidas
                 </Label>
                 <Input
@@ -232,21 +228,15 @@ export function ReadingSessionModal({
                   onChange={(e) =>
                     setPagesRead(e.target.value ? parseInt(e.target.value) : "")
                   }
-                  className="font-mono"
+                  className="font-mono text-xs h-8 rounded border-gray-300 dark:border-gray-700"
                 />
               </div>
             </div>
 
-            {/* Prévia da Calibração */}
             {previewSpeed && (
-              <div className="rounded-lg bg-indigo-50 dark:bg-indigo-950/40 p-3 text-xs flex items-center justify-between text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>Velocidade desta sessão:</span>
-                </div>
-                <span className="font-mono font-bold text-sm">
-                  {previewSpeed} p/h
-                </span>
+              <div className="rounded bg-gray-100 dark:bg-gray-800 px-2.5 py-1.5 text-xs flex items-center justify-between font-mono text-gray-700 dark:text-gray-300">
+                <span>Taxa desta sessão:</span>
+                <span className="font-bold">{previewSpeed} p/h</span>
               </div>
             )}
 
@@ -256,15 +246,16 @@ export function ReadingSessionModal({
                 variant="outline"
                 onClick={onClose}
                 disabled={loading}
+                className="h-8 text-xs rounded"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 disabled={loading || !durationMinutes || !pagesRead}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                className="bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded shadow-none"
               >
-                {loading ? "Calibrando..." : "Salvar & Calibrar"}
+                {loading ? "Salvando..." : "Salvar & Calibrar"}
               </Button>
             </DialogFooter>
           </form>

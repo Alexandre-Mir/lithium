@@ -27,12 +27,11 @@ import {
   Check,
   Book,
   FileText,
-  Calendar,
-  Sparkles,
+  Clock,
   Zap,
   CheckCircle2,
-  Clock,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 
 interface ReadingsTableProps {
@@ -50,13 +49,16 @@ export function ReadingsTable({
 }: ReadingsTableProps) {
   const [readings, setReadings] = useState<Reading[]>(initialReadings);
   const [loading, setLoading] = useState(false);
+  const [fetchingMetadata, setFetchingMetadata] = useState(false);
 
   // Quick Add Row state
   const [newSubjectId, setNewSubjectId] = useState(subjects[0]?.id || "");
-  const [newTitle, setNewTitle] = useState("");
-  const [newAuthor, setNewAuthor] = useState("");
   const [newType, setNewType] = useState<ReadingType>("book");
+  const [newTitle, setNewTitle] = useState("");
+  const [newChapterTitle, setNewChapterTitle] = useState("");
+  const [newAuthor, setNewAuthor] = useState("");
   const [newIsbn, setNewIsbn] = useState("");
+  const [newDoi, setNewDoi] = useState("");
   const [newFullPages, setNewFullPages] = useState<number | "">("");
   const [newReadFull, setNewReadFull] = useState(false);
   const [newTargetPages, setNewTargetPages] = useState<number | "">(30);
@@ -90,11 +92,76 @@ export function ReadingsTable({
         return cur;
       }
     }
-    // Se for anterior ao primeiro deliverable
     if (deadline <= subDeliverables[0].date) {
       return subDeliverables[0];
     }
     return null;
+  };
+
+  // ============================================================
+  // FETCH AUTOMÁTICO: GOOGLE BOOKS API (onBlur do ISBN)
+  // ============================================================
+  const handleIsbnBlur = async () => {
+    const cleanIsbn = newIsbn.replace(/[^0-9X]/gi, "");
+    if (!cleanIsbn || cleanIsbn.length < 10) return;
+
+    try {
+      setFetchingMetadata(true);
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`);
+      const data = await res.json();
+      const volumeInfo = data.items?.[0]?.volumeInfo;
+      if (volumeInfo) {
+        if (volumeInfo.title && !newTitle) {
+          setNewTitle(volumeInfo.title);
+        }
+        if (volumeInfo.authors && volumeInfo.authors.length > 0 && !newAuthor) {
+          setNewAuthor(volumeInfo.authors.join(", "));
+        }
+        if (volumeInfo.pageCount && !newFullPages) {
+          setNewFullPages(volumeInfo.pageCount);
+        }
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar ISBN no Google Books:", err);
+    } finally {
+      setFetchingMetadata(false);
+    }
+  };
+
+  // ============================================================
+  // FETCH AUTOMÁTICO: CROSSREF API (onBlur do DOI)
+  // ============================================================
+  const handleDoiBlur = async () => {
+    const cleanDoi = newDoi.trim().replace(/^https?:\/\/doi\.org\//i, "");
+    if (!cleanDoi || cleanDoi.length < 5) return;
+
+    try {
+      setFetchingMetadata(true);
+      const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const message = json.message;
+      if (message) {
+        // Título do artigo
+        if (message.title && message.title.length > 0 && !newTitle) {
+          setNewTitle(message.title[0]);
+        }
+        // Autor(es)
+        if (message.author && Array.isArray(message.author) && !newAuthor) {
+          const authorNames = message.author
+            .map((a: any) => [a.given, a.family].filter(Boolean).join(" "))
+            .filter(Boolean)
+            .join(", ");
+          if (authorNames) {
+            setNewAuthor(authorNames);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar DOI na Crossref:", err);
+    } finally {
+      setFetchingMetadata(false);
+    }
   };
 
   const handleCreate = async () => {
@@ -107,9 +174,11 @@ export function ReadingsTable({
       const created = await createReading({
         subject_id: newSubjectId,
         title: newTitle.trim(),
+        chapter_title: newType === "book" ? newChapterTitle.trim() || null : null,
         author: newAuthor.trim() || null,
         type: newType,
-        isbn: newIsbn.trim() || null,
+        isbn: newType === "book" ? newIsbn.trim() || null : null,
+        doi: newType === "article" ? newDoi.trim() || null : null,
         full_book_pages: fullP,
         target_pages: targetP,
         read_full_book: newReadFull,
@@ -123,8 +192,10 @@ export function ReadingsTable({
           [...prev, created].sort((a, b) => a.deadline.localeCompare(b.deadline))
         );
         setNewTitle("");
+        setNewChapterTitle("");
         setNewAuthor("");
         setNewIsbn("");
+        setNewDoi("");
         setNewFullPages("");
         setNewReadFull(false);
         setNewTargetPages(30);
@@ -141,7 +212,6 @@ export function ReadingsTable({
 
   const handleToggleRead = async (reading: Reading) => {
     const nextStatus = !reading.is_read;
-    // Otimista
     setReadings((prev) =>
       prev.map((r) => (r.id === reading.id ? { ...r, is_read: nextStatus } : r))
     );
@@ -154,7 +224,6 @@ export function ReadingsTable({
       onRefresh?.();
     } catch (err) {
       console.error(err);
-      // Reverter
       setReadings((prev) =>
         prev.map((r) => (r.id === reading.id ? { ...r, is_read: reading.is_read } : r))
       );
@@ -201,22 +270,55 @@ export function ReadingsTable({
 
   return (
     <div className="space-y-4">
-      {/* Quick Add Row */}
-      <div className="rounded-xl border bg-card p-4 shadow-sm">
-        <h3 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-2 mb-3">
-          <Book className="w-4 h-4 text-emerald-500" />
-          Inserção Rápida de Leitura (Livro ou Artigo)
-        </h3>
+      {/* Formulário Dinâmico de Inserção - Flat Design */}
+      <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-bold tracking-wider text-gray-500 dark:text-gray-400 uppercase flex items-center gap-2">
+            Inserção Rápida de Leitura
+            {fetchingMetadata && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-normal text-indigo-600 dark:text-indigo-400">
+                <Loader2 className="w-3 h-3 animate-spin" /> Buscando metadados...
+              </span>
+            )}
+          </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
+          {/* Seletor Dinâmico de Tipo: Livro vs Artigo */}
+          <div className="flex rounded border border-gray-200 dark:border-gray-800 p-0.5 bg-gray-50 dark:bg-gray-950">
+            <button
+              type="button"
+              onClick={() => setNewType("book")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                newType === "book"
+                  ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 font-semibold"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
+              }`}
+            >
+              <Book className="w-3 h-3" /> Livro
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewType("article")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                newType === "article"
+                  ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 font-semibold"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
+              }`}
+            >
+              <FileText className="w-3 h-3" /> Artigo
+            </button>
+          </div>
+        </div>
+
+        {/* Linha 1: Campos Específicos por Tipo */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+          <div className="md:col-span-3">
+            <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
               Disciplina
             </label>
             <select
               value={newSubjectId}
               onChange={(e) => setNewSubjectId(e.target.value)}
-              className="w-full h-9 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus-visible:ring-1 focus-visible:ring-ring"
+              className="w-full h-8 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 py-1 text-xs"
             >
               {subjects.map((sub) => (
                 <option key={sub.id} value={sub.id}>
@@ -226,173 +328,193 @@ export function ReadingsTable({
             </select>
           </div>
 
-          <div className="md:col-span-3">
-            <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-              Título
-            </label>
-            <Input
-              placeholder="Ex: Cap. 4 - Atenção e Memória"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              className="h-9 text-xs"
-            />
-          </div>
+          {newType === "book" ? (
+            <>
+              {/* LIVRO: ISBN com onBlur, Título do Livro, Título do Capítulo */}
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
+                  ISBN (auto-preenche)
+                </label>
+                <Input
+                  placeholder="Ex: 9788539003839"
+                  value={newIsbn}
+                  onChange={(e) => setNewIsbn(e.target.value)}
+                  onBlur={handleIsbnBlur}
+                  className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
+                />
+              </div>
 
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-              Autor
+              <div className="md:col-span-4">
+                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
+                  Título do Livro *
+                </label>
+                <Input
+                  placeholder="Nome do Livro"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="h-8 text-xs rounded border-gray-300 dark:border-gray-700"
+                />
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
+                  Título do Capítulo (Opcional)
+                </label>
+                <Input
+                  placeholder="Ex: Cap. 3 - Carga Cognitiva"
+                  value={newChapterTitle}
+                  onChange={(e) => setNewChapterTitle(e.target.value)}
+                  className="h-8 text-xs rounded border-gray-300 dark:border-gray-700"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              {/* ARTIGO: DOI com onBlur, Título do Artigo */}
+              <div className="md:col-span-3">
+                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
+                  DOI (auto-preenche)
+                </label>
+                <Input
+                  placeholder="Ex: 10.1037/0033-295X.101.2.346"
+                  value={newDoi}
+                  onChange={(e) => setNewDoi(e.target.value)}
+                  onBlur={handleDoiBlur}
+                  className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
+                />
+              </div>
+
+              <div className="md:col-span-6">
+                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
+                  Título do Artigo *
+                </label>
+                <Input
+                  placeholder="Nome do Artigo Científico"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="h-8 text-xs rounded border-gray-300 dark:border-gray-700"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Linha 2: Autor, Páginas, Deadline e Botão */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end mt-2.5 pt-2.5 border-t border-gray-100 dark:border-gray-800">
+          <div className="md:col-span-3">
+            <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
+              Autor(es)
             </label>
             <Input
-              placeholder="Ex: Daniel Kahneman"
+              placeholder="Ex: John Sweller"
               value={newAuthor}
               onChange={(e) => setNewAuthor(e.target.value)}
-              className="h-9 text-xs"
+              className="h-8 text-xs rounded border-gray-300 dark:border-gray-700"
             />
           </div>
 
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-              Tipo
-            </label>
-            <div className="flex rounded-md border p-0.5 bg-muted/30">
-              <button
-                type="button"
-                onClick={() => setNewType("book")}
-                className={`flex-1 flex items-center justify-center gap-1 py-1 rounded text-xs font-medium transition-colors ${
-                  newType === "book"
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Book className="w-3 h-3" /> Livro
-              </button>
-              <button
-                type="button"
-                onClick={() => setNewType("article")}
-                className={`flex-1 flex items-center justify-center gap-1 py-1 rounded text-xs font-medium transition-colors ${
-                  newType === "article"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <FileText className="w-3 h-3" /> Artigo
-              </button>
-            </div>
-          </div>
+          {newType === "book" && (
+            <>
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
+                  Total Livro (Págs)
+                </label>
+                <Input
+                  type="number"
+                  placeholder="Ex: 350"
+                  value={newFullPages}
+                  onChange={(e) => {
+                    const val = e.target.value ? parseInt(e.target.value) : "";
+                    setNewFullPages(val);
+                    if (newReadFull && typeof val === "number") {
+                      setNewTargetPages(val);
+                    }
+                  }}
+                  className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
+                />
+              </div>
 
-          <div className="md:col-span-3">
-            <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-              ISBN (se livro)
-            </label>
-            <Input
-              placeholder="Ex: 9788539003839"
-              value={newIsbn}
-              onChange={(e) => setNewIsbn(e.target.value)}
-              disabled={newType !== "book"}
-              className="h-9 text-xs font-mono"
-            />
-          </div>
+              <div className="md:col-span-2 flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800/60 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 h-8">
+                <Switch
+                  id="new-full-book"
+                  checked={newReadFull}
+                  onCheckedChange={(checked) => {
+                    setNewReadFull(checked);
+                    if (checked && typeof newFullPages === "number") {
+                      setNewTargetPages(newFullPages);
+                    }
+                  }}
+                />
+                <label
+                  htmlFor="new-full-book"
+                  className="text-[11px] font-medium cursor-pointer text-gray-700 dark:text-gray-300 truncate"
+                >
+                  Livro inteiro
+                </label>
+              </div>
+            </>
+          )}
 
-          {/* Segunda linha de opções de páginas e data */}
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-              Total Livro (Págs)
+          <div className={newType === "book" ? "md:col-span-2" : "md:col-span-3"}>
+            <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
+              Meta Páginas *
             </label>
             <Input
               type="number"
-              placeholder="Ex: 350"
-              value={newFullPages}
-              onChange={(e) => {
-                const val = e.target.value ? parseInt(e.target.value) : "";
-                setNewFullPages(val);
-                if (newReadFull && typeof val === "number") {
-                  setNewTargetPages(val);
-                }
-              }}
-              className="h-9 text-xs font-mono"
-            />
-          </div>
-
-          <div className="md:col-span-3 flex items-center gap-2 bg-muted/40 px-3 py-2 rounded-lg border h-9">
-            <Switch
-              id="new-full-book"
-              checked={newReadFull}
-              onCheckedChange={(checked) => {
-                setNewReadFull(checked);
-                if (checked && typeof newFullPages === "number") {
-                  setNewTargetPages(newFullPages);
-                }
-              }}
-            />
-            <label
-              htmlFor="new-full-book"
-              className="text-xs font-medium cursor-pointer text-slate-700 dark:text-slate-300"
-            >
-              Ler livro completo
-            </label>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-              Meta Páginas
-            </label>
-            <Input
-              type="number"
-              placeholder="Ex: 40"
               value={newTargetPages}
               onChange={(e) =>
                 setNewTargetPages(e.target.value ? parseInt(e.target.value) : "")
               }
-              className="h-9 text-xs font-mono"
+              className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
             />
           </div>
 
-          <div className="md:col-span-3">
-            <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-              Deadline da Leitura
+          <div className={newType === "book" ? "md:col-span-2" : "md:col-span-4"}>
+            <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
+              Deadline *
             </label>
             <Input
               type="date"
               value={newDeadline}
               onChange={(e) => setNewDeadline(e.target.value)}
-              className="h-9 text-xs font-mono"
+              className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
             />
           </div>
 
-          <div className="md:col-span-2">
+          <div className={newType === "book" ? "md:col-span-1" : "md:col-span-2"}>
             <Button
               onClick={handleCreate}
               disabled={loading || !newTitle.trim() || !newDeadline || !newSubjectId}
               size="sm"
-              className="w-full h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="w-full h-8 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold rounded shadow-none"
             >
-              <Plus className="w-4 h-4 mr-1" /> Adicionar
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+      {/* Tabela de Leituras - Flat Design */}
+      <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
         <Table>
-          <TableHeader className="bg-muted/50">
-            <TableRow>
-              <TableHead className="w-[50px]">Lido?</TableHead>
-              <TableHead className="w-[140px]">Disciplina</TableHead>
-              <TableHead className="min-w-[200px]">Título / Autor</TableHead>
-              <TableHead className="w-[90px]">Tipo</TableHead>
-              <TableHead className="w-[110px]">Páginas</TableHead>
-              <TableHead className="w-[100px]">Velocidade</TableHead>
-              <TableHead className="w-[130px]">Deadline</TableHead>
-              <TableHead className="min-w-[170px]">Vínculo Cronológico</TableHead>
-              <TableHead className="w-[90px] text-right">Ações</TableHead>
+          <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
+            <TableRow className="border-b border-gray-200 dark:border-gray-800">
+              <TableHead className="w-[30px] p-2 text-center">Status</TableHead>
+              <TableHead className="w-[120px] p-2 text-xs">Disciplina</TableHead>
+              <TableHead className="min-w-[200px] p-2 text-xs">Título / Identificador</TableHead>
+              <TableHead className="w-[80px] p-2 text-xs">Tipo</TableHead>
+              <TableHead className="w-[80px] p-2 text-xs">Págs</TableHead>
+              <TableHead className="w-[90px] p-2 text-xs">Velocidade</TableHead>
+              <TableHead className="w-[100px] p-2 text-xs">Prazo</TableHead>
+              <TableHead className="min-w-[150px] p-2 text-xs">Vínculo</TableHead>
+              <TableHead className="w-[90px] p-2 text-right text-xs">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {readings.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-sm">
-                  Nenhuma leitura cadastrada. Adicione sua primeira leitura acima.
+                <TableCell colSpan={9} className="text-center py-6 text-gray-500 text-xs">
+                  Nenhuma leitura cadastrada.
                 </TableCell>
               </TableRow>
             ) : (
@@ -407,60 +529,38 @@ export function ReadingsTable({
                 return (
                   <TableRow
                     key={reading.id}
-                    className={`hover:bg-muted/30 transition-colors ${
-                      reading.is_read ? "opacity-60 bg-muted/10" : ""
+                    className={`border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors ${
+                      reading.is_read ? "opacity-60 bg-gray-50/50 dark:bg-gray-900/50" : ""
                     }`}
                   >
-                    <TableCell>
+                    <TableCell className="p-2 text-center">
                       <button
                         type="button"
                         onClick={() => handleToggleRead(reading)}
-                        className={`rounded-full p-1 transition-colors ${
+                        className={`transition-colors ${
                           reading.is_read
-                            ? "text-emerald-600 hover:text-emerald-700"
-                            : "text-slate-300 hover:text-slate-500"
+                            ? "text-emerald-600"
+                            : "text-gray-300 hover:text-gray-500"
                         }`}
-                        title={
-                          reading.is_read
-                            ? "Concluído (gatilhos D+1, D+7, D+21 gerados)"
-                            : "Marcar como lido"
-                        }
+                        title={reading.is_read ? "Concluído (D+1, D+7, D+21 gerados)" : "Marcar como lido"}
                       >
-                        <CheckCircle2
-                          className={`w-5 h-5 ${reading.is_read ? "fill-emerald-100" : ""}`}
-                        />
+                        <CheckCircle2 className="w-4 h-4" />
                       </button>
                     </TableCell>
 
-                    <TableCell>
-                      {isEditing ? (
-                        <select
-                          value={editValues.subject_id ?? reading.subject_id}
-                          onChange={(e) =>
-                            setEditValues((prev) => ({ ...prev, subject_id: e.target.value }))
-                          }
-                          className="h-8 w-full rounded border px-2 text-xs bg-background"
-                        >
-                          {subjects.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: sub?.theme_color || "#6366f1" }}
-                          />
-                          <span className="text-xs font-semibold truncate max-w-[110px]">
-                            {sub?.name || "Disciplina"}
-                          </span>
-                        </div>
-                      )}
+                    <TableCell className="p-2">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: sub?.theme_color || "#4f46e5" }}
+                        />
+                        <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[100px]">
+                          {sub?.name || "Disciplina"}
+                        </span>
+                      </div>
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="p-2">
                       {isEditing ? (
                         <div className="space-y-1">
                           <Input
@@ -468,8 +568,7 @@ export function ReadingsTable({
                             onChange={(e) =>
                               setEditValues((prev) => ({ ...prev, title: e.target.value }))
                             }
-                            placeholder="Título"
-                            className="h-7 text-xs"
+                            className="h-6 text-xs rounded"
                           />
                           <Input
                             value={editValues.author ?? reading.author ?? ""}
@@ -477,131 +576,89 @@ export function ReadingsTable({
                               setEditValues((prev) => ({ ...prev, author: e.target.value }))
                             }
                             placeholder="Autor"
-                            className="h-7 text-xs"
+                            className="h-6 text-xs rounded"
                           />
                         </div>
                       ) : (
                         <div>
                           <div
-                            className={`font-semibold text-sm ${
-                              reading.is_read ? "line-through text-muted-foreground" : ""
+                            className={`font-semibold text-xs ${
+                              reading.is_read ? "line-through text-gray-400" : "text-gray-900 dark:text-gray-100"
                             }`}
                           >
                             {reading.title}
                           </div>
+                          {reading.chapter_title && (
+                            <div className="text-[11px] text-gray-600 dark:text-gray-400 font-medium">
+                              ↳ {reading.chapter_title}
+                            </div>
+                          )}
                           {reading.author && (
-                            <div className="text-xs text-muted-foreground italic">
+                            <div className="text-[10px] text-gray-500 italic">
                               por {reading.author}
                             </div>
                           )}
                           {reading.isbn && (
-                            <div className="text-[10px] text-slate-400 font-mono">
+                            <span className="text-[9px] font-mono text-gray-400 block">
                               ISBN: {reading.isbn}
-                            </div>
+                            </span>
                           )}
-                        </div>
-                      )}
-                    </TableCell>
-
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] uppercase font-semibold ${
-                          reading.type === "book"
-                            ? "border-emerald-200 text-emerald-700 bg-emerald-50"
-                            : "border-indigo-200 text-indigo-700 bg-indigo-50"
-                        }`}
-                      >
-                        {reading.type === "book" ? "Livro" : "Artigo"}
-                      </Badge>
-                    </TableCell>
-
-                    <TableCell>
-                      {isEditing ? (
-                        <Input
-                          type="number"
-                          value={editValues.target_pages ?? reading.target_pages}
-                          onChange={(e) =>
-                            setEditValues((prev) => ({
-                              ...prev,
-                              target_pages: parseInt(e.target.value) || 0,
-                            }))
-                          }
-                          className="h-8 text-xs font-mono w-20"
-                        />
-                      ) : (
-                        <div className="font-mono text-xs">
-                          <span className="font-semibold text-slate-900 dark:text-slate-100">
-                            {reading.target_pages}p
-                          </span>
-                          {reading.full_book_pages && (
-                            <span className="text-muted-foreground text-[10px] ml-1">
-                              / {reading.full_book_pages}p
+                          {reading.doi && (
+                            <span className="text-[9px] font-mono text-indigo-500 block truncate max-w-[240px]">
+                              DOI: {reading.doi}
                             </span>
                           )}
                         </div>
                       )}
                     </TableCell>
 
-                    <TableCell>
-                      <div className="flex items-center gap-1 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-                        <Zap className="w-3 h-3 text-amber-500 shrink-0" />
-                        <span>{Number(reading.current_speed_pph).toFixed(1)} p/h</span>
-                      </div>
+                    <TableCell className="p-2">
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] py-0 px-1 border-gray-300 text-gray-700 dark:text-gray-300"
+                      >
+                        {reading.type === "book" ? "Livro" : "Artigo"}
+                      </Badge>
                     </TableCell>
 
-                    <TableCell>
-                      {isEditing ? (
-                        <Input
-                          type="date"
-                          value={editValues.deadline ?? reading.deadline}
-                          onChange={(e) =>
-                            setEditValues((prev) => ({ ...prev, deadline: e.target.value }))
-                          }
-                          className="h-8 text-xs font-mono"
-                        />
-                      ) : (
-                        <div className="font-mono text-xs flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
-                          <span>
-                            {new Date(reading.deadline + "T00:00:00").toLocaleDateString("pt-BR")}
-                          </span>
-                        </div>
-                      )}
+                    <TableCell className="p-2 font-mono text-xs">
+                      {reading.target_pages}p
                     </TableCell>
 
-                    {/* Vínculo Cronológico (Regra de Negócio 4) */}
-                    <TableCell>
+                    <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
+                      {Number(reading.current_speed_pph).toFixed(1)} p/h
+                    </TableCell>
+
+                    <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
+                      {new Date(reading.deadline + "T00:00:00").toLocaleDateString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                      })}
+                    </TableCell>
+
+                    <TableCell className="p-2">
                       {linkedDeliverable ? (
-                        <div className="flex items-center gap-1.5 text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded border">
-                          <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
-                          <span className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[130px]">
+                        <div className="flex items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
+                          <ArrowRight className="w-2.5 h-2.5 text-gray-400 shrink-0" />
+                          <span className="truncate max-w-[120px]">
                             {linkedDeliverable.title}
                           </span>
-                          <span className="text-[10px] font-mono text-muted-foreground shrink-0">
-                            ({new Date(linkedDeliverable.date + "T00:00:00").toLocaleDateString("pt-BR", {
-                              day: "2-digit",
-                              month: "2-digit",
-                            })})
-                          </span>
                         </div>
                       ) : (
-                        <span className="text-[11px] text-muted-foreground italic">
-                          Sem entrega vinculada
-                        </span>
+                        <span className="text-[10px] text-gray-400">—</span>
                       )}
                     </TableCell>
 
-                    <TableCell className="text-right">
+                    <TableCell className="p-2 text-right">
                       {isEditing ? (
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             size="icon-sm"
                             variant="ghost"
                             onClick={() => handleUpdate(reading.id)}
-                            className="text-emerald-600 hover:text-emerald-700"
+                            className="text-emerald-600 h-6 w-6"
                           >
-                            <Check className="w-4 h-4" />
+                            <Check className="w-3.5 h-3.5" />
                           </Button>
                           <Button
                             size="icon-sm"
@@ -610,6 +667,7 @@ export function ReadingsTable({
                               setEditingId(null);
                               setEditValues({});
                             }}
+                            className="h-6 w-6"
                           >
                             ✕
                           </Button>
@@ -622,14 +680,12 @@ export function ReadingsTable({
                             onClick={() => {
                               setEditingId(reading.id);
                               setEditValues({
-                                subject_id: reading.subject_id,
                                 title: reading.title,
+                                chapter_title: reading.chapter_title,
                                 author: reading.author,
-                                target_pages: reading.target_pages,
-                                deadline: reading.deadline,
                               });
                             }}
-                            className="text-xs text-muted-foreground hover:text-foreground"
+                            className="text-xs text-gray-500 hover:text-gray-900 h-6 px-1.5"
                           >
                             Editar
                           </Button>
@@ -637,9 +693,9 @@ export function ReadingsTable({
                             size="icon-sm"
                             variant="ghost"
                             onClick={() => handleDelete(reading.id)}
-                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+                            className="text-red-500 hover:text-red-700 h-6 w-6"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         </div>
                       )}

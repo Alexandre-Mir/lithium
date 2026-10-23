@@ -6,16 +6,7 @@ import { BookCard } from "./book-card";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Search,
-  BookOpen,
-  Filter,
-  CheckCircle2,
-  Clock,
-  Layers,
-  Sparkles,
-} from "lucide-react";
+import { Search, BookOpen } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface LibraryViewProps {
@@ -35,22 +26,18 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
 
-  // Filtros
   const filteredReadings = initialReadings.filter((r) => {
-    // Busca textual por título ou autor
     const matchesSearch =
       r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (r.chapter_title && r.chapter_title.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (r.author && r.author.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    // Filtro por disciplina
     const matchesSubject =
       selectedSubject === "all" || r.subject_id === selectedSubject;
 
-    // Filtro por tipo
     const matchesType =
       selectedType === "all" || r.type === selectedType;
 
-    // Filtro por status
     const matchesStatus =
       selectedStatus === "all" ||
       (selectedStatus === "read" ? r.is_read : !r.is_read);
@@ -74,44 +61,43 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-gray-200 dark:border-gray-800">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2.5">
-            <BookOpen className="w-8 h-8 text-indigo-600" />
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <BookOpen className="w-5 h-5" />
             Biblioteca de Textos
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Visualização em cards com integração ao Google Books para capas e temas coloridos para artigos.
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Cards flat com capa via Google Books (livros) ou tema colorido (artigos).
           </p>
         </div>
 
-        {/* Badges de Resumo */}
-        <div className="flex flex-wrap gap-2 text-xs">
-          <Badge variant="outline" className="px-2.5 py-1 font-mono">
-            <strong>{initialReadings.length}</strong> Total
+        <div className="flex flex-wrap gap-1.5 text-xs font-mono">
+          <Badge variant="outline" className="border-gray-300 px-2 py-0.5">
+            {initialReadings.length} Total
           </Badge>
-          <Badge variant="outline" className="px-2.5 py-1 text-emerald-700 bg-emerald-50 border-emerald-200">
-            <strong>{totalBooks}</strong> Livros
+          <Badge variant="outline" className="border-gray-300 px-2 py-0.5">
+            {totalBooks} Livros
           </Badge>
-          <Badge variant="outline" className="px-2.5 py-1 text-indigo-700 bg-indigo-50 border-indigo-200">
-            <strong>{totalArticles}</strong> Artigos
+          <Badge variant="outline" className="border-gray-300 px-2 py-0.5">
+            {totalArticles} Artigos
           </Badge>
-          <Badge variant="outline" className="px-2.5 py-1 text-slate-700 bg-slate-100">
-            <strong>{totalRead}</strong> Concluídos
+          <Badge variant="outline" className="border-gray-300 px-2 py-0.5">
+            {totalRead} Concluídos
           </Badge>
         </div>
       </div>
 
-      {/* Barra de Filtros e Busca */}
-      <div className="rounded-xl border bg-card p-4 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+      {/* Barra de Filtros */}
+      <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
           <div className="md:col-span-4 relative">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
+            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
             <Input
-              placeholder="Buscar por título ou autor..."
+              placeholder="Buscar por título, capítulo ou autor..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 text-sm"
+              className="pl-8 text-xs h-8 rounded border-gray-300 dark:border-gray-700"
             />
           </div>
 
@@ -119,7 +105,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
             <select
               value={selectedSubject}
               onChange={(e) => setSelectedSubject(e.target.value)}
-              className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring"
+              className="w-full h-8 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 text-xs"
             >
               <option value="all">Todas as Disciplinas</option>
               {subjects.map((s) => (
@@ -134,11 +120,11 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value as "all" | "book" | "article")}
-              className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring"
+              className="w-full h-8 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 text-xs"
             >
               <option value="all">Todos os Tipos</option>
-              <option value="book">Apenas Livros</option>
-              <option value="article">Apenas Artigos</option>
+              <option value="book">Livros</option>
+              <option value="article">Artigos</option>
             </select>
           </div>
 
@@ -146,7 +132,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value as "all" | "pending" | "read")}
-              className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring"
+              className="w-full h-8 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 text-xs"
             >
               <option value="all">Todos os Status</option>
               <option value="pending">Apenas Pendentes</option>
@@ -158,19 +144,17 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
 
       {/* Grid de Cards */}
       {filteredReadings.length === 0 ? (
-        <div className="py-16 text-center rounded-2xl border border-dashed bg-card/50">
-          <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-40" />
-          <h3 className="font-bold text-lg text-slate-700 dark:text-slate-300">
+        <div className="py-12 text-center rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+          <BookOpen className="w-8 h-8 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
+          <h3 className="font-bold text-sm text-gray-700 dark:text-gray-300">
             Nenhuma leitura encontrada
           </h3>
-          <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-            {searchTerm || selectedSubject !== "all" || selectedType !== "all" || selectedStatus !== "all"
-              ? "Tente ajustar os filtros acima para encontrar o que procura."
-              : "Cadastre suas leituras na aba Setup para começar a acompanhar seu progresso."}
+          <p className="text-xs text-gray-500 mt-0.5">
+            Ajuste os filtros ou adicione textos na aba Setup.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredReadings.map((reading) => (
             <BookCard
               key={reading.id}

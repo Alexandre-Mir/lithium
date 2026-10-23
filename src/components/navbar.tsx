@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Brain, LayoutDashboard, Table2, Library, BookOpen } from "lucide-react";
+import { Brain, LayoutDashboard, Table2, Library, Clock } from "lucide-react";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -26,39 +26,45 @@ export function Navbar() {
       icon: Library,
       active: pathname.startsWith("/library"),
     },
+    {
+      label: "Histórico",
+      href: "/history",
+      icon: Clock,
+      active: pathname.startsWith("/history"),
+    },
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-8">
-        <Link href="/" className="flex items-center gap-2.5 font-bold tracking-tight text-lg">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
-            <Brain className="h-5 w-5" />
+    <header className="sticky top-0 z-50 w-full border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+      <div className="container mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-8">
+        <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-sm">
+          <div className="flex h-7 w-7 items-center justify-center rounded bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900">
+            <Brain className="h-4 w-4" />
           </div>
-          <div>
-            <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent font-extrabold text-xl">
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-bold text-base text-gray-900 dark:text-gray-100">
               Lithium
             </span>
-            <span className="hidden sm:inline-block ml-2 text-xs font-normal text-muted-foreground uppercase tracking-widest">
+            <span className="hidden sm:inline-block text-[10px] font-mono text-gray-500 uppercase">
               Motor Cognitivo
             </span>
           </div>
         </Link>
 
-        <nav className="flex items-center gap-1 sm:gap-2">
+        <nav className="flex items-center gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
                   item.active
-                    ? "bg-secondary text-foreground font-semibold shadow-xs"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 hover:text-gray-900"
                 }`}
               >
-                <Icon className={`h-4 w-4 ${item.active ? "text-indigo-600" : ""}`} />
+                <Icon className="h-3.5 w-3.5" />
                 <span>{item.label}</span>
               </Link>
             );

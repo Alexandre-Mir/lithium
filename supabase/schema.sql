@@ -34,12 +34,24 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE IF NOT EXISTS subjects (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name          TEXT NOT NULL,
+  professor     TEXT NOT NULL DEFAULT '',
+  syllabus      TEXT,
+  objectives    TEXT,
+  methodology   TEXT,
+  assessment    TEXT,
   is_autonomous BOOLEAN NOT NULL DEFAULT false,
   class_days    TEXT[] NOT NULL DEFAULT '{}',
   theme_color   TEXT NOT NULL DEFAULT '#6366f1',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Garantir colunas novas caso a tabela já existisse
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS professor TEXT NOT NULL DEFAULT '';
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS syllabus TEXT;
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS objectives TEXT;
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS methodology TEXT;
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS assessment TEXT;
 
 DROP TRIGGER IF EXISTS subjects_updated_at ON subjects;
 CREATE TRIGGER subjects_updated_at
@@ -73,9 +85,11 @@ CREATE TABLE IF NOT EXISTS readings (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   subject_id        UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   title             TEXT NOT NULL,
+  chapter_title     TEXT,
   author            TEXT,
   type              reading_type NOT NULL DEFAULT 'book',
   isbn              TEXT,
+  doi               TEXT,
   full_book_pages   INTEGER,
   target_pages      INTEGER NOT NULL DEFAULT 0,
   read_full_book    BOOLEAN NOT NULL DEFAULT false,
@@ -88,6 +102,8 @@ CREATE TABLE IF NOT EXISTS readings (
 
 -- Garantir colunas novas caso a tabela já tenha sido criada antes
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS author TEXT;
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS chapter_title TEXT;
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS doi TEXT;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS full_book_pages INTEGER;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS read_full_book BOOLEAN NOT NULL DEFAULT false;
 

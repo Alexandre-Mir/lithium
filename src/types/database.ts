@@ -1,5 +1,5 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema)
+// Lithium — Database Types (mirrors Supabase schema v1.1)
 // ============================================================
 
 export type ReadingType = "book" | "article";
@@ -10,6 +10,11 @@ export type ReviewStatus = "pending" | "done";
 export interface Subject {
   id: string;
   name: string;
+  professor: string;
+  syllabus: string | null;
+  objectives: string | null;
+  methodology: string | null;
+  assessment: string | null;
   is_autonomous: boolean;
   class_days: string[];
   theme_color: string;
@@ -30,9 +35,11 @@ export interface Reading {
   id: string;
   subject_id: string;
   title: string;
+  chapter_title: string | null;
   author: string | null;
   type: ReadingType;
   isbn: string | null;
+  doi: string | null;
   full_book_pages: number | null;
   target_pages: number;
   read_full_book: boolean;
@@ -86,88 +93,28 @@ export interface SpacedReviewWithReading extends SpacedReview {
   reading: Reading & { subject: Subject };
 }
 
-// ---- Supabase generated Database type ----
-
-export interface Database {
-  public: {
-    Tables: {
-      subjects: {
-        Row: Subject;
-        Insert: Partial<Subject> & Pick<SubjectInsert, "name">;
-        Update: Partial<Subject>;
-        Relationships: [
-          {
-            foreignKeyName: "";
-            columns: [];
-            isOneToOne: false;
-            referencedRelation: "";
-            referencedColumns: [];
-          }
-        ];
-      };
-      deliverables: {
-        Row: Deliverable;
-        Insert: Partial<Deliverable> & Pick<DeliverableInsert, "subject_id" | "title" | "date">;
-        Update: Partial<Deliverable>;
-        Relationships: [
-          {
-            foreignKeyName: "deliverables_subject_id_fkey";
-            columns: ["subject_id"];
-            isOneToOne: false;
-            referencedRelation: "subjects";
-            referencedColumns: ["id"];
-          }
-        ];
-      };
-      readings: {
-        Row: Reading;
-        Insert: Partial<Reading> & Pick<ReadingInsert, "subject_id" | "title" | "deadline">;
-        Update: Partial<Reading>;
-        Relationships: [
-          {
-            foreignKeyName: "readings_subject_id_fkey";
-            columns: ["subject_id"];
-            isOneToOne: false;
-            referencedRelation: "subjects";
-            referencedColumns: ["id"];
-          }
-        ];
-      };
-      reading_sessions: {
-        Row: ReadingSession;
-        Insert: Partial<ReadingSession> & Pick<ReadingSessionInsert, "reading_id" | "duration_minutes" | "pages_read">;
-        Update: Partial<ReadingSession>;
-        Relationships: [
-          {
-            foreignKeyName: "reading_sessions_reading_id_fkey";
-            columns: ["reading_id"];
-            isOneToOne: false;
-            referencedRelation: "readings";
-            referencedColumns: ["id"];
-          }
-        ];
-      };
-      spaced_reviews: {
-        Row: SpacedReview;
-        Insert: Partial<SpacedReview> & Pick<SpacedReviewInsert, "reading_id" | "review_date">;
-        Update: Partial<SpacedReview>;
-        Relationships: [
-          {
-            foreignKeyName: "spaced_reviews_reading_id_fkey";
-            columns: ["reading_id"];
-            isOneToOne: false;
-            referencedRelation: "readings";
-            referencedColumns: ["id"];
-          }
-        ];
-      };
+export interface ReadingSessionWithReading extends ReadingSession {
+  reading: {
+    title: string;
+    chapter_title: string | null;
+    author: string | null;
+    type: ReadingType;
+    subject: {
+      name: string;
+      theme_color: string;
     };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: {
-      reading_type: ReadingType;
-      review_status: ReviewStatus;
-    };
-    CompositeTypes: Record<string, never>;
   };
+}
+
+export interface SubjectStat {
+  id: string;
+  name: string;
+  professor: string;
+  theme_color: string;
+  is_autonomous: boolean;
+  totalReadings: number;
+  completedReadings: number;
+  progressPercent: number;
+  totalMinutes: number;
+  totalPages: number;
 }

@@ -5,9 +5,11 @@ import {
   ReadingWithSubject,
   SpacedReviewWithReading,
   Deliverable,
+  SubjectStat,
 } from "@/types/database";
 import { Tier1Card } from "./tier1-card";
 import { ReadingTierCard } from "./reading-tier-card";
+import { SubjectStats } from "./subject-stats";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,16 +17,9 @@ import {
   Brain,
   Sparkles,
   Flame,
-  AlertTriangle,
-  GraduationCap,
-  Compass,
   CheckCircle2,
   Clock,
-  Layers,
-  Zap,
-  Calendar,
-  BookOpen,
-  ArrowDownRight,
+  Compass,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -36,6 +31,7 @@ interface DashboardViewProps {
   tier4: ReadingWithSubject[];
   readingDeliverableMap: Record<string, string>;
   allDeliverables: Deliverable[];
+  subjectStats?: SubjectStat[];
 }
 
 export function DashboardView({
@@ -45,6 +41,7 @@ export function DashboardView({
   tier4,
   readingDeliverableMap,
   allDeliverables,
+  subjectStats = [],
 }: DashboardViewProps) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
@@ -58,7 +55,6 @@ export function DashboardView({
   };
 
   const handleQuickSessionAny = () => {
-    // Escolhe a tarefa mais prioritária (Tier 2 se houver, senão Tier 3, senão Tier 4)
     const topReading = tier2[0] || tier3[0] || tier4[0];
     if (topReading) {
       setActiveReading(topReading);
@@ -72,11 +68,9 @@ export function DashboardView({
     router.refresh();
   };
 
-  // Métricas do dia
   const totalTasks = tier1.length + tier2.length + tier3.length + tier4.length;
   const totalUrgentPages = tier2.reduce((acc, r) => acc + r.target_pages, 0);
 
-  // Estimativa de tempo total de leitura pendente
   const totalReadingHours = [...tier2, ...tier3, ...tier4].reduce((acc, r) => {
     const sp = Number(r.current_speed_pph) || 20;
     return acc + (r.target_pages / sp);
@@ -91,80 +85,86 @@ export function DashboardView({
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-8">
-      {/* Top Hero Section */}
-      <div className="rounded-3xl border bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 shadow-xl relative overflow-hidden">
-        {/* Background decorative glow */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div className="space-y-2">
+      {/* Top Hero Section - Flat Design (fundo sólido, sem gradientes ou sombras pesadas) */}
+      <div className="rounded-lg border border-gray-800 bg-gray-900 text-white p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-200 border border-indigo-400/30">
-                <Brain className="w-3.5 h-3.5 text-indigo-300" />
-                Motor Cognitivo Ativo
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-800 text-gray-300 border border-gray-700">
+                <Brain className="w-3.5 h-3.5 text-indigo-400" />
+                Motor Cognitivo
               </span>
-              <span className="text-xs text-indigo-200/80 capitalize">
+              <span className="text-xs text-gray-400 capitalize">
                 {todayFormatted}
               </span>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
               Efeito Cascata Diário
             </h1>
-            <p className="text-sm text-indigo-200/90 max-w-2xl leading-relaxed">
-              Sua alocação de tempo é gerenciada dinamicamente: consolidação de memória primeiro,
-              provas críticas em seguida, graduação regular e ritmo autônomo.
+            <p className="text-xs text-gray-400 max-w-2xl leading-relaxed">
+              Alocação algorítmica de tempo: retenção em primeiro lugar (Active Recall),
+              provas críticas a seguir (&le; 7 dias), estudos regulares e ritmo autônomo.
             </p>
           </div>
 
-          <div className="flex flex-wrap sm:flex-nowrap gap-3 shrink-0">
+          <div className="flex flex-wrap sm:flex-nowrap gap-2.5 shrink-0">
             <Button
               onClick={handleQuickSessionAny}
-              size="lg"
-              className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-500/20 text-sm h-12 px-6"
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 px-4 rounded shadow-none"
             >
-              <Sparkles className="w-4 h-4 mr-2 text-amber-200" />
-              Sessão de Leitura Rápida
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+              Sessão Rápida
             </Button>
+            <Link href="/history">
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-gray-800 hover:bg-gray-700 text-gray-200 border-gray-700 font-medium text-xs h-9 rounded"
+              >
+                <Clock className="w-3.5 h-3.5 mr-1.5 text-gray-400" />
+                Histórico
+              </Button>
+            </Link>
             <Link href="/setup">
               <Button
                 variant="outline"
-                size="lg"
-                className="bg-white/10 hover:bg-white/20 text-white border-white/20 font-semibold text-sm h-12"
+                size="sm"
+                className="bg-gray-800 hover:bg-gray-700 text-gray-200 border-gray-700 font-medium text-xs h-9 rounded"
               >
-                Configurar Planilha
+                Planilha
               </Button>
             </Link>
           </div>
         </div>
 
-        {/* Mini métricas em cards translúcidos */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-white/10 relative z-10">
-          <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-            <span className="text-xs text-indigo-200 block">Total de Ações</span>
-            <span className="text-2xl font-black font-mono text-white">
+        {/* Métricas Flat */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-5 pt-5 border-t border-gray-800">
+          <div className="bg-gray-950/60 rounded p-2.5 border border-gray-800">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Total de Ações</span>
+            <span className="text-xl font-bold font-mono text-white">
               {totalTasks}
             </span>
           </div>
 
-          <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-            <span className="text-xs text-indigo-200 block">Repetições Hoje</span>
-            <span className="text-2xl font-black font-mono text-indigo-300">
+          <div className="bg-gray-950/60 rounded p-2.5 border border-gray-800">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Repetições Hoje</span>
+            <span className="text-xl font-bold font-mono text-indigo-400">
               {tier1.length}
             </span>
           </div>
 
-          <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-            <span className="text-xs text-indigo-200 block">Zona de Perigo</span>
-            <span className="text-2xl font-black font-mono text-rose-300">
+          <div className="bg-gray-950/60 rounded p-2.5 border border-gray-800">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Zona de Perigo</span>
+            <span className="text-xl font-bold font-mono text-red-400">
               {tier2.length}
             </span>
           </div>
 
-          <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-            <span className="text-xs text-indigo-200 block">Carga Estimada</span>
-            <span className="text-2xl font-black font-mono text-amber-300">
+          <div className="bg-gray-950/60 rounded p-2.5 border border-gray-800">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Carga Estimada</span>
+            <span className="text-xl font-bold font-mono text-amber-400">
               ~{totalReadingHours.toFixed(1)}h
             </span>
           </div>
@@ -172,40 +172,42 @@ export function DashboardView({
       </div>
 
       {/* ============================================================ */}
+      {/* MÉTRICAS POR DISCIPLINA (Calculadas em tempo real)           */}
+      {/* ============================================================ */}
+      {subjectStats.length > 0 && <SubjectStats stats={subjectStats} />}
+
+      {/* ============================================================ */}
       {/* TIER 1: SPACED REVIEWS (Repetição Espaçada — D+1, D+7, D+21)  */}
       {/* ============================================================ */}
       <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 flex items-center justify-center font-bold text-xs">
               T1
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-slate-100">
+                <h2 className="text-sm font-bold tracking-wider text-gray-900 dark:text-gray-100 uppercase">
                   Repetições Espaçadas Agendadas
                 </h2>
-                <Badge className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase">
+                <Badge variant="outline" className="text-[10px] border-indigo-300 text-indigo-700 dark:text-indigo-300 py-0">
                   Prioridade Máxima (D+1, D+7, D+21)
                 </Badge>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Active Recall para retenção permanente. Deve ser executado antes de novos conteúdos.
-              </p>
             </div>
           </div>
-          <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+          <span className="text-xs font-mono font-bold text-gray-700 dark:text-gray-300">
             {tier1.length} pendente(s)
           </span>
         </div>
 
         {tier1.length === 0 ? (
-          <div className="rounded-2xl border border-dashed bg-card/60 p-5 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span>Nenhuma repetição agendada para hoje! A curva do esquecimento está protegida.</span>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {tier1.map((rev) => (
               <Tier1Card key={rev.id} review={rev} onRefresh={handleRefresh} />
             ))}
@@ -218,36 +220,33 @@ export function DashboardView({
       {/* ============================================================ */}
       <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-rose-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-red-600 text-white flex items-center justify-center font-bold text-xs">
               T2
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-slate-100">
+                <h2 className="text-sm font-bold tracking-wider text-gray-900 dark:text-gray-100 uppercase">
                   Zona de Perigo — Provas e Entregas em &le; 7 dias
                 </h2>
-                <Badge className="bg-rose-500 hover:bg-rose-600 text-white font-bold text-[10px] uppercase flex items-center gap-1">
+                <Badge variant="outline" className="text-[10px] border-red-300 text-red-700 dark:text-red-300 py-0 flex items-center gap-1">
                   <Flame className="w-3 h-3" /> Hard Deadline
                 </Badge>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Leituras vinculadas a entregas iminentes de matérias ativas. Prioridade imediata de leitura.
-              </p>
             </div>
           </div>
-          <span className="text-xs font-mono font-bold text-rose-600 dark:text-rose-400">
+          <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
             {tier2.length} leitura(s) • {totalUrgentPages}p
           </span>
         </div>
 
         {tier2.length === 0 ? (
-          <div className="rounded-2xl border border-dashed bg-card/60 p-5 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            <span>Nenhuma leitura na Zona de Perigo no momento. Você está adiantado!</span>
+          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span>Nenhuma leitura na Zona de Perigo no momento.</span>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {tier2.map((reading) => {
               const linkedDeliverableId = readingDeliverableMap[reading.id];
               const linkedDeliverable = linkedDeliverableId
@@ -273,36 +272,28 @@ export function DashboardView({
       {/* ============================================================ */}
       <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-gray-700 text-white flex items-center justify-center font-bold text-xs">
               T3
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-slate-100">
-                  Leituras Regulares — Disciplinas da Graduação
-                </h2>
-                <Badge variant="outline" className="text-sky-700 bg-sky-50 border-sky-200 font-bold text-[10px] uppercase">
-                  Estudo Ativo
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Prazos acadêmicos convencionais sem prova nos próximos 7 dias.
-              </p>
+              <h2 className="text-sm font-bold tracking-wider text-gray-900 dark:text-gray-100 uppercase">
+                Leituras Regulares — Disciplinas da Graduação
+              </h2>
             </div>
           </div>
-          <span className="text-xs font-mono font-bold text-sky-600 dark:text-sky-400">
+          <span className="text-xs font-mono font-bold text-gray-600 dark:text-gray-400">
             {tier3.length} leitura(s)
           </span>
         </div>
 
         {tier3.length === 0 ? (
-          <div className="rounded-2xl border border-dashed bg-card/60 p-5 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-slate-400" />
-            <span>Nenhuma leitura acadêmica regular pendente.</span>
+          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-gray-400" />
+            <span>Nenhuma leitura regular pendente.</span>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {tier3.map((reading) => {
               const linkedDeliverableId = readingDeliverableMap[reading.id];
               const linkedDeliverable = linkedDeliverableId
@@ -328,22 +319,14 @@ export function DashboardView({
       {/* ============================================================ */}
       <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-amber-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-amber-700 text-white flex items-center justify-center font-bold text-xs">
               T4
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-slate-100">
-                  Estudos Autônomos & Projetos Pessoais
-                </h2>
-                <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 font-bold text-[10px] uppercase">
-                  Prazos Elásticos
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Leituras autodirigidas e de livre interesse. Absorção de carga cognitiva em momentos de folga.
-              </p>
+              <h2 className="text-sm font-bold tracking-wider text-gray-900 dark:text-gray-100 uppercase">
+                Estudos Autônomos & Projetos Pessoais
+              </h2>
             </div>
           </div>
           <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
@@ -352,12 +335,12 @@ export function DashboardView({
         </div>
 
         {tier4.length === 0 ? (
-          <div className="rounded-2xl border border-dashed bg-card/60 p-5 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
-            <Compass className="w-4 h-4 text-slate-400" />
-            <span>Nenhuma leitura autônoma cadastrada no momento.</span>
+          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+            <Compass className="w-4 h-4 text-gray-400" />
+            <span>Nenhuma leitura autônoma pendente.</span>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {tier4.map((reading) => (
               <ReadingTierCard
                 key={reading.id}

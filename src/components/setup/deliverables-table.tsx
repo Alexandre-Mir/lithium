@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Check, AlertTriangle, Calendar } from "lucide-react";
+import { Plus, Trash2, Check, AlertTriangle } from "lucide-react";
 
 interface DeliverablesTableProps {
   initialDeliverables: Deliverable[];
@@ -116,22 +116,21 @@ export function DeliverablesTable({
 
   return (
     <div className="space-y-4">
-      {/* Quick Add Row */}
-      <div className="rounded-xl border bg-card p-4 shadow-sm">
-        <h3 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-2 mb-3">
-          <Calendar className="w-4 h-4 text-violet-500" />
-          Inserção Rápida de Entrega / Prova (Hard/Soft Deadline)
+      {/* Quick Add Row Flat */}
+      <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="text-xs font-bold tracking-wider text-gray-500 dark:text-gray-400 uppercase mb-3">
+          Cadastrar Entrega / Prova (Deadline)
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
           <div className="md:col-span-3">
             <select
               value={newSubjectId}
               onChange={(e) => setNewSubjectId(e.target.value)}
-              className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="w-full h-8 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 py-1 text-xs"
             >
               {subjects.map((sub) => (
                 <option key={sub.id} value={sub.id}>
-                  {sub.name} {sub.is_autonomous ? "(Autônomo)" : "(Faculdade)"}
+                  {sub.name}
                 </option>
               ))}
             </select>
@@ -139,11 +138,10 @@ export function DeliverablesTable({
 
           <div className="md:col-span-5">
             <Input
-              placeholder="Título da Entrega (ex: P1 de Cálculo, Entrega Artigo Final...)"
+              placeholder="Título da Prova ou Trabalho *"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              className="bg-background text-sm"
+              className="h-8 text-xs rounded border-gray-300 dark:border-gray-700"
             />
           </div>
 
@@ -152,7 +150,7 @@ export function DeliverablesTable({
               type="date"
               value={newDate}
               onChange={(e) => setNewDate(e.target.value)}
-              className="bg-background text-sm"
+              className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
             />
           </div>
 
@@ -161,31 +159,31 @@ export function DeliverablesTable({
               onClick={handleCreate}
               disabled={loading || !newTitle.trim() || !newDate || !newSubjectId}
               size="sm"
-              className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+              className="w-full h-8 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold rounded shadow-none"
             >
-              <Plus className="w-4 h-4 mr-1" /> Add
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Deliverables Table */}
-      <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+      {/* Deliverables Table Flat */}
+      <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
         <Table>
-          <TableHeader className="bg-muted/50">
-            <TableRow>
-              <TableHead className="w-[180px]">Disciplina</TableHead>
-              <TableHead className="min-w-[220px]">Título da Entrega / Prova</TableHead>
-              <TableHead className="w-[150px]">Data Limite</TableHead>
-              <TableHead className="w-[160px]">Status Temporal</TableHead>
-              <TableHead className="w-[100px] text-right">Ações</TableHead>
+          <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
+            <TableRow className="border-b border-gray-200 dark:border-gray-800">
+              <TableHead className="w-[180px] p-2 text-xs">Disciplina</TableHead>
+              <TableHead className="min-w-[220px] p-2 text-xs">Título da Entrega / Prova</TableHead>
+              <TableHead className="w-[130px] p-2 text-xs">Data</TableHead>
+              <TableHead className="w-[150px] p-2 text-xs">Status Temporal</TableHead>
+              <TableHead className="w-[90px] p-2 text-right text-xs">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {deliverables.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">
-                  Nenhuma entrega cadastrada. Adicione uma prova ou trabalho acima.
+                <TableCell colSpan={5} className="text-center py-6 text-gray-500 text-xs">
+                  Nenhuma entrega cadastrada.
                 </TableCell>
               </TableRow>
             ) : (
@@ -196,15 +194,18 @@ export function DeliverablesTable({
                 const daysLeft = getDaysLeft(deliv.date);
 
                 return (
-                  <TableRow key={deliv.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell>
+                  <TableRow
+                    key={deliv.id}
+                    className="border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                  >
+                    <TableCell className="p-2">
                       {isEditing ? (
                         <select
                           value={editValues.subject_id ?? deliv.subject_id}
                           onChange={(e) =>
                             setEditValues((prev) => ({ ...prev, subject_id: e.target.value }))
                           }
-                          className="h-8 w-full rounded border px-2 text-xs bg-background"
+                          className="h-7 w-full rounded border px-2 text-xs"
                         >
                           {subjects.map((s) => (
                             <option key={s.id} value={s.id}>
@@ -213,33 +214,35 @@ export function DeliverablesTable({
                           ))}
                         </select>
                       ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: sub?.theme_color || "#6366f1" }}
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: sub?.theme_color || "#4f46e5" }}
                           />
-                          <span className="text-xs font-semibold">{sub?.name || "Disciplina"}</span>
+                          <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">
+                            {sub?.name || "Disciplina"}
+                          </span>
                         </div>
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="p-2">
                       {isEditing ? (
                         <Input
                           value={editValues.title ?? deliv.title}
                           onChange={(e) =>
                             setEditValues((prev) => ({ ...prev, title: e.target.value }))
                           }
-                          className="h-8 text-sm"
+                          className="h-7 text-xs rounded"
                         />
                       ) : (
-                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                        <div className="font-semibold text-xs text-gray-900 dark:text-gray-100">
                           {deliv.title}
                         </div>
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
                       {isEditing ? (
                         <Input
                           type="date"
@@ -247,42 +250,40 @@ export function DeliverablesTable({
                           onChange={(e) =>
                             setEditValues((prev) => ({ ...prev, date: e.target.value }))
                           }
-                          className="h-8 text-xs font-mono"
+                          className="h-7 text-xs font-mono rounded"
                         />
                       ) : (
-                        <span className="font-mono text-xs">
-                          {new Date(deliv.date + "T00:00:00").toLocaleDateString("pt-BR")}
-                        </span>
+                        new Date(deliv.date + "T00:00:00").toLocaleDateString("pt-BR")
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="p-2">
                       {danger ? (
-                        <Badge className="bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-1 w-fit text-[11px] font-semibold animate-pulse">
+                        <Badge className="bg-red-600 text-white rounded text-[10px] font-bold py-0 flex items-center gap-1 w-fit">
                           <AlertTriangle className="w-3 h-3" />
                           Zona de Perigo ({daysLeft <= 0 ? "Hoje!" : `${daysLeft}d`})
                         </Badge>
                       ) : daysLeft < 0 ? (
-                        <Badge variant="outline" className="text-slate-400 border-slate-300 text-[11px]">
+                        <span className="text-[11px] text-gray-400 font-mono">
                           Encerrado
-                        </Badge>
+                        </span>
                       ) : (
-                        <Badge variant="secondary" className="text-[11px] font-normal">
+                        <span className="text-[11px] text-gray-600 dark:text-gray-400 font-mono">
                           Em {daysLeft} dias
-                        </Badge>
+                        </span>
                       )}
                     </TableCell>
 
-                    <TableCell className="text-right">
+                    <TableCell className="p-2 text-right">
                       {isEditing ? (
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             size="icon-sm"
                             variant="ghost"
                             onClick={() => handleUpdate(deliv.id)}
-                            className="text-emerald-600 hover:text-emerald-700"
+                            className="text-emerald-600 h-6 w-6"
                           >
-                            <Check className="w-4 h-4" />
+                            <Check className="w-3.5 h-3.5" />
                           </Button>
                           <Button
                             size="icon-sm"
@@ -291,6 +292,7 @@ export function DeliverablesTable({
                               setEditingId(null);
                               setEditValues({});
                             }}
+                            className="h-6 w-6"
                           >
                             ✕
                           </Button>
@@ -308,7 +310,7 @@ export function DeliverablesTable({
                                 date: deliv.date,
                               });
                             }}
-                            className="text-xs text-muted-foreground hover:text-foreground"
+                            className="text-xs text-gray-500 hover:text-gray-900 h-6 px-1.5"
                           >
                             Editar
                           </Button>
@@ -316,9 +318,9 @@ export function DeliverablesTable({
                             size="icon-sm"
                             variant="ghost"
                             onClick={() => handleDelete(deliv.id)}
-                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+                            className="text-red-500 hover:text-red-700 h-6 w-6"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         </div>
                       )}

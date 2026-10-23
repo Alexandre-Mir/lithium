@@ -11,7 +11,49 @@ import type {
   ReadingUpdate,
   ReadingSessionInsert,
   SpacedReviewUpdate,
+  SubjectStat,
 } from "@/types/database";
+
+// ============================================================
+// VALIDAÇÃO DE DIAS DE AULA
+// ============================================================
+
+/**
+ * Verifica se qualquer um dos class_days já possui 2 ou mais disciplinas.
+ */
+export async function validateClassDays(
+  classDays: string[],
+  excludeSubjectId?: string
+): Promise<{ valid: boolean; exceededDay?: string }> {
+  if (!classDays || classDays.length === 0) return { valid: true };
+
+  const { data: allSubjects, error } = await supabase
+    .from("subjects")
+    .select("id, class_days");
+
+  if (error) {
+    console.warn("Aviso ao validar class_days:", error.message);
+    return { valid: true }; // Não bloqueia caso o banco ainda esteja sincronizando
+  }
+
+  // Contar disciplinas por dia
+  const dayCounts: Record<string, number> = {};
+
+  for (const s of allSubjects || []) {
+    if (excludeSubjectId && s.id === excludeSubjectId) continue;
+    for (const day of s.class_days || []) {
+      dayCounts[day] = (dayCounts[day] || 0) + 1;
+    }
+  }
+
+  for (const day of classDays) {
+    if ((dayCounts[day] || 0) >= 2) {
+      return { valid: false, exceededDay: day };
+    }
+  }
+
+  return { valid: true };
+}
 
 // ============================================================
 // SUBJECTS
@@ -27,6 +69,12 @@ export async function getSubjects() {
 }
 
 export async function createSubject(input: SubjectInsert) {
+  // Validação: limite de 2 disciplinas por dia
+  const validation = await validateClassDays(input.class_days || []);
+  if (!validation.valid) {
+    throw new Error(`Limite de 2 disciplinas por dia atingido (dia: ${validation.exceededDay}).`);
+  }
+
   const { data, error } = await supabase
     .from("subjects")
     .insert(input)
@@ -34,10 +82,18 @@ export async function createSubject(input: SubjectInsert) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/setup");
   return data;
 }
 
 export async function updateSubject(id: string, input: SubjectUpdate) {
+  if (input.class_days) {
+    const validation = await validateClassDays(input.class_days, id);
+    if (!validation.valid) {
+      throw new Error(`Limite de 2 disciplinas por dia atingido (dia: ${validation.exceededDay}).`);
+    }
+  }
+
   const { data, error } = await supabase
     .from("subjects")
     .update(input)
@@ -46,6 +102,7 @@ export async function updateSubject(id: string, input: SubjectUpdate) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/setup");
   return data;
 }
 
@@ -53,6 +110,7 @@ export async function deleteSubject(id: string) {
   const { error } = await supabase.from("subjects").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/setup");
 }
 
 // ============================================================
@@ -78,6 +136,7 @@ export async function createDeliverable(input: DeliverableInsert) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/setup");
   return data;
 }
 
@@ -90,6 +149,7 @@ export async function updateDeliverable(id: string, input: DeliverableUpdate) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/setup");
   return data;
 }
 
@@ -97,6 +157,7 @@ export async function deleteDeliverable(id: string) {
   const { error } = await supabase.from("deliverables").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/setup");
 }
 
 // ============================================================
@@ -132,6 +193,8 @@ export async function createReading(input: ReadingInsert) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/setup");
+  revalidatePath("/library");
   return data;
 }
 
@@ -144,6 +207,8 @@ export async function updateReading(id: string, input: ReadingUpdate) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/setup");
+  revalidatePath("/library");
   return data;
 }
 
@@ -151,6 +216,8 @@ export async function deleteReading(id: string) {
   const { error } = await supabase.from("readings").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/setup");
+  revalidatePath("/library");
 }
 
 // ============================================================
@@ -167,13 +234,21 @@ export async function getReadingSessions(readingId: string) {
   return data;
 }
 
+export async function getAllReadingSessions() {
+  const { data, error } = await supabase
+    .from("reading_sessions")
+    .select("*, reading:readings(title, chapter_title, author, type, subject:subjects(name, theme_color))")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 /**
  * Cria uma sessão de leitura e executa a CALIBRAÇÃO:
  * - Calcula a velocidade real: (pages_read / duration_minutes) * 60
  * - Atualiza current_speed_pph na leitura correspondente
  */
 export async function createReadingSession(input: ReadingSessionInsert) {
-  // 1. Inserir a sessão
   const { data: session, error: sessionError } = await supabase
     .from("reading_sessions")
     .insert(input)
@@ -181,7 +256,7 @@ export async function createReadingSession(input: ReadingSessionInsert) {
     .single();
   if (sessionError) throw new Error(sessionError.message);
 
-  // 2. CALIBRAÇÃO — recalcular velocidade com base em TODAS as sessões
+  // Recalcular velocidade com base em TODAS as sessões
   const { data: allSessions, error: sessionsError } = await supabase
     .from("reading_sessions")
     .select("pages_read, duration_minutes")
@@ -191,13 +266,11 @@ export async function createReadingSession(input: ReadingSessionInsert) {
   const totalPages = allSessions.reduce((sum, s) => sum + s.pages_read, 0);
   const totalMinutes = allSessions.reduce((sum, s) => sum + s.duration_minutes, 0);
 
-  // Média ponderada: total de páginas / total de minutos * 60
   const newSpeedPph =
     totalMinutes > 0
       ? Math.round((totalPages / totalMinutes) * 60 * 100) / 100
       : 20.0;
 
-  // 3. Atualizar a velocidade na leitura
   const { error: updateError } = await supabase
     .from("readings")
     .update({ current_speed_pph: newSpeedPph })
@@ -205,6 +278,8 @@ export async function createReadingSession(input: ReadingSessionInsert) {
   if (updateError) throw new Error(updateError.message);
 
   revalidatePath("/");
+  revalidatePath("/library");
+  revalidatePath("/history");
   return { session, newSpeedPph };
 }
 
@@ -212,22 +287,13 @@ export async function createReadingSession(input: ReadingSessionInsert) {
 // MARCAR LEITURA COMO CONCLUÍDA + REPETIÇÃO ESPAÇADA
 // ============================================================
 
-/**
- * Marca uma leitura como concluída (is_read = true) e
- * DISPARA o Gatilho de Repetição Espaçada:
- * - D+1  (active_recall)
- * - D+7  (active_recall)
- * - D+21 (active_recall)
- */
 export async function markReadingAsRead(readingId: string) {
-  // 1. Marcar como lida
   const { error: updateError } = await supabase
     .from("readings")
     .update({ is_read: true })
     .eq("id", readingId);
   if (updateError) throw new Error(updateError.message);
 
-  // 2. Calcular datas de revisão
   const today = new Date();
   const intervals = [1, 7, 21];
 
@@ -242,18 +308,16 @@ export async function markReadingAsRead(readingId: string) {
     };
   });
 
-  // 3. Inserir os 3 gatilhos de repetição
   const { error: reviewError } = await supabase
     .from("spaced_reviews")
     .insert(reviews);
   if (reviewError) throw new Error(reviewError.message);
 
   revalidatePath("/");
+  revalidatePath("/library");
+  revalidatePath("/setup");
 }
 
-/**
- * Desmarcar leitura como não-lida e remover revisões pendentes
- */
 export async function markReadingAsUnread(readingId: string) {
   const { error: updateError } = await supabase
     .from("readings")
@@ -261,7 +325,6 @@ export async function markReadingAsUnread(readingId: string) {
     .eq("id", readingId);
   if (updateError) throw new Error(updateError.message);
 
-  // Remover revisões pendentes (manter as que já foram feitas)
   const { error: deleteError } = await supabase
     .from("spaced_reviews")
     .delete()
@@ -270,6 +333,8 @@ export async function markReadingAsUnread(readingId: string) {
   if (deleteError) throw new Error(deleteError.message);
 
   revalidatePath("/");
+  revalidatePath("/library");
+  revalidatePath("/setup");
 }
 
 // ============================================================
@@ -304,24 +369,96 @@ export async function markReviewAsDone(id: string) {
 }
 
 // ============================================================
+// MÉTRICAS POR DISCIPLINA (Histórico e Dashboard Gamificado)
+// ============================================================
+
+export async function getSubjectStats(): Promise<SubjectStat[]> {
+  try {
+    const { data: subjects, error: e1 } = await supabase
+      .from("subjects")
+      .select("*")
+      .order("name");
+    if (e1) {
+      console.warn("Aviso ao carregar subjects para stats:", e1.message);
+      return [];
+    }
+
+    const { data: readings, error: e2 } = await supabase
+      .from("readings")
+      .select("id, subject_id, is_read");
+    if (e2) {
+      console.warn("Aviso ao carregar readings para stats:", e2.message);
+      return [];
+    }
+
+    const { data: sessions, error: e3 } = await supabase
+      .from("reading_sessions")
+      .select("reading_id, duration_minutes, pages_read");
+    if (e3) {
+      console.warn("Aviso ao carregar sessions para stats:", e3.message);
+      return [];
+    }
+
+    // Mapa de reading_id -> subject_id
+    const readingToSubject = new Map<string, string>();
+    for (const r of readings || []) {
+      readingToSubject.set(r.id, r.subject_id);
+    }
+
+    // Agregar estatísticas por disciplina
+    const stats: SubjectStat[] = (subjects || []).map((sub: any) => {
+      const subReadings = (readings || []).filter((r: any) => r.subject_id === sub.id);
+      const totalReadings = subReadings.length;
+      const completedReadings = subReadings.filter((r: any) => r.is_read).length;
+      const progressPercent =
+        totalReadings > 0 ? Math.round((completedReadings / totalReadings) * 100) : 0;
+
+      // Somar sessões das leituras desta disciplina
+      const subReadingIds = new Set(subReadings.map((r: any) => r.id));
+      const subSessions = (sessions || []).filter((s: any) =>
+        subReadingIds.has(s.reading_id)
+      );
+
+      const totalMinutes = subSessions.reduce(
+        (acc: number, s: any) => acc + (s.duration_minutes || 0),
+        0
+      );
+      const totalPages = subSessions.reduce(
+        (acc: number, s: any) => acc + (s.pages_read || 0),
+        0
+      );
+
+      return {
+        id: sub.id,
+        name: sub.name,
+        professor: sub.professor || "",
+        theme_color: sub.theme_color || "#6366f1",
+        is_autonomous: sub.is_autonomous,
+        totalReadings,
+        completedReadings,
+        progressPercent,
+        totalMinutes,
+        totalPages,
+      };
+    });
+
+    return stats;
+  } catch (err) {
+    console.warn("Erro ao calcular subject stats:", err);
+    return [];
+  }
+}
+
+// ============================================================
 // DASHBOARD — EFEITO CASCATA (Hierarquia de Execução)
 // ============================================================
 
-/**
- * Busca e organiza as tarefas do dia na hierarquia do Efeito Cascata:
- *
- * Tier 1: spaced_reviews pendentes com review_date <= hoje
- * Tier 2: readings pendentes de matérias NÃO autônomas com deliverable em <= 7 dias
- * Tier 3: readings pendentes regulares (não autônomas)
- * Tier 4: readings pendentes de matérias autônomas
- */
 export async function getDashboardData() {
   const today = new Date().toISOString().split("T")[0];
   const sevenDaysFromNow = new Date();
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
   const sevenDaysStr = sevenDaysFromNow.toISOString().split("T")[0];
 
-  // ---- Tier 1: Revisões pendentes (vencidas ou do dia) ----
   let tier1: any[] = [];
   let schemaError: string | null = null;
 
@@ -343,7 +480,6 @@ export async function getDashboardData() {
     schemaError = err?.message;
   }
 
-  // ---- Buscar todas as leituras pendentes com subject ----
   let allPendingReadings: any[] = [];
   try {
     const { data, error: e2 } = await supabase
@@ -361,7 +497,6 @@ export async function getDashboardData() {
     console.warn("Exceção na busca de readings:", err?.message);
   }
 
-  // ---- Buscar deliverables na zona de perigo (próximos 7 dias) ----
   let urgentDeliverables: any[] = [];
   try {
     const { data, error: e3 } = await supabase
@@ -379,7 +514,6 @@ export async function getDashboardData() {
     console.warn("Exceção na busca de deliverables:", err?.message);
   }
 
-  // ---- Buscar TODOS os deliverables para a Regra Cronológica ----
   let allDeliverables: any[] = [];
   try {
     const { data, error: e4 } = await supabase
@@ -395,17 +529,11 @@ export async function getDashboardData() {
     console.warn("Exceção na busca de allDeliverables:", err?.message);
   }
 
-  // IDs de subjects com deliverables urgentes
   const urgentSubjectIds = new Set(
     urgentDeliverables?.map((d) => d.subject_id) ?? []
   );
 
-  // Regra Cronológica de Vínculo:
-  // Uma reading está vinculada a um deliverable se:
-  // reading.deadline <= deliverable.date E reading.deadline > data do deliverable anterior da mesma matéria
-  const readingDeliverableMap = new Map<string, string>(); // reading_id -> deliverable_id
-
-  // Agrupar deliverables por subject
+  const readingDeliverableMap = new Map<string, string>();
   const deliverablesBySubject = new Map<string, typeof allDeliverables>();
   for (const d of allDeliverables ?? []) {
     const list = deliverablesBySubject.get(d.subject_id) ?? [];
@@ -432,24 +560,17 @@ export async function getDashboardData() {
     }
   }
 
-  // ---- Classificar as leituras pendentes em tiers ----
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tier2: (typeof allPendingReadings extends (infer T)[] | null ? T : never)[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tier3: typeof tier2 = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tier4: typeof tier2 = [];
+  const tier2: any[] = [];
+  const tier3: any[] = [];
+  const tier4: any[] = [];
 
   for (const reading of allPendingReadings ?? []) {
     const subject = reading.subject;
-    if (!subject) continue;
-
-    if (Array.isArray(subject)) continue; // type guard
+    if (!subject || Array.isArray(subject)) continue;
 
     if (subject.is_autonomous) {
       tier4.push(reading);
     } else if (urgentSubjectIds.has(reading.subject_id)) {
-      // Verificar se esta reading está vinculada a um deliverable urgente
       const linkedDeliverableId = readingDeliverableMap.get(reading.id);
       const isLinkedToUrgent = urgentDeliverables?.some(
         (d) => d.id === linkedDeliverableId
@@ -480,10 +601,6 @@ export async function getDashboardData() {
 // PROJEÇÃO DE TEMPO (utilitário)
 // ============================================================
 
-/**
- * Calcula a projeção de horas necessárias para concluir uma leitura,
- * com base na velocidade calibrada e nas sessões já realizadas.
- */
 export async function getReadingProjection(readingId: string) {
   const { data: reading, error: readingError } = await supabase
     .from("readings")
@@ -492,7 +609,6 @@ export async function getReadingProjection(readingId: string) {
     .single();
   if (readingError) throw new Error(readingError.message);
 
-  // Total de páginas já lidas
   const { data: sessions, error: sessionsError } = await supabase
     .from("reading_sessions")
     .select("pages_read")
@@ -506,17 +622,13 @@ export async function getReadingProjection(readingId: string) {
       ? Math.round((pagesRemaining / reading.current_speed_pph) * 100) / 100
       : 0;
 
-  // Dias até a deadline
   const today = new Date();
   const deadline = new Date(reading.deadline);
   const daysRemaining = Math.max(
     0,
-    Math.ceil(
-      (deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-    )
+    Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
   );
 
-  // Horas por dia necessárias
   const hoursPerDay =
     daysRemaining > 0
       ? Math.round((hoursRemaining / daysRemaining) * 100) / 100
