@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +24,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Trash2, Check, FileText, AlertCircle } from "lucide-react";
+import {
+  EMPTY_PEDAGOGICAL_VALUES,
+  SubjectPedagogicalDialog,
+  type SubjectPedagogicalValues,
+} from "@/components/setup/subject-pedagogical-dialog";
 
 interface SubjectsTableProps {
   initialSubjects: Subject[];
@@ -32,6 +36,15 @@ interface SubjectsTableProps {
 }
 
 const WEEK_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function subjectPedagogicalValues(subject: Subject): SubjectPedagogicalValues {
+  return {
+    syllabus: subject.syllabus ?? "",
+    objectives: subject.objectives ?? "",
+    methodology: subject.methodology ?? "",
+    assessment: subject.assessment ?? "",
+  };
+}
 
 export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps) {
   const [subjects, setSubjects] = useState<Subject[]>(initialSubjects);
@@ -46,10 +59,7 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
   const [newThemeColor, setNewThemeColor] = useState("#4f46e5");
 
   // Campos pedagógicos opcionais (Ementa, Objetivos, etc.)
-  const [newSyllabus, setNewSyllabus] = useState("");
-  const [newObjectives, setNewObjectives] = useState("");
-  const [newMethodology, setNewMethodology] = useState("");
-  const [newAssessment, setNewAssessment] = useState("");
+  const [newPedagogicalValues, setNewPedagogicalValues] = useState(EMPTY_PEDAGOGICAL_VALUES);
   const [showPedagogicalModal, setShowPedagogicalModal] = useState(false);
 
   // Edição inline rápida
@@ -58,6 +68,7 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
 
   // Modal de visualização de detalhes pedagógicos
   const [viewingSubject, setViewingSubject] = useState<Subject | null>(null);
+  const [editingPedagogicalSubject, setEditingPedagogicalSubject] = useState<Subject | null>(null);
 
   const toggleDay = (day: string, currentDays: string[], onChange: (days: string[]) => void) => {
     if (currentDays.includes(day)) {
@@ -101,10 +112,10 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
       const newSub = await createSubject({
         name: newName.trim(),
         professor: newProfessor.trim(),
-        syllabus: newSyllabus.trim() || null,
-        objectives: newObjectives.trim() || null,
-        methodology: newMethodology.trim() || null,
-        assessment: newAssessment.trim() || null,
+        syllabus: newPedagogicalValues.syllabus.trim() || null,
+        objectives: newPedagogicalValues.objectives.trim() || null,
+        methodology: newPedagogicalValues.methodology.trim() || null,
+        assessment: newPedagogicalValues.assessment.trim() || null,
         is_autonomous: newIsAutonomous,
         class_days: newClassDays,
         theme_color: newThemeColor,
@@ -116,10 +127,7 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
         setNewProfessor("");
         setNewClassDays([]);
         setNewIsAutonomous(false);
-        setNewSyllabus("");
-        setNewObjectives("");
-        setNewMethodology("");
-        setNewAssessment("");
+        setNewPedagogicalValues(EMPTY_PEDAGOGICAL_VALUES);
         setShowPedagogicalModal(false);
         onRefresh?.();
       }
@@ -223,7 +231,9 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
             className="text-xs text-indigo-600 dark:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-800 h-7"
           >
             <FileText className="w-3.5 h-3.5 mr-1" />
-            {newSyllabus || newObjectives ? "Ementa preenchida ✓" : "+ Ementa / Objetivos (Opcional)"}
+            {Object.values(newPedagogicalValues).some(Boolean)
+              ? "Ementa preenchida ✓"
+              : "+ Ementa / Objetivos (Opcional)"}
           </Button>
         </div>
 
@@ -457,18 +467,22 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
                     </TableCell>
 
                     <TableCell className="p-2">
-                      {sub.syllabus || sub.objectives || sub.methodology || sub.assessment ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setViewingSubject(sub)}
-                          className="h-6 text-[11px] px-2 text-indigo-600 dark:text-indigo-400"
-                        >
-                          Ver detalhes
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          const hasPedagogicalData = Boolean(
+                            sub.syllabus || sub.objectives || sub.methodology || sub.assessment,
+                          );
+                          if (hasPedagogicalData) setViewingSubject(sub);
+                          else setEditingPedagogicalSubject(sub);
+                        }}
+                        className="h-6 whitespace-nowrap px-2 text-[11px] text-indigo-600 dark:text-indigo-400"
+                      >
+                        {sub.syllabus || sub.objectives || sub.methodology || sub.assessment
+                          ? "Ver / Editar"
+                          : "+ Adicionar"}
+                      </Button>
                     </TableCell>
 
                     <TableCell className="p-2 text-right">
@@ -532,81 +546,13 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
         </Table>
       </div>
 
-      {/* Modal para Adicionar Ementa, Objetivos, Metodologia e Avaliação */}
-      <Dialog open={showPedagogicalModal} onOpenChange={setShowPedagogicalModal}>
-        <DialogContent className="sm:max-w-lg rounded-md border border-gray-200 dark:border-gray-800">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold">
-              Ementa e Planejamento Pedagógico
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Campos complementares para a disciplina {newName ? `"${newName}"` : ""}.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-2 text-xs">
-            <div>
-              <label className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
-                Ementa (Syllabus)
-              </label>
-              <Textarea
-                placeholder="Conteúdo programático da disciplina..."
-                value={newSyllabus}
-                onChange={(e) => setNewSyllabus(e.target.value)}
-                className="text-xs h-18 rounded border-gray-300 dark:border-gray-700"
-              />
-            </div>
-
-            <div>
-              <label className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
-                Objetivos de Aprendizagem
-              </label>
-              <Textarea
-                placeholder="Competências e objetivos a serem desenvolvidos..."
-                value={newObjectives}
-                onChange={(e) => setNewObjectives(e.target.value)}
-                className="text-xs h-16 rounded border-gray-300 dark:border-gray-700"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
-                  Metodologia
-                </label>
-                <Input
-                  placeholder="Ex: Aulas expositivas e seminários"
-                  value={newMethodology}
-                  onChange={(e) => setNewMethodology(e.target.value)}
-                  className="text-xs h-8 rounded border-gray-300 dark:border-gray-700"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
-                  Critérios de Avaliação
-                </label>
-                <Input
-                  placeholder="Ex: P1 (40%) + P2 (40%) + Trab (20%)"
-                  value={newAssessment}
-                  onChange={(e) => setNewAssessment(e.target.value)}
-                  className="text-xs h-8 rounded border-gray-300 dark:border-gray-700"
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              onClick={() => setShowPedagogicalModal(false)}
-              className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded"
-            >
-              Salvar & Fechar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SubjectPedagogicalDialog
+        open={showPedagogicalModal}
+        onOpenChange={setShowPedagogicalModal}
+        subjectName={newName}
+        initialValues={newPedagogicalValues}
+        onSave={setNewPedagogicalValues}
+      />
 
       {/* Modal para Visualizar Detalhes Pedagógicos de Disciplina Existente */}
       <Dialog open={!!viewingSubject} onOpenChange={(open) => !open && setViewingSubject(null)}>
@@ -667,6 +613,16 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
           <DialogFooter>
             <Button
               type="button"
+              onClick={() => {
+                if (viewingSubject) setEditingPedagogicalSubject(viewingSubject);
+                setViewingSubject(null);
+              }}
+              className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded"
+            >
+              Editar
+            </Button>
+            <Button
+              type="button"
               variant="outline"
               onClick={() => setViewingSubject(null)}
               className="text-xs h-8 rounded"
@@ -676,6 +632,30 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SubjectPedagogicalDialog
+        open={!!editingPedagogicalSubject}
+        onOpenChange={(open) => !open && setEditingPedagogicalSubject(null)}
+        subjectName={editingPedagogicalSubject?.name ?? ""}
+        initialValues={editingPedagogicalSubject
+          ? subjectPedagogicalValues(editingPedagogicalSubject)
+          : EMPTY_PEDAGOGICAL_VALUES}
+        onSave={async (values) => {
+          if (!editingPedagogicalSubject) return;
+          const updated = await updateSubject(editingPedagogicalSubject.id, {
+            syllabus: values.syllabus.trim() || null,
+            objectives: values.objectives.trim() || null,
+            methodology: values.methodology.trim() || null,
+            assessment: values.assessment.trim() || null,
+          });
+          setSubjects((current) =>
+            current.map((subject) => subject.id === updated.id ? updated : subject),
+          );
+          setEditingPedagogicalSubject(null);
+          setViewingSubject(updated);
+          onRefresh?.();
+        }}
+      />
     </div>
   );
 }

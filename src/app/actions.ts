@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { todayISO, addDaysISO, daysUntil } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
+import { pickInitialSpeed } from "@/lib/speed";
+import { validateReadingUpdate } from "@/lib/reading-validation";
 import type {
   SubjectInsert,
   SubjectUpdate,
@@ -21,6 +23,7 @@ import type {
   Deliverable,
   ReadingWithSubject,
   SpacedReviewWithReading,
+  ReadingSpeedStat,
 } from "@/types/database";
 
 // ============================================================
@@ -112,6 +115,7 @@ export async function updateSubject(id: string, input: SubjectUpdate) {
   if (error) throw new Error(error.message);
   revalidatePath("/");
   revalidatePath("/setup");
+  revalidatePath("/library", "layout");
   return data;
 }
 
@@ -204,18 +208,31 @@ export async function getSpacedReviewsByReading(readingId: string) {
   return data;
 }
 
+export async function getSpeedStats(): Promise<ReadingSpeedStat[]> {
+  const { data, error } = await supabase
+    .from("reading_speed_stats")
+    .select("reading_type, sessions, total_pages, total_minutes");
+
+  if (error) {
+    console.warn("Não foi possível consultar reading_speed_stats:", error.message);
+    return [];
+  }
+
+  return (data ?? []) as unknown as ReadingSpeedStat[];
+}
+
 export async function getReadingDetail(id: string) {
   const reading = await getReadingById(id);
   if (!reading) return null;
 
-  const [sessions, reviews, deliverables, allSessions] = await Promise.all([
+  const [sessions, reviews, deliverables, speedStats] = await Promise.all([
     getReadingSessions(id),
     getSpacedReviewsByReading(id),
     getDeliverables(reading.subject_id),
-    getAllReadingSessions(),
+    getSpeedStats(),
   ]);
-  const totalPages = allSessions.reduce((sum, session) => sum + session.pages_read, 0);
-  const totalMinutes = allSessions.reduce((sum, session) => sum + session.duration_minutes, 0);
+  const totalPages = speedStats.reduce((sum, stat) => sum + stat.total_pages, 0);
+  const totalMinutes = speedStats.reduce((sum, stat) => sum + stat.total_minutes, 0);
   return {
     reading,
     sessions,
@@ -226,8 +243,10 @@ export async function getReadingDetail(id: string) {
 }
 
 export async function createReading(input: ReadingInsert) {
+  const currentSpeed = input.current_speed_pph ?? pickInitialSpeed(await getSpeedStats(), input.type);
   const insert = {
     ...input,
+    current_speed_pph: currentSpeed,
     ...(input.metadata_source ? { metadata_fetched_at: new Date().toISOString() } : {}),
   };
   const { data, error } = await supabase
@@ -259,18 +278,14 @@ type MetadataFields = {
 };
 
 export async function refreshReadingMetadata(readingId: string, options: { force?: boolean } = {}) {
-  const { data: reading, error: readingError } = await supabase.from("readings").select("id, type, isbn, doi, metadata_fetched_at").eq("id", readingId).single();
+  const { data: reading, error: readingError } = await supabase.from("readings").select("id, type, isbn, doi, cover_url, publisher, published_year, metadata_source, metadata_fetched_at").eq("id", readingId).single();
   if (readingError) throw new Error(readingError.message);
   if (!options.force && reading.metadata_fetched_at) return { status: "skipped" as const };
   const result = reading.type === "book" && reading.isbn ? await fetchBookMetadata(reading.isbn) : reading.type === "article" && reading.doi ? await fetchArticleMetadata(reading.doi) : { status: "not_found" as const };
   if (result.status === "error") return result;
-  const fields: MetadataFields = {
-    cover_url: result.status === "ok" ? result.data.coverUrl : null,
-    publisher: result.status === "ok" ? result.data.publisher : null,
-    published_year: result.status === "ok" ? result.data.publishedYear : null,
-    metadata_source: result.status === "ok" ? result.data.source : null,
-    metadata_fetched_at: new Date().toISOString(),
-  };
+  const fields: MetadataFields = result.status === "not_found"
+    ? { cover_url: reading.cover_url, publisher: reading.publisher, published_year: reading.published_year, metadata_source: reading.metadata_source, metadata_fetched_at: new Date().toISOString() }
+    : { cover_url: result.data.coverUrl ?? reading.cover_url, publisher: result.data.publisher ?? reading.publisher, published_year: result.data.publishedYear ?? reading.published_year, metadata_source: result.data.source ?? reading.metadata_source, metadata_fetched_at: new Date().toISOString() };
   const { error } = await supabase.from("readings").update(fields).eq("id", readingId);
   if (error) throw new Error(error.message);
   revalidatePath("/library");
@@ -299,6 +314,9 @@ export async function backfillMissingMetadata() {
 }
 
 export async function updateReading(id: string, input: ReadingUpdate) {
+  const validationError = validateReadingUpdate(input);
+  if (validationError) throw new Error(validationError);
+
   const { data, error } = await supabase
     .from("readings")
     .update(input)
@@ -309,6 +327,7 @@ export async function updateReading(id: string, input: ReadingUpdate) {
   revalidatePath("/");
   revalidatePath("/setup");
   revalidatePath("/library");
+  revalidatePath(`/library/${id}`);
   return data;
 }
 

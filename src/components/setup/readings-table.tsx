@@ -14,6 +14,9 @@ import {
 } from "@/app/actions";
 import { formatDateBR } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
+import { validateReadingUpdate } from "@/lib/reading-validation";
+import { metadataAttemptsSummary } from "@/lib/metadata-labels";
+import type { MetadataAttempt } from "@/lib/book-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -35,6 +38,7 @@ import {
   CheckCircle2,
   ArrowRight,
   Loader2,
+  AlertCircle,
 } from "lucide-react";
 
 interface ReadingsTableProps {
@@ -72,10 +76,12 @@ export function ReadingsTable({
   const [newMetadataSource, setNewMetadataSource] = useState<string | null>(null);
   const [lookedUpIsbn, setLookedUpIsbn] = useState("");
   const [lookedUpDoi, setLookedUpDoi] = useState("");
+  const [metadataNotice, setMetadataNotice] = useState<{ kind: "not_found" | "error"; text: string; attempts: MetadataAttempt[]; type: "ISBN" | "DOI" } | null>(null);
 
   // Inline editing state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Reading>>({});
+  const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null);
 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
 
@@ -98,8 +104,9 @@ export function ReadingsTable({
     try {
       setFetchingMetadata(true);
       const result = await lookupBookByIsbn(cleanIsbn);
-      setLookedUpIsbn(cleanIsbn);
       if (result.status === "ok") {
+        setLookedUpIsbn(cleanIsbn);
+        setMetadataNotice(null);
         if (result.data.title && !newTitle) setNewTitle(result.data.title);
         if (result.data.authors && !newAuthor) setNewAuthor(result.data.authors);
         if (result.data.pageCount && !newFullPages) setNewFullPages(result.data.pageCount);
@@ -107,11 +114,14 @@ export function ReadingsTable({
         setNewPublisher(result.data.publisher);
         setNewPublishedYear(result.data.publishedYear);
         setNewMetadataSource(result.data.source);
-      } else if (result.status === "error") {
-        console.warn("Erro ao buscar metadados do livro:", result.reason);
+      } else if (result.status === "not_found") {
+        setLookedUpIsbn(cleanIsbn);
+        setMetadataNotice({ kind: "not_found", text: "Nenhum resultado para este ISBN. Preencha manualmente.", attempts: result.attempts, type: "ISBN" });
+      } else {
+        setMetadataNotice({ kind: "error", text: `Sem resposta dos provedores (${metadataAttemptsSummary(result.attempts)}). Preencha manualmente ou tente de novo.`, attempts: result.attempts, type: "ISBN" });
       }
-    } catch (err) {
-      console.warn("Erro ao buscar ISBN no Google Books:", err);
+    } catch {
+      setMetadataNotice({ kind: "error", text: "Sem resposta dos provedores. Preencha manualmente ou tente de novo.", attempts: [], type: "ISBN" });
     } finally {
       setFetchingMetadata(false);
     }
@@ -127,18 +137,22 @@ export function ReadingsTable({
     try {
       setFetchingMetadata(true);
       const result = await lookupArticleByDoi(cleanDoi);
-      setLookedUpDoi(cleanDoi);
       if (result.status === "ok") {
+        setLookedUpDoi(cleanDoi);
+        setMetadataNotice(null);
         if (result.data.title && !newTitle) setNewTitle(result.data.title);
         if (result.data.authors && !newAuthor) setNewAuthor(result.data.authors);
         setNewPublisher(result.data.publisher);
         setNewPublishedYear(result.data.publishedYear);
         setNewMetadataSource(result.data.source);
-      } else if (result.status === "error") {
-        console.warn("Erro ao buscar metadados do artigo:", result.reason);
+      } else if (result.status === "not_found") {
+        setLookedUpDoi(cleanDoi);
+        setMetadataNotice({ kind: "not_found", text: "Nenhum resultado para este DOI. Preencha manualmente.", attempts: result.attempts, type: "DOI" });
+      } else {
+        setMetadataNotice({ kind: "error", text: `Sem resposta dos provedores (${metadataAttemptsSummary(result.attempts)}). Preencha manualmente ou tente de novo.`, attempts: result.attempts, type: "DOI" });
       }
-    } catch (err) {
-      console.warn("Erro ao buscar DOI na Crossref:", err);
+    } catch {
+      setMetadataNotice({ kind: "error", text: "Sem resposta dos provedores. Preencha manualmente ou tente de novo.", attempts: [], type: "DOI" });
     } finally {
       setFetchingMetadata(false);
     }
@@ -164,7 +178,6 @@ export function ReadingsTable({
         read_full_book: newReadFull,
         deadline: newDeadline,
         is_read: false,
-        current_speed_pph: 20.0,
         cover_url: newCover,
         publisher: newPublisher,
         published_year: newPublishedYear,
@@ -223,6 +236,13 @@ export function ReadingsTable({
   };
 
   const handleUpdate = async (id: string) => {
+    setEditErrorMessage(null);
+    const validationError = validateReadingUpdate(editValues);
+    if (validationError) {
+      setEditErrorMessage(validationError);
+      return;
+    }
+
     try {
       setLoading(true);
       const updated = await updateReading(id, editValues);
@@ -238,7 +258,7 @@ export function ReadingsTable({
       }
     } catch (err) {
       console.error(err);
-      alert("Erro ao atualizar leitura.");
+      setEditErrorMessage(err instanceof Error ? err.message : "Erro ao atualizar leitura.");
     } finally {
       setLoading(false);
     }
@@ -407,6 +427,13 @@ export function ReadingsTable({
           )}
         </div>
 
+        {metadataNotice && (
+          <div className={`md:col-span-12 mt-2 flex items-center justify-between gap-2 border p-2 text-[11px] ${metadataNotice.kind === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+            <span>{metadataNotice.text}</span>
+            {metadataNotice.kind === "error" && <Button type="button" size="sm" variant="outline" className="h-6 text-[11px]" onClick={() => { if (metadataNotice.type === "ISBN") { setLookedUpIsbn(""); void handleIsbnBlur(); } else { setLookedUpDoi(""); void handleDoiBlur(); } }}>Tentar de novo</Button>}
+          </div>
+        )}
+
         {/* Linha 2: Autor, Páginas, Deadline e Botão */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end mt-2.5 pt-2.5 border-t border-gray-100 dark:border-gray-800">
           <div className="md:col-span-3">
@@ -502,6 +529,21 @@ export function ReadingsTable({
         </div>
       </div>
 
+      {editErrorMessage && (
+        <div className="flex items-center gap-2 rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+          <span className="font-medium">{editErrorMessage}</span>
+          <button
+            type="button"
+            onClick={() => setEditErrorMessage(null)}
+            className="ml-auto text-xs font-bold text-red-700 dark:text-red-300"
+            aria-label="Fechar mensagem de erro"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Tabela de Leituras - Flat Design */}
       <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
         <Table>
@@ -528,11 +570,17 @@ export function ReadingsTable({
             ) : (
               readings.map((reading) => {
                 const isEditing = editingId === reading.id;
-                const sub = subjectMap.get(reading.subject_id);
-                const subDeliverables = deliverablesBySubject.get(reading.subject_id) || [];
+                const subjectId = isEditing
+                  ? editValues.subject_id ?? reading.subject_id
+                  : reading.subject_id;
+                const deadline = isEditing
+                  ? editValues.deadline ?? reading.deadline
+                  : reading.deadline;
+                const sub = subjectMap.get(subjectId);
+                const subDeliverables = deliverablesBySubject.get(subjectId) || [];
                 const linkedDeliverable = findLinkedDeliverable(
                   subDeliverables,
-                  reading.deadline
+                  deadline
                 );
 
                 return (
@@ -558,15 +606,30 @@ export function ReadingsTable({
                     </TableCell>
 
                     <TableCell className="p-2">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: sub?.theme_color || "#4f46e5" }}
-                        />
-                        <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[100px]">
-                          {sub?.name || "Disciplina"}
-                        </span>
-                      </div>
+                      {isEditing ? (
+                        <select
+                          value={subjectId}
+                          onChange={(event) =>
+                            setEditValues((prev) => ({ ...prev, subject_id: event.target.value }))
+                          }
+                          className="h-7 w-full rounded border border-gray-300 bg-white px-1 text-[11px] dark:border-gray-700 dark:bg-gray-950"
+                          aria-label="Disciplina da leitura"
+                        >
+                          {subjects.map((subject) => (
+                            <option key={subject.id} value={subject.id}>{subject.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: sub?.theme_color || "#4f46e5" }}
+                          />
+                          <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[100px]">
+                            {sub?.name || "Disciplina"}
+                          </span>
+                        </div>
+                      )}
                     </TableCell>
 
                     <TableCell className="p-2">
@@ -579,6 +642,16 @@ export function ReadingsTable({
                             }
                             className="h-6 text-xs rounded"
                           />
+                          {reading.type === "book" && (
+                            <Input
+                              value={editValues.chapter_title ?? ""}
+                              onChange={(e) =>
+                                setEditValues((prev) => ({ ...prev, chapter_title: e.target.value || null }))
+                              }
+                              placeholder="Capítulo"
+                              className="h-6 text-xs rounded"
+                            />
+                          )}
                           <Input
                             value={editValues.author ?? reading.author ?? ""}
                             onChange={(e) =>
@@ -631,7 +704,21 @@ export function ReadingsTable({
                     </TableCell>
 
                     <TableCell className="p-2 font-mono text-xs">
-                      {reading.target_pages}p
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={editValues.target_pages ?? reading.target_pages}
+                          onChange={(event) =>
+                            setEditValues((prev) => ({ ...prev, target_pages: Number(event.target.value) }))
+                          }
+                          className="h-7 w-16 rounded px-1 text-xs"
+                          aria-label="Meta de páginas"
+                        />
+                      ) : (
+                        `${reading.target_pages}p`
+                      )}
                     </TableCell>
 
                     <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
@@ -639,10 +726,19 @@ export function ReadingsTable({
                     </TableCell>
 
                     <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
-                      {formatDateBR(reading.deadline, {
-                        day: "2-digit",
-                        month: "2-digit",
-                      })}
+                      {isEditing ? (
+                        <Input
+                          type="date"
+                          value={deadline}
+                          onChange={(event) =>
+                            setEditValues((prev) => ({ ...prev, deadline: event.target.value }))
+                          }
+                          className="h-7 w-[125px] rounded px-1 text-[11px]"
+                          aria-label="Prazo da leitura"
+                        />
+                      ) : (
+                        formatDateBR(reading.deadline, { day: "2-digit", month: "2-digit" })
+                      )}
                     </TableCell>
 
                     <TableCell className="p-2">
@@ -675,6 +771,7 @@ export function ReadingsTable({
                             onClick={() => {
                               setEditingId(null);
                               setEditValues({});
+                              setEditErrorMessage(null);
                             }}
                             className="h-6 w-6"
                           >
@@ -687,11 +784,15 @@ export function ReadingsTable({
                             size="sm"
                             variant="ghost"
                             onClick={() => {
+                              setEditErrorMessage(null);
                               setEditingId(reading.id);
                               setEditValues({
+                                subject_id: reading.subject_id,
                                 title: reading.title,
                                 chapter_title: reading.chapter_title,
                                 author: reading.author,
+                                target_pages: reading.target_pages,
+                                deadline: reading.deadline,
                               });
                             }}
                             className="text-xs text-gray-500 hover:text-gray-900 h-6 px-1.5"

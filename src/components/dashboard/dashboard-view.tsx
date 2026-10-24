@@ -20,7 +20,6 @@ import {
   Flame,
   CheckCircle2,
   Clock,
-  Compass,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -175,7 +174,7 @@ export function DashboardView({
       {/* ============================================================ */}
       {/* TIER 1: SPACED REVIEWS (Repetição Espaçada — D+1, D+7, D+21)  */}
       {/* ============================================================ */}
-      <section className="space-y-3">
+      {tier1.length > 0 && <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 flex items-center justify-center font-bold text-xs">
@@ -197,24 +196,17 @@ export function DashboardView({
           </span>
         </div>
 
-        {tier1.length === 0 ? (
-          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Nenhuma repetição agendada para hoje! A curva do esquecimento está protegida.</span>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {tier1.map((rev) => (
-              <Tier1Card key={rev.id} review={rev} onRefresh={handleRefresh} />
-            ))}
-          </div>
-        )}
-      </section>
+        <div className="space-y-2">
+          {tier1.map((rev) => (
+            <Tier1Card key={rev.id} review={rev} onRefresh={handleRefresh} />
+          ))}
+        </div>
+      </section>}
 
       {/* ============================================================ */}
       {/* TIER 2: ZONA DE PERIGO (Entregas e Provas em <= 7 dias)       */}
       {/* ============================================================ */}
-      <section className="space-y-3">
+      {tier2.length > 0 && <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-red-600 text-white flex items-center justify-center font-bold text-xs">
@@ -236,37 +228,40 @@ export function DashboardView({
           </span>
         </div>
 
-        {tier2.length === 0 ? (
-          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Nenhuma leitura na Zona de Perigo no momento.</span>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {tier2.map((reading) => {
-              const linkedDeliverableId = readingDeliverableMap[reading.id];
-              const linkedDeliverable = linkedDeliverableId
-                ? deliverableMap.get(linkedDeliverableId)
-                : null;
-              return (
-                <ReadingTierCard
-                  key={reading.id}
-                  reading={reading}
-                  tierNumber={2}
-                  linkedDeliverable={linkedDeliverable}
-                  onOpenSession={handleOpenSession}
-                  onRefresh={handleRefresh}
-                />
-              );
-            })}
-          </div>
-        )}
-      </section>
+        <div className="space-y-2">
+          {tier2.map((reading) => {
+            const linkedDeliverableId = readingDeliverableMap[reading.id];
+            const linkedDeliverable = linkedDeliverableId
+              ? deliverableMap.get(linkedDeliverableId)
+              : null;
+            return (
+              <ReadingTierCard
+                key={reading.id}
+                reading={reading}
+                tierNumber={2}
+                linkedDeliverable={linkedDeliverable}
+                onOpenSession={handleOpenSession}
+                onRefresh={handleRefresh}
+              />
+            );
+          })}
+        </div>
+      </section>}
 
       {/* ============================================================ */}
       {/* TIER 3: LEITURAS REGULARES DA FACULDADE (Estudo Ativo)        */}
       {/* ============================================================ */}
-      <section className="space-y-3">
+      {totalTasks === 0 ? (
+        <div className="rounded-md border border-gray-200 bg-white p-5 text-center text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          <p>Nada pendente por agora</p>
+          <Link
+            href="/setup"
+            className="mt-2 inline-block font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
+          >
+            Cadastrar leituras
+          </Link>
+        </div>
+      ) : <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-gray-700 text-white flex items-center justify-center font-bold text-xs">
@@ -308,12 +303,12 @@ export function DashboardView({
             })}
           </div>
         )}
-      </section>
+      </section>}
 
       {/* ============================================================ */}
       {/* TIER 4: ESTUDO AUTÔNOMO (Prazos Elásticos)                     */}
       {/* ============================================================ */}
-      <section className="space-y-3">
+      {tier4.length > 0 && <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-amber-700 text-white flex items-center justify-center font-bold text-xs">
@@ -330,25 +325,18 @@ export function DashboardView({
           </span>
         </div>
 
-        {tier4.length === 0 ? (
-          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
-            <Compass className="w-4 h-4 text-gray-400" />
-            <span>Nenhuma leitura autônoma pendente.</span>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {tier4.map((reading) => (
-              <ReadingTierCard
-                key={reading.id}
-                reading={reading}
-                tierNumber={4}
-                onOpenSession={handleOpenSession}
-                onRefresh={handleRefresh}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+        <div className="space-y-2">
+          {tier4.map((reading) => (
+            <ReadingTierCard
+              key={reading.id}
+              reading={reading}
+              tierNumber={4}
+              onOpenSession={handleOpenSession}
+              onRefresh={handleRefresh}
+            />
+          ))}
+        </div>
+      </section>}
 
       {/* Modal de Sessão de Leitura Reutilizado */}
       <ReadingSessionModal

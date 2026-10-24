@@ -16,10 +16,12 @@ export function findLinkedDeliverable<T extends { date: string }>(
 ): T | null {
   for (let i = 0; i < entregasOrdenadasPorDataAsc.length; i++) {
     const entrega = entregasOrdenadasPorDataAsc[i];
-    const previousDate =
-      i > 0 ? entregasOrdenadasPorDataAsc[i - 1].date : "1970-01-01";
+    const previousDate = i > 0 ? entregasOrdenadasPorDataAsc[i - 1].date : null;
+    const isAfterPrevious = previousDate
+      ? deadline > previousDate
+      : deadline === entrega.date;
 
-    if (deadline <= entrega.date && deadline > previousDate) {
+    if (deadline <= entrega.date && isAfterPrevious) {
       return entrega;
     }
   }

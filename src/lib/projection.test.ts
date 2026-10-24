@@ -1,0 +1,106 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { computeProjection } from "@/lib/projection";
+import type { Reading, ReadingSession } from "@/types/database";
+
+function makeReading(overrides: Partial<Reading> = {}): Reading {
+  return {
+    id: "reading-1",
+    subject_id: "subject-1",
+    title: "Livro de teste",
+    chapter_title: null,
+    author: "Autoria",
+    type: "book",
+    isbn: null,
+    doi: null,
+    full_book_pages: null,
+    target_pages: 100,
+    read_full_book: false,
+    deadline: "2026-10-29",
+    is_read: false,
+    current_speed_pph: 20,
+    cover_url: null,
+    publisher: null,
+    published_year: null,
+    metadata_source: null,
+    metadata_fetched_at: null,
+    created_at: "2026-10-01T12:00:00Z",
+    updated_at: "2026-10-01T12:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeSession(pagesRead: number, durationMinutes: number): ReadingSession {
+  return {
+    id: `session-${pagesRead}-${durationMinutes}`,
+    reading_id: "reading-1",
+    pages_read: pagesRead,
+    duration_minutes: durationMinutes,
+    created_at: "2026-10-23T12:00:00Z",
+  };
+}
+
+describe("computeProjection", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("usa 20 páginas por hora como referência quando não há sessões", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
+
+    expect(computeProjection(makeReading(), [])).toEqual({
+      pagesRead: 0,
+      pagesRemaining: 100,
+      progressPercent: 0,
+      overTarget: 0,
+      hoursRemaining: 5,
+      daysRemaining: 5,
+      hoursPerDay: 1,
+      isOverdue: false,
+    });
+  });
+
+  it("projeta páginas e tempo a partir das sessões registradas", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
+
+    const projection = computeProjection(makeReading(), [makeSession(30, 90), makeSession(20, 60)]);
+    expect(projection).toEqual({
+      pagesRead: 50,
+      pagesRemaining: 50,
+      progressPercent: 50,
+      overTarget: 0,
+      hoursRemaining: 2.5,
+      daysRemaining: 5,
+      hoursPerDay: 0.5,
+      isOverdue: false,
+    });
+  });
+
+  it("limita o progresso a 100% e informa páginas além da meta", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
+
+    const projection = computeProjection(makeReading(), [makeSession(130, 390)]);
+    expect(projection.progressPercent).toBe(100);
+    expect(projection.overTarget).toBe(30);
+    expect(projection.pagesRemaining).toBe(0);
+  });
+
+  it("marca uma leitura atrasada", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
+
+    const projection = computeProjection(makeReading({ deadline: "2026-10-23" }), []);
+    expect(projection.isOverdue).toBe(true);
+    expect(projection.daysRemaining).toBe(0);
+  });
+
+  it("usa todo o tempo restante como horas por dia quando o prazo é hoje", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
+
+    const projection = computeProjection(makeReading({ deadline: "2026-10-24" }), [makeSession(20, 60)]);
+    expect(projection.hoursRemaining).toBe(4);
+    expect(projection.daysRemaining).toBe(0);
+    expect(projection.hoursPerDay).toBe(4);
+  });
+});

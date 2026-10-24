@@ -1,5 +1,5 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.2)
+// Lithium — Database Types (mirrors Supabase schema v1.3)
 // ============================================================
 
 export type ReadingType = "book" | "article";
@@ -63,6 +63,13 @@ export interface ReadingSession {
   created_at: string;
 }
 
+export interface ReadingSpeedStat {
+  reading_type: ReadingType;
+  sessions: number;
+  total_pages: number;
+  total_minutes: number;
+}
+
 export interface SpacedReview {
   id: string;
   reading_id: string;
@@ -85,6 +92,7 @@ export type ReadingInsert = Omit<
   | "id"
   | "created_at"
   | "updated_at"
+  | "current_speed_pph"
   | "cover_url"
   | "publisher"
   | "published_year"
@@ -94,6 +102,7 @@ export type ReadingInsert = Omit<
   Partial<
     Pick<
       Reading,
+      | "current_speed_pph"
       | "cover_url"
       | "publisher"
       | "published_year"

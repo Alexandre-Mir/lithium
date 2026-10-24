@@ -1,4 +1,13 @@
-import type { ReadingType } from "@/types/database";
+export type MetadataProvider = "google_books" | "open_library" | "brasilapi" | "crossref";
+export type AttemptOutcome = "ok" | "empty" | "http_error" | "timeout" | "network" | "parse_error";
+
+export interface MetadataAttempt {
+  provider: MetadataProvider;
+  outcome: AttemptOutcome;
+  httpStatus?: number;
+  ms: number;
+  detail?: string;
+}
 
 export interface BookMetadata {
   title: string;
@@ -7,140 +16,411 @@ export interface BookMetadata {
   coverUrl: string | null;
   publisher: string | null;
   publishedYear: number | null;
-  source: "google_books" | "open_library";
+  source: MetadataProvider;
 }
 
-export interface ArticleMetadata {
-  title: string;
-  authors: string;
-  pageCount: number | null;
-  coverUrl: string | null;
-  publisher: string | null;
-  publishedYear: number | null;
+export interface ArticleMetadata extends Omit<BookMetadata, "source"> {
   source: "crossref";
 }
 
 export type MetadataResult<T> =
-  | { status: "ok"; data: T }
-  | { status: "not_found" }
-  | { status: "error"; reason: "rate_limited" | "network" | "unknown" };
+  | { status: "ok"; data: T; attempts: MetadataAttempt[] }
+  | { status: "not_found"; attempts: MetadataAttempt[] }
+  | {
+      status: "error";
+      reason: "rate_limited" | "network" | "unknown";
+      attempts: MetadataAttempt[];
+    };
 
-const OPEN_LIBRARY_INTERVAL = 1100;
-let openLibraryQueue: Promise<void> = Promise.resolve();
-let lastOpenLibraryRequest = 0;
+interface RequestResult {
+  body?: unknown;
+  status?: number;
+  outcome?: AttemptOutcome;
+}
+
+interface OpenLibraryItem {
+  title?: string;
+  authors?: Array<{ name?: string }>;
+  number_of_pages?: number;
+  publishers?: Array<{ name?: string }>;
+  publish_date?: string;
+  cover?: { large?: string; medium?: string };
+}
+
+let openQueue: Promise<void> = Promise.resolve();
+let lastOpenRequestAt = 0;
+let warnedMissingGoogleKey = false;
 
 function cleanUrl(value: unknown): string | null {
   if (typeof value !== "string" || !value) return null;
   return value.replace(/^http:\/\//i, "https://").replace(/&edge=curl/g, "");
 }
 
-function yearFrom(value: unknown): number | null {
+function extractYear(value: unknown): number | null {
   const match = String(value ?? "").match(/\b(\d{4})\b/);
   return match ? Number(match[1]) : null;
 }
 
-function contactHeaders(): HeadersInit {
-  const email = process.env.CONTACT_EMAIL;
-  return { "User-Agent": email ? `Lithium/0.3 (${email})` : "Lithium/0.3" };
+function requestHeaders(): HeadersInit {
+  const contact = process.env.CONTACT_EMAIL;
+  return {
+    "User-Agent": contact ? `Lithium/0.3 (${contact})` : "Lithium/0.3",
+  };
 }
 
-async function fetchJson(url: string, timeoutMs = 8000, headers?: HeadersInit) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal, headers });
-    return response;
-  } finally {
-    clearTimeout(timeout);
+function isBrazilianIsbn(isbn: string): boolean {
+  return /^(?:978(?:85|65)\d{8}|(?:85|65)\d{7}[\dX])$/.test(isbn);
+}
+
+function isValidIsbn(isbn: string): boolean {
+  return /^(?:\d{9}[\dX]|\d{13})$/.test(isbn);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function exceptionDetail(error: unknown): string {
+  if (error instanceof Error && error.cause && typeof error.cause === "object" && "code" in error.cause) {
+    return String(error.cause.code);
   }
+  return error instanceof Error ? error.name : "unknown";
 }
 
-async function waitForOpenLibrarySlot() {
+function redactApiKey(detail: string): string {
+  return detail.replace(/([?&]key=)[^&\s"']+/gi, "$1[redacted]");
+}
+
+function logFailure(identifier: string, attempts: MetadataAttempt[]): void {
+  const summary = attempts
+    .map((attempt) => {
+      const status = attempt.httpStatus ? ` ${attempt.httpStatus}` : "";
+      const detail = attempt.detail ? ` "${redactApiKey(attempt.detail)}"` : "";
+      return `${attempt.provider}: ${attempt.outcome}${status}${detail} (${attempt.ms}ms)`;
+    })
+    .join(" | ");
+
+  console.warn(`[metadata] ${identifier} ${summary}`.trimEnd());
+}
+
+function finish<T>(
+  identifier: string,
+  attempts: MetadataAttempt[],
+  budgetExpired = false,
+): MetadataResult<T> {
+  if (!budgetExpired && attempts.every((attempt) => attempt.outcome === "empty")) {
+    logFailure(identifier, attempts);
+    return { status: "not_found", attempts };
+  }
+
+  const reason = attempts.some((attempt) => attempt.httpStatus === 429)
+    ? "rate_limited"
+    : attempts.some((attempt) => attempt.outcome === "timeout" || attempt.outcome === "network")
+      ? "network"
+      : "unknown";
+
+  logFailure(identifier, attempts);
+  return { status: "error", reason, attempts };
+}
+
+async function waitForOpenLibrarySlot(): Promise<void> {
   let release!: () => void;
-  const previous = openLibraryQueue;
-  openLibraryQueue = new Promise<void>((resolve) => {
+  const previous = openQueue;
+  openQueue = new Promise<void>((resolve) => {
     release = resolve;
   });
+
   await previous;
-  const delay = Math.max(0, OPEN_LIBRARY_INTERVAL - (Date.now() - lastOpenLibraryRequest));
-  if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
-  lastOpenLibraryRequest = Date.now();
+  const waitMs = Math.max(0, 1100 - (Date.now() - lastOpenRequestAt));
+  if (waitMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+  lastOpenRequestAt = Date.now();
   release();
 }
 
-async function fetchOpenLibrary(isbn: string): Promise<MetadataResult<BookMetadata>> {
+async function request(
+  url: string,
+  provider: MetadataProvider,
+  timeoutMs: number,
+  deadline: number,
+  attempts: MetadataAttempt[],
+  headers?: HeadersInit,
+): Promise<RequestResult> {
+  for (let retry = 0; retry < 2 && Date.now() < deadline; retry += 1) {
+    const attempt: MetadataAttempt = { provider, outcome: "network", ms: 0 };
+    attempts.push(attempt);
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    const remainingMs = deadline - Date.now();
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.min(timeoutMs, Math.max(1, remainingMs)),
+    );
+
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers });
+      attempt.httpStatus = response.status;
+      const responseText = await response.text();
+      attempt.ms = Date.now() - startedAt;
+
+      if (!response.ok) {
+        attempt.outcome = "http_error";
+        if (provider === "google_books") {
+          try {
+            const payload = JSON.parse(responseText) as { error?: { message?: string } };
+            attempt.detail = payload.error?.message?.slice(0, 140);
+          } catch {
+            // O corpo de erro pode não ser JSON.
+          }
+        }
+
+        const canRetry = response.status >= 500;
+        if (canRetry && retry === 0 && Date.now() + 800 < deadline) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 800));
+          continue;
+        }
+
+        return { status: response.status, outcome: "http_error" };
+      }
+
+      try {
+        const body = JSON.parse(responseText) as unknown;
+        attempt.outcome = "ok";
+        return { body, status: response.status, outcome: "ok" };
+      } catch {
+        attempt.outcome = "parse_error";
+        return { status: response.status, outcome: "parse_error" };
+      }
+    } catch (error) {
+      attempt.ms = Date.now() - startedAt;
+      attempt.outcome = isAbortError(error) ? "timeout" : "network";
+      attempt.detail = exceptionDetail(error);
+
+      if (retry === 0 && Date.now() + 800 < deadline) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 800));
+        continue;
+      }
+
+      return { status: attempt.httpStatus, outcome: attempt.outcome };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return { outcome: attempts.at(-1)?.outcome };
+}
+
+function googleErrorDetailIsSafeToLog(attempt: MetadataAttempt): void {
+  if (attempt.detail) attempt.detail = redactApiKey(attempt.detail).slice(0, 140);
+}
+
+async function fetchOpenLibrary(
+  isbn: string,
+  deadline: number,
+  attempts: MetadataAttempt[],
+): Promise<BookMetadata | null> {
   await waitForOpenLibrarySlot();
-  try {
-    const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`;
-    const response = await fetchJson(url, 8000, contactHeaders());
-    if (response.status === 429) return { status: "error", reason: "rate_limited" };
-    if (!response.ok) return { status: "error", reason: response.status >= 500 ? "network" : "unknown" };
-    const json = (await response.json()) as Record<string, {
-      title?: string;
-      authors?: Array<{ name?: string }>;
-      number_of_pages?: number;
-      publishers?: Array<{ name?: string }>;
-      publish_date?: string;
-      cover?: { medium?: string; large?: string };
-    }>;
-    const item = json[`ISBN:${isbn}`];
-    if (!item) return { status: "not_found" };
+  if (Date.now() >= deadline) return null;
+
+  const result = await request(
+    `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`,
+    "open_library",
+    12000,
+    deadline,
+    attempts,
+    requestHeaders(),
+  );
+  const payload = result.body as Record<string, OpenLibraryItem | undefined> | undefined;
+  const item = payload?.[`ISBN:${isbn}`];
+
+  if (!item?.title) {
+    if (result.outcome === "ok") attempts.at(-1)!.outcome = "empty";
+    return null;
+  }
+
+  return {
+    title: item.title,
+    authors: (item.authors ?? []).map((author) => author.name).filter(Boolean).join(", "),
+    pageCount: item.number_of_pages ?? null,
+    coverUrl: cleanUrl(item.cover?.large ?? item.cover?.medium),
+    publisher: item.publishers?.[0]?.name ?? null,
+    publishedYear: extractYear(item.publish_date),
+    source: "open_library",
+  };
+}
+
+async function fetchBrasilApi(
+  isbn: string,
+  deadline: number,
+  attempts: MetadataAttempt[],
+): Promise<BookMetadata | null> {
+  const result = await request(
+    `https://brasilapi.com.br/api/isbn/v1/${isbn}?providers=cbl,mercado-editorial`,
+    "brasilapi",
+    8000,
+    deadline,
+    attempts,
+  );
+
+  if (result.status === 404) {
+    attempts.at(-1)!.outcome = "empty";
+    return null;
+  }
+
+  const item = result.body as
+    | {
+        title?: string;
+        subtitle?: string;
+        authors?: string[];
+        publisher?: string;
+        year?: number;
+        page_count?: number;
+        cover_url?: string | null;
+      }
+    | undefined;
+
+  if (!item?.title) {
+    if (result.outcome === "ok") attempts.at(-1)!.outcome = "empty";
+    return null;
+  }
+
+  return {
+    title: item.subtitle ? `${item.title}: ${item.subtitle}` : item.title,
+    authors: item.authors?.join(", ") ?? "",
+    pageCount: item.page_count ?? null,
+    coverUrl: cleanUrl(item.cover_url),
+    publisher: item.publisher ?? null,
+    publishedYear: item.year ?? null,
+    source: "brasilapi",
+  };
+}
+
+export async function fetchBookMetadata(rawIsbn: string): Promise<MetadataResult<BookMetadata>> {
+  const isbn = rawIsbn.replace(/[^0-9X]/gi, "").toUpperCase();
+  const attempts: MetadataAttempt[] = [];
+  if (!isValidIsbn(isbn)) return finish(`isbn=${isbn}`, attempts);
+
+  if (!process.env.GOOGLE_BOOKS_API_KEY && !warnedMissingGoogleKey) {
+    warnedMissingGoogleKey = true;
+    console.warn("[metadata] GOOGLE_BOOKS_API_KEY ausente; Google Books será consultado sem chave.");
+  }
+
+  const deadline = Date.now() + 20000;
+  const key = process.env.GOOGLE_BOOKS_API_KEY;
+  const keyQuery = key ? `&key=${encodeURIComponent(key)}` : "";
+  const google = await request(
+    `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=1${keyQuery}`,
+    "google_books",
+    8000,
+    deadline,
+    attempts,
+  );
+  const volume = (
+    google.body as
+      | {
+          items?: Array<{
+            volumeInfo?: {
+              title?: string;
+              authors?: string[];
+              pageCount?: number;
+              imageLinks?: {
+                small?: string;
+                medium?: string;
+                large?: string;
+                thumbnail?: string;
+              };
+              publisher?: string;
+              publishedDate?: string;
+            };
+          }>;
+        }
+      | undefined
+  )?.items?.[0]?.volumeInfo;
+
+  if (volume?.title) {
     return {
       status: "ok",
       data: {
-        title: item.title ?? "",
-        authors: (item.authors ?? []).map((author) => author.name).filter(Boolean).join(", "),
-        pageCount: item.number_of_pages ?? null,
-        coverUrl: cleanUrl(item.cover?.medium ?? item.cover?.large),
-        publisher: item.publishers?.[0]?.name ?? null,
-        publishedYear: yearFrom(item.publish_date),
-        source: "open_library",
+        title: volume.title,
+        authors: volume.authors?.join(", ") ?? "",
+        pageCount: volume.pageCount ?? null,
+        coverUrl: cleanUrl(
+          volume.imageLinks?.large ??
+            volume.imageLinks?.medium ??
+            volume.imageLinks?.small ??
+            volume.imageLinks?.thumbnail,
+        ),
+        publisher: volume.publisher ?? null,
+        publishedYear: extractYear(volume.publishedDate),
+        source: "google_books",
       },
+      attempts,
     };
-  } catch (error) {
-    return { status: "error", reason: error instanceof DOMException && error.name === "AbortError" ? "network" : "network" };
   }
+
+  if (google.outcome === "ok") attempts.at(-1)!.outcome = "empty";
+  googleErrorDetailIsSafeToLog(attempts[0]);
+
+  if (isBrazilianIsbn(isbn) && Date.now() < deadline) {
+    const brasilApi = await fetchBrasilApi(isbn, deadline, attempts);
+    if (brasilApi) return { status: "ok", data: brasilApi, attempts };
+  }
+
+  if (Date.now() < deadline) {
+    const openLibrary = await fetchOpenLibrary(isbn, deadline, attempts);
+    if (openLibrary) return { status: "ok", data: openLibrary, attempts };
+  }
+
+  return finish(`isbn=${isbn}`, attempts, Date.now() >= deadline);
 }
 
-export async function fetchBookMetadata(isbn: string): Promise<MetadataResult<BookMetadata>> {
-  const cleanIsbn = isbn.replace(/[^0-9X]/gi, "").toUpperCase();
-  if (![10, 13].includes(cleanIsbn.length)) return { status: "not_found" };
-  const key = process.env.GOOGLE_BOOKS_API_KEY;
-  const googleUrl = `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}&maxResults=1${key ? `&key=${encodeURIComponent(key)}` : ""}`;
-  try {
-    const response = await fetchJson(googleUrl);
-    if (response.ok) {
-      const json = (await response.json()) as { items?: Array<{ volumeInfo?: { title?: string; authors?: string[]; pageCount?: number; imageLinks?: { thumbnail?: string; smallThumbnail?: string }; publisher?: string; publishedDate?: string } }> };
-      const volume = json.items?.[0]?.volumeInfo;
-      if (volume) {
-        return { status: "ok", data: { title: volume.title ?? "", authors: volume.authors?.join(", ") ?? "", pageCount: volume.pageCount ?? null, coverUrl: cleanUrl(volume.imageLinks?.thumbnail ?? volume.imageLinks?.smallThumbnail), publisher: volume.publisher ?? null, publishedYear: yearFrom(volume.publishedDate), source: "google_books" } };
-      }
-    } else if (response.status === 429) {
-      return fetchOpenLibrary(cleanIsbn);
-    } else if (response.status >= 500) {
-      return fetchOpenLibrary(cleanIsbn);
-    }
-  } catch {
-    return fetchOpenLibrary(cleanIsbn);
-  }
-  return fetchOpenLibrary(cleanIsbn);
-}
+export async function fetchArticleMetadata(rawDoi: string): Promise<MetadataResult<ArticleMetadata>> {
+  const doi = rawDoi
+    .trim()
+    .replace(/^(?:https?:\/\/(?:doi\.org|dx\.doi\.org)\/|doi:)/i, "");
+  const attempts: MetadataAttempt[] = [];
+  const mailto = process.env.CONTACT_EMAIL
+    ? `?mailto=${encodeURIComponent(process.env.CONTACT_EMAIL)}`
+    : "";
+  const deadline = Date.now() + 20000;
+  const result = await request(
+    `https://api.crossref.org/works/${encodeURIComponent(doi)}${mailto}`,
+    "crossref",
+    8000,
+    deadline,
+    attempts,
+  );
+  const message = (
+    result.body as
+      | {
+          message?: {
+            title?: string[];
+            author?: Array<{ given?: string; family?: string }>;
+            publisher?: string;
+            issued?: { "date-parts"?: number[][] };
+          };
+        }
+      | undefined
+  )?.message;
 
-export async function fetchArticleMetadata(doi: string): Promise<MetadataResult<ArticleMetadata>> {
-  const cleanDoi = doi.trim().replace(/^(?:https?:\/\/(?:doi\.org|dx\.doi\.org)\/|doi:)/i, "");
-  if (!cleanDoi) return { status: "not_found" };
-  const mailto = process.env.CONTACT_EMAIL ? `?mailto=${encodeURIComponent(process.env.CONTACT_EMAIL)}` : "";
-  try {
-    const response = await fetchJson(`https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}${mailto}`);
-    if (response.status === 429) return { status: "error", reason: "rate_limited" };
-    if (response.status === 404) return { status: "not_found" };
-    if (!response.ok) return { status: "error", reason: response.status >= 500 ? "network" : "unknown" };
-    const message = (await response.json() as { message?: { title?: string[]; author?: Array<{ given?: string; family?: string }>; publisher?: string; issued?: { "date-parts"?: number[][] } } }).message;
-    if (!message) return { status: "not_found" };
-    return { status: "ok", data: { title: message.title?.[0] ?? "", authors: (message.author ?? []).map((author) => [author.given, author.family].filter(Boolean).join(" ")).filter(Boolean).join(", "), pageCount: null, coverUrl: null, publisher: message.publisher ?? null, publishedYear: message.issued?.["date-parts"]?.[0]?.[0] ?? null, source: "crossref" } };
-  } catch {
-    return { status: "error", reason: "network" };
+  if (message?.title?.[0]) {
+    return {
+      status: "ok",
+      data: {
+        title: message.title[0],
+        authors: (message.author ?? [])
+          .map((author) => [author.given, author.family].filter(Boolean).join(" "))
+          .filter(Boolean)
+          .join(", "),
+        pageCount: null,
+        coverUrl: null,
+        publisher: message.publisher ?? null,
+        publishedYear: message.issued?.["date-parts"]?.[0]?.[0] ?? null,
+        source: "crossref",
+      },
+      attempts,
+    };
   }
-}
 
-export type ReadingMetadataType = ReadingType;
+  if (result.status === 404 || result.outcome === "ok") attempts.at(-1)!.outcome = "empty";
+  return finish(`doi=${doi}`, attempts, Date.now() >= deadline);
+}

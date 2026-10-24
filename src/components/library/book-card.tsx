@@ -7,9 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { markReadingAsRead, markReadingAsUnread } from "@/app/actions";
 import { formatDateBR } from "@/lib/dates";
+import { ReadingCover } from "@/components/library/reading-cover";
 import {
-  BookOpen,
-  FileText,
   Clock,
   Zap,
   CheckCircle2,
@@ -32,7 +31,6 @@ export function BookCard({
   onRefresh,
 }: BookCardProps) {
   const [isRead, setIsRead] = useState(reading.is_read);
-  const [imageError, setImageError] = useState(false);
 
   const handleToggleRead = async () => {
     const nextVal = !isRead;
@@ -59,39 +57,10 @@ export function BookCard({
   return (
     <div className="relative flex flex-col rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden transition-colors hover:border-gray-300 dark:hover:border-gray-700">
       {/* Header Visual Flat */}
-      <div
-        className="relative h-40 w-full flex items-center justify-center border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950"
-      >
-        {reading.type === "book" && reading.cover_url && !imageError ? (
-          <Link href={`/library/${reading.id}`} className="relative z-10 h-full w-full flex items-center justify-center p-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={reading.cover_url}
-              alt={reading.title}
-              className="h-32 max-w-[90px] object-contain rounded border border-gray-200 dark:border-gray-800"
-              onError={() => setImageError(true)}
-            />
-          </Link>
-        ) : (
-          <div className="flex flex-col items-center justify-center text-center p-4 w-full h-full">
-            <div
-              className="w-10 h-10 rounded flex items-center justify-center mb-1.5 text-white"
-              style={{ backgroundColor: themeColor }}
-            >
-              {reading.type === "article" ? (
-                <FileText className="w-5 h-5" />
-              ) : (
-                <BookOpen className="w-5 h-5" />
-              )}
-            </div>
-            <span
-              className="text-[10px] font-bold uppercase tracking-wider"
-              style={{ color: themeColor }}
-            >
-              {reading.type === "article" ? "Artigo Científico" : "Livro"}
-            </span>
-          </div>
-        )}
+      <div className="relative border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950">
+        <Link href={`/library/${reading.id}`} className="relative z-10 block">
+          <ReadingCover reading={reading} themeColor={themeColor} size="card" />
+        </Link>
 
         {/* Badges superiores flutuantes */}
         <div className="absolute top-2 left-2 z-10 flex gap-1">

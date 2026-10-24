@@ -1,6 +1,6 @@
 -- ============================================================
 -- LITHIUM — Motor Cognitivo de Estudos
--- Schema v1.2 (Totalmente idempotente e seguro contra reexecuções)
+-- Schema v1.3 (Totalmente idempotente e seguro contra reexecuções)
 -- ============================================================
 
 -- 0. Extensions
@@ -187,6 +187,22 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN
   CREATE POLICY "Allow all" ON spaced_reviews FOR ALL USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- ============================================================
+-- VIEW: velocidade agregada por tipo de leitura (v1.3)
+-- ============================================================
+CREATE OR REPLACE VIEW reading_speed_stats
+WITH (security_invoker = true) AS
+SELECT
+  r.type::text                               AS reading_type,
+  COUNT(*)::int                              AS sessions,
+  COALESCE(SUM(s.pages_read), 0)::int        AS total_pages,
+  COALESCE(SUM(s.duration_minutes), 0)::int  AS total_minutes
+FROM reading_sessions s
+JOIN readings r ON r.id = s.reading_id
+GROUP BY r.type;
+
+GRANT SELECT ON reading_speed_stats TO anon, authenticated;
 
 -- ============================================================
 -- NOTIFY POSTGREST: Forçar recarga imediata do schema cache

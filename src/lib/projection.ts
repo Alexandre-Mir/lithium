@@ -4,7 +4,7 @@ import type { Reading, ReadingSession } from "@/types/database";
 export function computeProjection(reading: Reading, sessions: ReadingSession[]) {
   const pagesRead = sessions.reduce((sum, session) => sum + session.pages_read, 0);
   const totalMinutes = sessions.reduce((sum, session) => sum + session.duration_minutes, 0);
-  const speed = totalMinutes > 0 ? (pagesRead / totalMinutes) * 60 : 20;
+  const speed = totalMinutes > 0 ? (pagesRead / totalMinutes) * 60 : reading.current_speed_pph;
   const pagesRemaining = Math.max(0, reading.target_pages - pagesRead);
   const overTarget = Math.max(0, pagesRead - reading.target_pages);
   const progressPercent = reading.target_pages > 0
