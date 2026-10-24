@@ -1,7 +1,7 @@
 "use client";
 
 import { SubjectStat } from "@/types/database";
-import { Clock, BookOpen, CheckCircle2, GraduationCap } from "lucide-react";
+import { Clock, BookOpen, GraduationCap } from "lucide-react";
 
 interface SubjectStatsProps {
   stats: SubjectStat[];

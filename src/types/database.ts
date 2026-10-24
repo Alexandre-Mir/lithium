@@ -1,5 +1,5 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.1)
+// Lithium — Database Types (mirrors Supabase schema v1.2)
 // ============================================================
 
 export type ReadingType = "book" | "article";
@@ -46,6 +46,11 @@ export interface Reading {
   deadline: string;
   is_read: boolean;
   current_speed_pph: number;
+  cover_url: string | null;
+  publisher: string | null;
+  published_year: number | null;
+  metadata_source: string | null;
+  metadata_fetched_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -75,7 +80,27 @@ export type SubjectUpdate = Partial<SubjectInsert>;
 export type DeliverableInsert = Omit<Deliverable, "id" | "created_at" | "updated_at">;
 export type DeliverableUpdate = Partial<DeliverableInsert>;
 
-export type ReadingInsert = Omit<Reading, "id" | "created_at" | "updated_at">;
+export type ReadingInsert = Omit<
+  Reading,
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "cover_url"
+  | "publisher"
+  | "published_year"
+  | "metadata_source"
+  | "metadata_fetched_at"
+> &
+  Partial<
+    Pick<
+      Reading,
+      | "cover_url"
+      | "publisher"
+      | "published_year"
+      | "metadata_source"
+      | "metadata_fetched_at"
+    >
+  >;
 export type ReadingUpdate = Partial<ReadingInsert>;
 
 export type ReadingSessionInsert = Omit<ReadingSession, "id" | "created_at">;

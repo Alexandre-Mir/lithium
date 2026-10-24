@@ -11,6 +11,7 @@ import { Tier1Card } from "./tier1-card";
 import { ReadingTierCard } from "./reading-tier-card";
 import { SubjectStats } from "./subject-stats";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
+import { formatTodayLongBR } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,12 +77,7 @@ export function DashboardView({
     return acc + (r.target_pages / sp);
   }, 0);
 
-  const todayFormatted = new Intl.DateTimeFormat("pt-BR", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(new Date());
+  const todayFormatted = formatTodayLongBR();
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-8">

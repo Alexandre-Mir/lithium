@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { SpacedReviewWithReading } from "@/types/database";
 import { markReviewAsDone } from "@/app/actions";
+import { todayISO, formatDateBR } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2 } from "lucide-react";
@@ -34,7 +36,7 @@ export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
     }
   };
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = todayISO();
   const isOverdue = review.review_date < todayStr;
 
   if (completed) {
@@ -42,7 +44,7 @@ export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
       <div className="rounded-md border border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20 p-3 flex items-center justify-between text-xs">
         <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span className="line-through">{reading?.title || "Revisão"}</span>
+          <Link href={`/library/${reading?.id}`} className="line-through">{reading?.title || "Revisão"}</Link>
         </div>
         <Badge variant="outline" className="text-[10px] bg-white dark:bg-gray-900 border-emerald-300 text-emerald-800 py-0">
           Revisado
@@ -61,7 +63,7 @@ export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
 
           {isOverdue ? (
             <Badge variant="outline" className="text-[10px] border-red-300 text-red-700 dark:text-red-300 py-0">
-              Atrasada ({new Date(review.review_date + "T00:00:00").toLocaleDateString("pt-BR")})
+              Atrasada ({formatDateBR(review.review_date)})
             </Badge>
           ) : (
             <Badge variant="outline" className="text-[10px] border-gray-300 text-gray-600 dark:text-gray-400 py-0 font-mono">
@@ -82,9 +84,7 @@ export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
           )}
         </div>
 
-        <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100">
-          {reading?.title || "Leitura vinculada"}
-        </h4>
+        <Link href={`/library/${reading?.id}`} className="relative z-10 block"><h4 className="font-bold text-sm text-gray-900 dark:text-gray-100">{reading?.title || "Leitura vinculada"}</h4></Link>
 
         {reading?.chapter_title && (
           <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">

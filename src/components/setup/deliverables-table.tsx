@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Deliverable, Subject } from "@/types/database";
 import { createDeliverable, updateDeliverable, deleteDeliverable } from "@/app/actions";
+import { daysUntil, formatDateBR } from "@/lib/dates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -40,21 +41,6 @@ export function DeliverablesTable({
   const [editValues, setEditValues] = useState<Partial<Deliverable>>({});
 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
-
-  const isDangerZone = (dateStr: string) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const target = new Date(dateStr + "T00:00:00");
-    const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return diffDays >= 0 && diffDays <= 7;
-  };
-
-  const getDaysLeft = (dateStr: string) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const target = new Date(dateStr + "T00:00:00");
-    return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  };
 
   const handleCreate = async () => {
     if (!newTitle.trim() || !newDate || !newSubjectId) return;
@@ -190,8 +176,8 @@ export function DeliverablesTable({
               deliverables.map((deliv) => {
                 const isEditing = editingId === deliv.id;
                 const sub = subjectMap.get(deliv.subject_id);
-                const danger = isDangerZone(deliv.date);
-                const daysLeft = getDaysLeft(deliv.date);
+                const daysLeft = daysUntil(deliv.date);
+                const danger = daysLeft >= 0 && daysLeft <= 7;
 
                 return (
                   <TableRow
@@ -253,7 +239,7 @@ export function DeliverablesTable({
                           className="h-7 text-xs font-mono rounded"
                         />
                       ) : (
-                        new Date(deliv.date + "T00:00:00").toLocaleDateString("pt-BR")
+                        formatDateBR(deliv.date)
                       )}
                     </TableCell>
 

@@ -2,6 +2,9 @@
 
 import { supabase } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
+import { todayISO, addDaysISO, daysUntil } from "@/lib/dates";
+import { findLinkedDeliverable } from "@/lib/cascade";
+import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
 import type {
   SubjectInsert,
   SubjectUpdate,
@@ -12,6 +15,12 @@ import type {
   ReadingSessionInsert,
   SpacedReviewUpdate,
   SubjectStat,
+  Subject,
+  Reading,
+  ReadingSession,
+  Deliverable,
+  ReadingWithSubject,
+  SpacedReviewWithReading,
 } from "@/types/database";
 
 // ============================================================
@@ -180,15 +189,50 @@ export async function getReadingById(id: string) {
     .from("readings")
     .select("*, subject:subjects(*)")
     .eq("id", id)
-    .single();
+    .maybeSingle();
   if (error) throw new Error(error.message);
   return data;
 }
 
+export async function getSpacedReviewsByReading(readingId: string) {
+  const { data, error } = await supabase
+    .from("spaced_reviews")
+    .select("*")
+    .eq("reading_id", readingId)
+    .order("review_date", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function getReadingDetail(id: string) {
+  const reading = await getReadingById(id);
+  if (!reading) return null;
+
+  const [sessions, reviews, deliverables, allSessions] = await Promise.all([
+    getReadingSessions(id),
+    getSpacedReviewsByReading(id),
+    getDeliverables(reading.subject_id),
+    getAllReadingSessions(),
+  ]);
+  const totalPages = allSessions.reduce((sum, session) => sum + session.pages_read, 0);
+  const totalMinutes = allSessions.reduce((sum, session) => sum + session.duration_minutes, 0);
+  return {
+    reading,
+    sessions,
+    reviews,
+    deliverables,
+    globalAverageSpeed: totalMinutes > 0 ? (totalPages / totalMinutes) * 60 : 0,
+  };
+}
+
 export async function createReading(input: ReadingInsert) {
+  const insert = {
+    ...input,
+    ...(input.metadata_source ? { metadata_fetched_at: new Date().toISOString() } : {}),
+  };
   const { data, error } = await supabase
     .from("readings")
-    .insert(input)
+    .insert(insert)
     .select()
     .single();
   if (error) throw new Error(error.message);
@@ -196,6 +240,62 @@ export async function createReading(input: ReadingInsert) {
   revalidatePath("/setup");
   revalidatePath("/library");
   return data;
+}
+
+export async function lookupBookByIsbn(isbn: string) {
+  return fetchBookMetadata(isbn);
+}
+
+export async function lookupArticleByDoi(doi: string) {
+  return fetchArticleMetadata(doi);
+}
+
+type MetadataFields = {
+  cover_url: string | null;
+  publisher: string | null;
+  published_year: number | null;
+  metadata_source: string | null;
+  metadata_fetched_at: string;
+};
+
+export async function refreshReadingMetadata(readingId: string, options: { force?: boolean } = {}) {
+  const { data: reading, error: readingError } = await supabase.from("readings").select("id, type, isbn, doi, metadata_fetched_at").eq("id", readingId).single();
+  if (readingError) throw new Error(readingError.message);
+  if (!options.force && reading.metadata_fetched_at) return { status: "skipped" as const };
+  const result = reading.type === "book" && reading.isbn ? await fetchBookMetadata(reading.isbn) : reading.type === "article" && reading.doi ? await fetchArticleMetadata(reading.doi) : { status: "not_found" as const };
+  if (result.status === "error") return result;
+  const fields: MetadataFields = {
+    cover_url: result.status === "ok" ? result.data.coverUrl : null,
+    publisher: result.status === "ok" ? result.data.publisher : null,
+    published_year: result.status === "ok" ? result.data.publishedYear : null,
+    metadata_source: result.status === "ok" ? result.data.source : null,
+    metadata_fetched_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("readings").update(fields).eq("id", readingId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/library");
+  revalidatePath(`/library/${readingId}`);
+  return result;
+}
+
+export async function backfillMissingMetadata() {
+  const { data: readings, error } = await supabase.from("readings").select("id, type, isbn, doi, metadata_fetched_at").is("metadata_fetched_at", null).or("isbn.not.is.null,doi.not.is.null").limit(6);
+  if (error) throw new Error(error.message);
+  let updated = 0;
+  let notFound = 0;
+  let failed = 0;
+  for (const [index, reading] of (readings ?? []).entries()) {
+    if (index > 0) await new Promise((resolve) => setTimeout(resolve, 1100));
+    const result = await refreshReadingMetadata(reading.id, { force: true });
+    if (result.status === "ok") updated++;
+    else if (result.status === "not_found") notFound++;
+    else if (result.status === "error") {
+      failed++;
+      if (result.reason === "rate_limited") break;
+    }
+  }
+  const { count } = await supabase.from("readings").select("id", { count: "exact", head: true }).is("metadata_fetched_at", null).or("isbn.not.is.null,doi.not.is.null");
+  return { updated, notFound, failed, remaining: count ?? 0 };
 }
 
 export async function updateReading(id: string, input: ReadingUpdate) {
@@ -294,23 +394,22 @@ export async function markReadingAsRead(readingId: string) {
     .eq("id", readingId);
   if (updateError) throw new Error(updateError.message);
 
-  const today = new Date();
+  const today = todayISO();
   const intervals = [1, 7, 21];
 
-  const reviews = intervals.map((days) => {
-    const reviewDate = new Date(today);
-    reviewDate.setDate(reviewDate.getDate() + days);
-    return {
-      reading_id: readingId,
-      review_date: reviewDate.toISOString().split("T")[0],
-      status: "pending" as const,
-      type: "active_recall",
-    };
-  });
+  const reviews = intervals.map((days) => ({
+    reading_id: readingId,
+    review_date: addDaysISO(today, days),
+    status: "pending" as const,
+    type: "active_recall",
+  }));
 
   const { error: reviewError } = await supabase
     .from("spaced_reviews")
-    .insert(reviews);
+    .upsert(reviews, {
+      onConflict: "reading_id,review_date,type",
+      ignoreDuplicates: true,
+    });
   if (reviewError) throw new Error(reviewError.message);
 
   revalidatePath("/");
@@ -328,8 +427,7 @@ export async function markReadingAsUnread(readingId: string) {
   const { error: deleteError } = await supabase
     .from("spaced_reviews")
     .delete()
-    .eq("reading_id", readingId)
-    .eq("status", "pending");
+    .eq("reading_id", readingId);
   if (deleteError) throw new Error(deleteError.message);
 
   revalidatePath("/");
@@ -406,25 +504,32 @@ export async function getSubjectStats(): Promise<SubjectStat[]> {
     }
 
     // Agregar estatísticas por disciplina
-    const stats: SubjectStat[] = (subjects || []).map((sub: any) => {
-      const subReadings = (readings || []).filter((r: any) => r.subject_id === sub.id);
+    const subjectRows = (subjects ?? []) as Subject[];
+    const readingRows = (readings ?? []) as Pick<Reading, "id" | "subject_id" | "is_read">[];
+    const sessionRows = (sessions ?? []) as Pick<
+      ReadingSession,
+      "reading_id" | "duration_minutes" | "pages_read"
+    >[];
+
+    const stats: SubjectStat[] = subjectRows.map((sub) => {
+      const subReadings = readingRows.filter((reading) => reading.subject_id === sub.id);
       const totalReadings = subReadings.length;
-      const completedReadings = subReadings.filter((r: any) => r.is_read).length;
+      const completedReadings = subReadings.filter((reading) => reading.is_read).length;
       const progressPercent =
         totalReadings > 0 ? Math.round((completedReadings / totalReadings) * 100) : 0;
 
       // Somar sessões das leituras desta disciplina
-      const subReadingIds = new Set(subReadings.map((r: any) => r.id));
-      const subSessions = (sessions || []).filter((s: any) =>
-        subReadingIds.has(s.reading_id)
+      const subReadingIds = new Set(subReadings.map((reading) => reading.id));
+      const subSessions = sessionRows.filter((session) =>
+        subReadingIds.has(session.reading_id)
       );
 
       const totalMinutes = subSessions.reduce(
-        (acc: number, s: any) => acc + (s.duration_minutes || 0),
+        (acc, session) => acc + (session.duration_minutes || 0),
         0
       );
       const totalPages = subSessions.reduce(
-        (acc: number, s: any) => acc + (s.pages_read || 0),
+        (acc, session) => acc + (session.pages_read || 0),
         0
       );
 
@@ -454,12 +559,10 @@ export async function getSubjectStats(): Promise<SubjectStat[]> {
 // ============================================================
 
 export async function getDashboardData() {
-  const today = new Date().toISOString().split("T")[0];
-  const sevenDaysFromNow = new Date();
-  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-  const sevenDaysStr = sevenDaysFromNow.toISOString().split("T")[0];
+  const today = todayISO();
+  const sevenDaysStr = addDaysISO(today, 7);
 
-  let tier1: any[] = [];
+  let tier1: SpacedReviewWithReading[] = [];
   let schemaError: string | null = null;
 
   try {
@@ -473,14 +576,15 @@ export async function getDashboardData() {
       console.warn("Aviso na busca de spaced_reviews:", e1.message);
       schemaError = e1.message;
     } else {
-      tier1 = data || [];
+      tier1 = (data ?? []) as SpacedReviewWithReading[];
     }
-  } catch (err: any) {
-    console.warn("Exceção na busca de spaced_reviews:", err?.message);
-    schemaError = err?.message;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : undefined;
+    console.warn("Exceção na busca de spaced_reviews:", message);
+    schemaError = message ?? null;
   }
 
-  let allPendingReadings: any[] = [];
+  let allPendingReadings: ReadingWithSubject[] = [];
   try {
     const { data, error: e2 } = await supabase
       .from("readings")
@@ -491,13 +595,16 @@ export async function getDashboardData() {
       console.warn("Aviso na busca de readings:", e2.message);
       if (!schemaError) schemaError = e2.message;
     } else {
-      allPendingReadings = data || [];
+      allPendingReadings = (data ?? []) as ReadingWithSubject[];
     }
-  } catch (err: any) {
-    console.warn("Exceção na busca de readings:", err?.message);
+  } catch (err: unknown) {
+    console.warn(
+      "Exceção na busca de readings:",
+      err instanceof Error ? err.message : undefined
+    );
   }
 
-  let urgentDeliverables: any[] = [];
+  let urgentDeliverables: Deliverable[] = [];
   try {
     const { data, error: e3 } = await supabase
       .from("deliverables")
@@ -508,13 +615,16 @@ export async function getDashboardData() {
     if (e3) {
       console.warn("Aviso na busca de deliverables urgentes:", e3.message);
     } else {
-      urgentDeliverables = data || [];
+      urgentDeliverables = (data ?? []) as Deliverable[];
     }
-  } catch (err: any) {
-    console.warn("Exceção na busca de deliverables:", err?.message);
+  } catch (err: unknown) {
+    console.warn(
+      "Exceção na busca de deliverables:",
+      err instanceof Error ? err.message : undefined
+    );
   }
 
-  let allDeliverables: any[] = [];
+  let allDeliverables: Deliverable[] = [];
   try {
     const { data, error: e4 } = await supabase
       .from("deliverables")
@@ -523,10 +633,13 @@ export async function getDashboardData() {
     if (e4) {
       console.warn("Aviso na busca de allDeliverables:", e4.message);
     } else {
-      allDeliverables = data || [];
+      allDeliverables = (data ?? []) as Deliverable[];
     }
-  } catch (err: any) {
-    console.warn("Exceção na busca de allDeliverables:", err?.message);
+  } catch (err: unknown) {
+    console.warn(
+      "Exceção na busca de allDeliverables:",
+      err instanceof Error ? err.message : undefined
+    );
   }
 
   const urgentSubjectIds = new Set(
@@ -545,24 +658,15 @@ export async function getDashboardData() {
     const subjectDeliverables = deliverablesBySubject.get(reading.subject_id);
     if (!subjectDeliverables) continue;
 
-    for (let i = 0; i < subjectDeliverables.length; i++) {
-      const deliverable = subjectDeliverables[i];
-      const previousDate =
-        i > 0 ? subjectDeliverables[i - 1].date : "1970-01-01";
-
-      if (
-        reading.deadline <= deliverable.date &&
-        reading.deadline > previousDate
-      ) {
-        readingDeliverableMap.set(reading.id, deliverable.id);
-        break;
-      }
+    const linked = findLinkedDeliverable(subjectDeliverables, reading.deadline);
+    if (linked) {
+      readingDeliverableMap.set(reading.id, linked.id);
     }
   }
 
-  const tier2: any[] = [];
-  const tier3: any[] = [];
-  const tier4: any[] = [];
+  const tier2: ReadingWithSubject[] = [];
+  const tier3: ReadingWithSubject[] = [];
+  const tier4: ReadingWithSubject[] = [];
 
   for (const reading of allPendingReadings ?? []) {
     const subject = reading.subject;
@@ -622,12 +726,7 @@ export async function getReadingProjection(readingId: string) {
       ? Math.round((pagesRemaining / reading.current_speed_pph) * 100) / 100
       : 0;
 
-  const today = new Date();
-  const deadline = new Date(reading.deadline);
-  const daysRemaining = Math.max(
-    0,
-    Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-  );
+  const daysRemaining = Math.max(0, daysUntil(reading.deadline));
 
   const hoursPerDay =
     daysRemaining > 0

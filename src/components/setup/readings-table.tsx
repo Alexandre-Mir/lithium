@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Reading, Subject, Deliverable, ReadingType } from "@/types/database";
 import {
   createReading,
@@ -8,7 +9,11 @@ import {
   deleteReading,
   markReadingAsRead,
   markReadingAsUnread,
+  lookupBookByIsbn,
+  lookupArticleByDoi,
 } from "@/app/actions";
+import { formatDateBR } from "@/lib/dates";
+import { findLinkedDeliverable } from "@/lib/cascade";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -27,8 +32,6 @@ import {
   Check,
   Book,
   FileText,
-  Clock,
-  Zap,
   CheckCircle2,
   ArrowRight,
   Loader2,
@@ -63,6 +66,12 @@ export function ReadingsTable({
   const [newReadFull, setNewReadFull] = useState(false);
   const [newTargetPages, setNewTargetPages] = useState<number | "">(30);
   const [newDeadline, setNewDeadline] = useState("");
+  const [newCover, setNewCover] = useState<string | null>(null);
+  const [newPublisher, setNewPublisher] = useState<string | null>(null);
+  const [newPublishedYear, setNewPublishedYear] = useState<number | null>(null);
+  const [newMetadataSource, setNewMetadataSource] = useState<string | null>(null);
+  const [lookedUpIsbn, setLookedUpIsbn] = useState("");
+  const [lookedUpDoi, setLookedUpDoi] = useState("");
 
   // Inline editing state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -79,47 +88,27 @@ export function ReadingsTable({
     deliverablesBySubject.set(d.subject_id, list);
   }
 
-  // Regra Cronológica de Vínculo:
-  // reading.deadline <= deliverable.date E reading.deadline > data do deliverable anterior
-  const findLinkedDeliverable = (subjectId: string, deadline: string): Deliverable | null => {
-    const subDeliverables = deliverablesBySubject.get(subjectId);
-    if (!subDeliverables || subDeliverables.length === 0) return null;
-
-    for (let i = 0; i < subDeliverables.length; i++) {
-      const cur = subDeliverables[i];
-      const prevDate = i > 0 ? subDeliverables[i - 1].date : "1970-01-01";
-      if (deadline <= cur.date && deadline > prevDate) {
-        return cur;
-      }
-    }
-    if (deadline <= subDeliverables[0].date) {
-      return subDeliverables[0];
-    }
-    return null;
-  };
-
   // ============================================================
   // FETCH AUTOMÁTICO: GOOGLE BOOKS API (onBlur do ISBN)
   // ============================================================
   const handleIsbnBlur = async () => {
     const cleanIsbn = newIsbn.replace(/[^0-9X]/gi, "");
-    if (!cleanIsbn || cleanIsbn.length < 10) return;
+    if (!cleanIsbn || cleanIsbn.length < 10 || cleanIsbn === lookedUpIsbn) return;
 
     try {
       setFetchingMetadata(true);
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`);
-      const data = await res.json();
-      const volumeInfo = data.items?.[0]?.volumeInfo;
-      if (volumeInfo) {
-        if (volumeInfo.title && !newTitle) {
-          setNewTitle(volumeInfo.title);
-        }
-        if (volumeInfo.authors && volumeInfo.authors.length > 0 && !newAuthor) {
-          setNewAuthor(volumeInfo.authors.join(", "));
-        }
-        if (volumeInfo.pageCount && !newFullPages) {
-          setNewFullPages(volumeInfo.pageCount);
-        }
+      const result = await lookupBookByIsbn(cleanIsbn);
+      setLookedUpIsbn(cleanIsbn);
+      if (result.status === "ok") {
+        if (result.data.title && !newTitle) setNewTitle(result.data.title);
+        if (result.data.authors && !newAuthor) setNewAuthor(result.data.authors);
+        if (result.data.pageCount && !newFullPages) setNewFullPages(result.data.pageCount);
+        setNewCover(result.data.coverUrl);
+        setNewPublisher(result.data.publisher);
+        setNewPublishedYear(result.data.publishedYear);
+        setNewMetadataSource(result.data.source);
+      } else if (result.status === "error") {
+        console.warn("Erro ao buscar metadados do livro:", result.reason);
       }
     } catch (err) {
       console.warn("Erro ao buscar ISBN no Google Books:", err);
@@ -133,29 +122,20 @@ export function ReadingsTable({
   // ============================================================
   const handleDoiBlur = async () => {
     const cleanDoi = newDoi.trim().replace(/^https?:\/\/doi\.org\//i, "");
-    if (!cleanDoi || cleanDoi.length < 5) return;
+    if (!cleanDoi || cleanDoi.length < 5 || cleanDoi === lookedUpDoi) return;
 
     try {
       setFetchingMetadata(true);
-      const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}`);
-      if (!res.ok) return;
-      const json = await res.json();
-      const message = json.message;
-      if (message) {
-        // Título do artigo
-        if (message.title && message.title.length > 0 && !newTitle) {
-          setNewTitle(message.title[0]);
-        }
-        // Autor(es)
-        if (message.author && Array.isArray(message.author) && !newAuthor) {
-          const authorNames = message.author
-            .map((a: any) => [a.given, a.family].filter(Boolean).join(" "))
-            .filter(Boolean)
-            .join(", ");
-          if (authorNames) {
-            setNewAuthor(authorNames);
-          }
-        }
+      const result = await lookupArticleByDoi(cleanDoi);
+      setLookedUpDoi(cleanDoi);
+      if (result.status === "ok") {
+        if (result.data.title && !newTitle) setNewTitle(result.data.title);
+        if (result.data.authors && !newAuthor) setNewAuthor(result.data.authors);
+        setNewPublisher(result.data.publisher);
+        setNewPublishedYear(result.data.publishedYear);
+        setNewMetadataSource(result.data.source);
+      } else if (result.status === "error") {
+        console.warn("Erro ao buscar metadados do artigo:", result.reason);
       }
     } catch (err) {
       console.warn("Erro ao buscar DOI na Crossref:", err);
@@ -185,6 +165,11 @@ export function ReadingsTable({
         deadline: newDeadline,
         is_read: false,
         current_speed_pph: 20.0,
+        cover_url: newCover,
+        publisher: newPublisher,
+        published_year: newPublishedYear,
+        metadata_source: newMetadataSource,
+        metadata_fetched_at: null,
       });
 
       if (created) {
@@ -196,6 +181,12 @@ export function ReadingsTable({
         setNewAuthor("");
         setNewIsbn("");
         setNewDoi("");
+        setNewCover(null);
+        setNewPublisher(null);
+        setNewPublishedYear(null);
+        setNewMetadataSource(null);
+        setLookedUpIsbn("");
+        setLookedUpDoi("");
         setNewFullPages("");
         setNewReadFull(false);
         setNewTargetPages(30);
@@ -338,7 +329,16 @@ export function ReadingsTable({
                 <Input
                   placeholder="Ex: 9788539003839"
                   value={newIsbn}
-                  onChange={(e) => setNewIsbn(e.target.value)}
+                  onChange={(e) => {
+                    setNewIsbn(e.target.value);
+                    if (e.target.value.replace(/[^0-9X]/gi, "") !== lookedUpIsbn) {
+                      setLookedUpIsbn("");
+                      setNewCover(null);
+                      setNewPublisher(null);
+                      setNewPublishedYear(null);
+                      setNewMetadataSource(null);
+                    }
+                  }}
                   onBlur={handleIsbnBlur}
                   className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
                 />
@@ -378,7 +378,15 @@ export function ReadingsTable({
                 <Input
                   placeholder="Ex: 10.1037/0033-295X.101.2.346"
                   value={newDoi}
-                  onChange={(e) => setNewDoi(e.target.value)}
+                  onChange={(e) => {
+                    setNewDoi(e.target.value);
+                    if (e.target.value.trim() !== lookedUpDoi) {
+                      setLookedUpDoi("");
+                      setNewPublisher(null);
+                      setNewPublishedYear(null);
+                      setNewMetadataSource(null);
+                    }
+                  }}
                   onBlur={handleDoiBlur}
                   className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
                 />
@@ -521,8 +529,9 @@ export function ReadingsTable({
               readings.map((reading) => {
                 const isEditing = editingId === reading.id;
                 const sub = subjectMap.get(reading.subject_id);
+                const subDeliverables = deliverablesBySubject.get(reading.subject_id) || [];
                 const linkedDeliverable = findLinkedDeliverable(
-                  reading.subject_id,
+                  subDeliverables,
                   reading.deadline
                 );
 
@@ -586,7 +595,7 @@ export function ReadingsTable({
                               reading.is_read ? "line-through text-gray-400" : "text-gray-900 dark:text-gray-100"
                             }`}
                           >
-                            {reading.title}
+                            <Link href={`/library/${reading.id}`} className="text-indigo-600 hover:underline">{reading.title}</Link>
                           </div>
                           {reading.chapter_title && (
                             <div className="text-[11px] text-gray-600 dark:text-gray-400 font-medium">
@@ -630,7 +639,7 @@ export function ReadingsTable({
                     </TableCell>
 
                     <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
-                      {new Date(reading.deadline + "T00:00:00").toLocaleDateString("pt-BR", {
+                      {formatDateBR(reading.deadline, {
                         day: "2-digit",
                         month: "2-digit",
                       })}

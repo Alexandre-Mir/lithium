@@ -1,6 +1,6 @@
 -- ============================================================
 -- LITHIUM — Motor Cognitivo de Estudos
--- Schema v1.1 (Totalmente idempotente e seguro contra reexecuções)
+-- Schema v1.2 (Totalmente idempotente e seguro contra reexecuções)
 -- ============================================================
 
 -- 0. Extensions
@@ -82,22 +82,27 @@ CREATE TRIGGER deliverables_updated_at
 -- TABELA 3: readings (Leituras)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS readings (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  subject_id        UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-  title             TEXT NOT NULL,
-  chapter_title     TEXT,
-  author            TEXT,
-  type              reading_type NOT NULL DEFAULT 'book',
-  isbn              TEXT,
-  doi               TEXT,
-  full_book_pages   INTEGER,
-  target_pages      INTEGER NOT NULL DEFAULT 0,
-  read_full_book    BOOLEAN NOT NULL DEFAULT false,
-  deadline          DATE NOT NULL,
-  is_read           BOOLEAN NOT NULL DEFAULT false,
-  current_speed_pph NUMERIC(6, 2) NOT NULL DEFAULT 20.00,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject_id          UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  title               TEXT NOT NULL,
+  chapter_title       TEXT,
+  author              TEXT,
+  type                reading_type NOT NULL DEFAULT 'book',
+  isbn                TEXT,
+  doi                 TEXT,
+  full_book_pages     INTEGER,
+  target_pages        INTEGER NOT NULL DEFAULT 0,
+  read_full_book      BOOLEAN NOT NULL DEFAULT false,
+  deadline            DATE NOT NULL,
+  is_read             BOOLEAN NOT NULL DEFAULT false,
+  current_speed_pph   NUMERIC(6, 2) NOT NULL DEFAULT 20.00,
+  cover_url           TEXT,
+  publisher           TEXT,
+  published_year      INTEGER,
+  metadata_source     TEXT,
+  metadata_fetched_at TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Garantir colunas novas caso a tabela já tenha sido criada antes
@@ -106,6 +111,11 @@ ALTER TABLE readings ADD COLUMN IF NOT EXISTS chapter_title TEXT;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS doi TEXT;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS full_book_pages INTEGER;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS read_full_book BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS cover_url TEXT;
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS publisher TEXT;
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS published_year INTEGER;
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS metadata_source TEXT;
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS metadata_fetched_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_readings_subject  ON readings(subject_id);
 CREATE INDEX IF NOT EXISTS idx_readings_deadline ON readings(deadline);
@@ -144,6 +154,10 @@ CREATE TABLE IF NOT EXISTS spaced_reviews (
 CREATE INDEX IF NOT EXISTS idx_reviews_date    ON spaced_reviews(review_date);
 CREATE INDEX IF NOT EXISTS idx_reviews_status  ON spaced_reviews(status);
 CREATE INDEX IF NOT EXISTS idx_reviews_reading ON spaced_reviews(reading_id);
+
+-- Índice único para upsert idempotente por leitura, data e tipo
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reviews_reading_date_type
+  ON spaced_reviews (reading_id, review_date, type);
 
 -- ============================================================
 -- Row Level Security: Acesso total (app pessoal, sem auth)

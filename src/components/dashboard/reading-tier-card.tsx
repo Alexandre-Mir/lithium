@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ReadingWithSubject, Deliverable } from "@/types/database";
 import { markReadingAsRead } from "@/app/actions";
+import { daysUntil, formatDateBR } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,14 +58,7 @@ export function ReadingTierCard({
     }
   };
 
-  const getDaysLeft = (dateStr: string) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const target = new Date(dateStr + "T00:00:00");
-    return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  };
-
-  const daysUntilDeadline = getDaysLeft(reading.deadline);
+  const daysUntilDeadline = daysUntil(reading.deadline);
 
   if (isRead) {
     return (
@@ -81,7 +76,7 @@ export function ReadingTierCard({
 
   return (
     <div
-      className={`rounded-md bg-white dark:bg-gray-900 p-3.5 transition-colors ${
+      className={`relative rounded-md bg-white dark:bg-gray-900 p-3.5 transition-colors ${
         tierNumber === 2
           ? "border-2 border-red-300 dark:border-red-900"
           : "border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700"
@@ -116,7 +111,7 @@ export function ReadingTierCard({
             {tierNumber === 2 && linkedDeliverable && (
               <Badge className="bg-red-600 text-white text-[10px] font-bold py-0 rounded flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" />
-                Entrega: {linkedDeliverable.title} (em {getDaysLeft(linkedDeliverable.date)}d)
+                Entrega: {linkedDeliverable.title} (em {daysUntil(linkedDeliverable.date)}d)
               </Badge>
             )}
 
@@ -126,7 +121,7 @@ export function ReadingTierCard({
               }`}
             >
               <Calendar className="w-3 h-3" />
-              {new Date(reading.deadline + "T00:00:00").toLocaleDateString("pt-BR", {
+              {formatDateBR(reading.deadline, {
                 day: "2-digit",
                 month: "2-digit",
               })}
@@ -135,9 +130,7 @@ export function ReadingTierCard({
           </div>
 
           <div>
-            <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100">
-              {reading.title}
-            </h4>
+            <Link href={`/library/${reading.id}`} className="relative z-10 block after:absolute after:inset-0"><h4 className="font-bold text-sm text-gray-900 dark:text-gray-100">{reading.title}</h4></Link>
             {reading.chapter_title && (
               <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">
                 ↳ {reading.chapter_title}
@@ -170,7 +163,7 @@ export function ReadingTierCard({
         </div>
 
         {/* Botões de Ação */}
-        <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t border-gray-100 dark:border-gray-800 md:border-t-0">
+        <div className="relative z-10 flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t border-gray-100 dark:border-gray-800 md:border-t-0">
           <Button
             onClick={() => onOpenSession(reading)}
             size="sm"

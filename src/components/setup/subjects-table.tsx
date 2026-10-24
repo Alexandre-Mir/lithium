@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Check, BookOpen, GraduationCap, FileText, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Check, FileText, AlertCircle } from "lucide-react";
 
 interface SubjectsTableProps {
   initialSubjects: Subject[];
@@ -123,9 +123,9 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
         setShowPedagogicalModal(false);
         onRefresh?.();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setErrorMessage(err.message || "Erro ao cadastrar disciplina.");
+      setErrorMessage(err instanceof Error ? err.message : "Erro ao cadastrar disciplina.");
     } finally {
       setLoading(false);
     }
@@ -167,9 +167,9 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
         setEditValues({});
         onRefresh?.();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setErrorMessage(err.message || "Erro ao atualizar disciplina.");
+      setErrorMessage(err instanceof Error ? err.message : "Erro ao atualizar disciplina.");
     } finally {
       setLoading(false);
     }

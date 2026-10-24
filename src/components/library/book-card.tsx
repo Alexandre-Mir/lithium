@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { Reading, Subject } from "@/types/database";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { markReadingAsRead, markReadingAsUnread } from "@/app/actions";
+import { formatDateBR } from "@/lib/dates";
 import {
   BookOpen,
   FileText,
@@ -23,54 +25,14 @@ interface BookCardProps {
   onRefresh?: () => void;
 }
 
-interface GoogleBookData {
-  thumbnail?: string;
-  description?: string;
-  publishedDate?: string;
-  pageCount?: number;
-}
-
 export function BookCard({
   reading,
   subject,
   onOpenSessionModal,
   onRefresh,
 }: BookCardProps) {
-  const [bookData, setBookData] = useState<GoogleBookData | null>(null);
   const [isRead, setIsRead] = useState(reading.is_read);
-
-  useEffect(() => {
-    if (reading.type === "book" && reading.isbn) {
-      const cleanIsbn = reading.isbn.replace(/[^0-9X]/gi, "");
-      if (!cleanIsbn) return;
-
-      let isMounted = true;
-      fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (!isMounted) return;
-          const item = data.items?.[0];
-          if (item?.volumeInfo) {
-            const v = item.volumeInfo;
-            const img = v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail;
-            const secureImg = img?.replace(/^http:\/\//i, "https://");
-            setBookData({
-              thumbnail: secureImg,
-              description: v.description,
-              publishedDate: v.publishedDate,
-              pageCount: v.pageCount,
-            });
-          }
-        })
-        .catch((err) => {
-          console.warn("Erro ao buscar no Google Books:", err);
-        });
-
-      return () => {
-        isMounted = false;
-      };
-    }
-  }, [reading.type, reading.isbn]);
+  const [imageError, setImageError] = useState(false);
 
   const handleToggleRead = async () => {
     const nextVal = !isRead;
@@ -95,20 +57,21 @@ export function BookCard({
   const themeColor = subject?.theme_color || "#4f46e5";
 
   return (
-    <div className="flex flex-col rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden transition-colors hover:border-gray-300 dark:hover:border-gray-700">
+    <div className="relative flex flex-col rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden transition-colors hover:border-gray-300 dark:hover:border-gray-700">
       {/* Header Visual Flat */}
       <div
         className="relative h-40 w-full flex items-center justify-center border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950"
       >
-        {reading.type === "book" && bookData?.thumbnail ? (
-          <div className="relative h-full w-full flex items-center justify-center p-3">
+        {reading.type === "book" && reading.cover_url && !imageError ? (
+          <Link href={`/library/${reading.id}`} className="relative z-10 h-full w-full flex items-center justify-center p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={bookData.thumbnail}
+              src={reading.cover_url}
               alt={reading.title}
               className="h-32 max-w-[90px] object-contain rounded border border-gray-200 dark:border-gray-800"
+              onError={() => setImageError(true)}
             />
-          </div>
+          </Link>
         ) : (
           <div className="flex flex-col items-center justify-center text-center p-4 w-full h-full">
             <div
@@ -167,14 +130,15 @@ export function BookCard({
       {/* Conteúdo */}
       <div className="flex-1 p-3.5 space-y-2.5">
         <div>
-          <h3
+            <Link href={`/library/${reading.id}`} className="relative z-10 block">
+            <h3
             className={`font-bold text-xs line-clamp-2 ${
               isRead ? "line-through text-gray-400" : "text-gray-900 dark:text-gray-100"
             }`}
             title={reading.title}
           >
             {reading.title}
-          </h3>
+            </h3></Link>
           {reading.chapter_title && (
             <p className="text-[11px] text-gray-600 dark:text-gray-400 font-medium mt-0.5 line-clamp-1">
               ↳ {reading.chapter_title}
@@ -207,7 +171,7 @@ export function BookCard({
           <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3 text-gray-400" />
             <span>
-              {new Date(reading.deadline + "T00:00:00").toLocaleDateString("pt-BR", {
+              {formatDateBR(reading.deadline, {
                 day: "2-digit",
                 month: "2-digit",
               })}

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { ReadingSessionWithReading } from "@/types/database";
+import { formatDateTimeBR } from "@/lib/dates";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -12,11 +12,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Clock, BookOpen, Search, Zap, Calendar, ArrowLeft } from "lucide-react";
+import { Search, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 interface HistoryViewProps {
-  initialSessions: any[];
+  initialSessions: ReadingSessionWithReading[];
 }
 
 export function HistoryView({ initialSessions }: HistoryViewProps) {
@@ -140,13 +140,7 @@ export function HistoryView({ initialSessions }: HistoryViewProps) {
                     ? ((session.pages_read / session.duration_minutes) * 60).toFixed(1)
                     : "0";
 
-                const dateStr = new Date(session.created_at).toLocaleString("pt-BR", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
+                const dateStr = formatDateTimeBR(session.created_at);
 
                 return (
                   <TableRow
@@ -159,7 +153,7 @@ export function HistoryView({ initialSessions }: HistoryViewProps) {
 
                     <TableCell className="p-2">
                       <div className="font-semibold text-xs text-gray-900 dark:text-gray-100">
-                        {reading?.title || "Leitura"}
+                        <Link href={`/library/${session.reading_id}`} className="hover:underline">{reading?.title || "Leitura"}</Link>
                       </div>
                       {reading?.chapter_title && (
                         <div className="text-[11px] text-gray-500">

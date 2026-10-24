@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, BookOpen } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { backfillMissingMetadata } from "@/app/actions";
+import { Loader2 } from "lucide-react";
 
 interface LibraryViewProps {
   initialReadings: Reading[];
@@ -23,6 +25,24 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
 
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
   const [activeReadingForSession, setActiveReadingForSession] = useState<Reading | null>(null);
+  const [backfillLoading, setBackfillLoading] = useState(false);
+  const [backfillSummary, setBackfillSummary] = useState<string | null>(null);
+
+  const pendingMetadataCount = initialReadings.filter(
+    (reading) => (reading.isbn || reading.doi) && !reading.metadata_fetched_at
+  ).length;
+
+  const handleBackfill = async () => {
+    setBackfillLoading(true);
+    setBackfillSummary(null);
+    try {
+      const result = await backfillMissingMetadata();
+      setBackfillSummary(`Atualizados: ${result.updated} · Não encontrados: ${result.notFound} · Falhas: ${result.failed} · Restantes: ${result.remaining}`);
+      router.refresh();
+    } finally {
+      setBackfillLoading(false);
+    }
+  };
 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
 
@@ -68,11 +88,11 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
             Biblioteca de Textos
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Cards flat com capa via Google Books (livros) ou tema colorido (artigos).
+            Cards flat com capa via metadados persistidos ou tema colorido.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 text-xs font-mono">
+        <div className="flex flex-wrap gap-1.5 text-xs font-mono items-center">
           <Badge variant="outline" className="border-gray-300 px-2 py-0.5">
             {initialReadings.length} Total
           </Badge>
@@ -85,8 +105,16 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
           <Badge variant="outline" className="border-gray-300 px-2 py-0.5">
             {totalRead} Concluídos
           </Badge>
+          {pendingMetadataCount > 0 && (
+            <button type="button" onClick={handleBackfill} disabled={backfillLoading} className="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2 py-1 font-sans font-semibold hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800">
+              {backfillLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Buscar capas pendentes ({pendingMetadataCount})
+            </button>
+          )}
         </div>
       </div>
+
+      {backfillSummary && <p className="text-xs text-gray-600 dark:text-gray-400">{backfillSummary}</p>}
 
       {/* Barra de Filtros */}
       <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
