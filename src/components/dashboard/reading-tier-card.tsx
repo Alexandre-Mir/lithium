@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ReadingWithSubject, Deliverable } from "@/types/database";
 import { markReadingAsRead } from "@/app/actions";
 import { daysUntil, formatDateBR } from "@/lib/dates";
+import { computeRemaining } from "@/lib/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,23 +36,29 @@ export function ReadingTierCard({
   onRefresh,
 }: ReadingTierCardProps) {
   const [loading, setLoading] = useState(false);
-  const [isRead, setIsRead] = useState(reading.is_read);
+  const [optimisticIsRead, setOptimisticIsRead] = useState<boolean | null>(null);
+  const isRead = optimisticIsRead ?? reading.is_read;
 
   const subject = reading.subject;
   const themeColor = subject?.theme_color || "#4f46e5";
 
   const speed = Number(reading.current_speed_pph) || 20;
-  const estimatedHours = (reading.target_pages / speed).toFixed(1);
+  const progress = computeRemaining({
+    targetPages: reading.target_pages,
+    pagesRead: reading.pages_read,
+    speedPph: speed,
+  });
+  const formattedHours = progress.hoursRemaining.toFixed(1).replace(".", ",");
 
   const handleMarkAsRead = async () => {
     try {
       setLoading(true);
-      setIsRead(true);
+      setOptimisticIsRead(true);
       await markReadingAsRead(reading.id);
       onRefresh?.();
     } catch (err) {
       console.error(err);
-      setIsRead(false);
+      setOptimisticIsRead(null);
       alert("Erro ao concluir leitura.");
     } finally {
       setLoading(false);
@@ -147,7 +154,7 @@ export function ReadingTierCard({
           <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400 pt-0.5">
             <div className="flex items-center gap-1">
               <Layers className="w-3 h-3 text-gray-400" />
-              <span>{reading.target_pages} páginas</span>
+              <span>{reading.pages_read} de {reading.target_pages} págs</span>
             </div>
 
             <div className="flex items-center gap-1">
@@ -157,9 +164,22 @@ export function ReadingTierCard({
 
             <div className="flex items-center gap-1 font-semibold text-gray-800 dark:text-gray-200">
               <Clock className="w-3 h-3 text-gray-400" />
-              <span>~{estimatedHours}h estimadas</span>
+              <span>~{formattedHours}h restantes</span>
             </div>
           </div>
+
+          <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${progress.progressPercent}%`, backgroundColor: themeColor }}
+            />
+          </div>
+
+          {progress.goalReached && !isRead && (
+            <Badge variant="outline" className="w-fit border-emerald-300 bg-emerald-50 text-[10px] text-emerald-800 py-0 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+              Meta atingida
+            </Badge>
+          )}
         </div>
 
         {/* Botões de Ação */}
@@ -178,7 +198,7 @@ export function ReadingTierCard({
             onClick={handleMarkAsRead}
             disabled={loading}
             size="sm"
-            className="bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded shadow-none"
+            className={`${progress.goalReached ? "bg-emerald-700 hover:bg-emerald-800 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700" : "bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900"} text-xs font-semibold h-8 rounded shadow-none`}
           >
             <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
             Concluir

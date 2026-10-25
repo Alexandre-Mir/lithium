@@ -1,5 +1,5 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.3)
+// Lithium — Database Types (mirrors Supabase schema v1.4)
 // ============================================================
 
 export type ReadingType = "book" | "article";
@@ -119,12 +119,15 @@ export type SpacedReviewUpdate = Partial<Pick<SpacedReview, "status">>;
 
 // ---- Joined / view types ----
 
+export type ReadingWithProgress = Reading & { pages_read: number };
+
 export interface ReadingWithSubject extends Reading {
   subject: Subject;
+  pages_read: number;
 }
 
 export interface SpacedReviewWithReading extends SpacedReview {
-  reading: Reading & { subject: Subject };
+  reading: ReadingWithSubject;
 }
 
 export interface ReadingSessionWithReading extends ReadingSession {

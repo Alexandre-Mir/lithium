@@ -7,6 +7,8 @@ import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
 import { pickInitialSpeed } from "@/lib/speed";
 import { validateReadingUpdate } from "@/lib/reading-validation";
+import { warnIfTruncated } from "@/lib/warn-if-truncated";
+import { computeRemaining } from "@/lib/progress";
 import type {
   SubjectInsert,
   SubjectUpdate,
@@ -19,6 +21,7 @@ import type {
   SubjectStat,
   Subject,
   Reading,
+  ReadingWithProgress,
   ReadingSession,
   Deliverable,
   ReadingWithSubject,
@@ -177,6 +180,46 @@ export async function deleteDeliverable(id: string) {
 // READINGS
 // ============================================================
 
+interface ReadingProgressSummary {
+  pages_read: number;
+  sessions: number;
+  total_minutes: number;
+}
+
+interface ReadingProgressViewRow extends ReadingProgressSummary {
+  reading_id: string;
+}
+
+async function getReadingProgressMap(): Promise<Map<string, ReadingProgressSummary>> {
+  try {
+    const { data, error } = await supabase
+      .from("reading_progress")
+      .select("reading_id, sessions, pages_read, total_minutes");
+
+    if (error) {
+      console.warn("Não foi possível consultar reading_progress; páginas lidas serão consideradas zero:", error.message);
+      return new Map();
+    }
+
+    const rows = (data ?? []) as unknown as ReadingProgressViewRow[];
+    warnIfTruncated(rows, "getReadingProgressMap");
+    return new Map(rows.map((row) => [
+      row.reading_id,
+      {
+        pages_read: Number(row.pages_read) || 0,
+        sessions: Number(row.sessions) || 0,
+        total_minutes: Number(row.total_minutes) || 0,
+      },
+    ]));
+  } catch (error: unknown) {
+    console.warn(
+      "Erro ao consultar reading_progress; páginas lidas serão consideradas zero:",
+      error instanceof Error ? error.message : "Falha desconhecida.",
+    );
+    return new Map();
+  }
+}
+
 export async function getReadings(subjectId?: string) {
   let query = supabase
     .from("readings")
@@ -185,7 +228,13 @@ export async function getReadings(subjectId?: string) {
   if (subjectId) query = query.eq("subject_id", subjectId);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return data;
+  const rows = data ?? [];
+  warnIfTruncated(rows, "getReadings");
+  const progressByReading = await getReadingProgressMap();
+  return (rows as unknown as Reading[]).map((reading) => ({
+    ...reading,
+    pages_read: progressByReading.get(reading.id)?.pages_read ?? 0,
+  })) as ReadingWithProgress[];
 }
 
 export async function getReadingById(id: string) {
@@ -359,7 +408,9 @@ export async function getAllReadingSessions() {
     .select("*, reading:readings(title, chapter_title, author, type, subject:subjects(name, theme_color))")
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return data;
+  const sessions = data ?? [];
+  const truncated = warnIfTruncated(sessions, "getAllReadingSessions");
+  return { sessions, truncated };
 }
 
 /**
@@ -489,7 +540,7 @@ export async function markReviewAsDone(id: string) {
 // MÉTRICAS POR DISCIPLINA (Histórico e Dashboard Gamificado)
 // ============================================================
 
-export async function getSubjectStats(): Promise<SubjectStat[]> {
+export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncated: boolean }> {
   try {
     const { data: subjects, error: e1 } = await supabase
       .from("subjects")
@@ -497,7 +548,7 @@ export async function getSubjectStats(): Promise<SubjectStat[]> {
       .order("name");
     if (e1) {
       console.warn("Aviso ao carregar subjects para stats:", e1.message);
-      return [];
+      return { stats: [], truncated: false };
     }
 
     const { data: readings, error: e2 } = await supabase
@@ -505,7 +556,7 @@ export async function getSubjectStats(): Promise<SubjectStat[]> {
       .select("id, subject_id, is_read");
     if (e2) {
       console.warn("Aviso ao carregar readings para stats:", e2.message);
-      return [];
+      return { stats: [], truncated: false };
     }
 
     const { data: sessions, error: e3 } = await supabase
@@ -513,8 +564,10 @@ export async function getSubjectStats(): Promise<SubjectStat[]> {
       .select("reading_id, duration_minutes, pages_read");
     if (e3) {
       console.warn("Aviso ao carregar sessions para stats:", e3.message);
-      return [];
+      return { stats: [], truncated: false };
     }
+
+    const truncated = warnIfTruncated(sessions ?? [], "getSubjectStats.sessions");
 
     // Mapa de reading_id -> subject_id
     const readingToSubject = new Map<string, string>();
@@ -566,10 +619,10 @@ export async function getSubjectStats(): Promise<SubjectStat[]> {
       };
     });
 
-    return stats;
+    return { stats, truncated };
   } catch (err) {
     console.warn("Erro ao calcular subject stats:", err);
-    return [];
+    return { stats: [], truncated: false };
   }
 }
 
@@ -580,6 +633,7 @@ export async function getSubjectStats(): Promise<SubjectStat[]> {
 export async function getDashboardData() {
   const today = todayISO();
   const sevenDaysStr = addDaysISO(today, 7);
+  const progressByReading = await getReadingProgressMap();
 
   let tier1: SpacedReviewWithReading[] = [];
   let schemaError: string | null = null;
@@ -595,7 +649,13 @@ export async function getDashboardData() {
       console.warn("Aviso na busca de spaced_reviews:", e1.message);
       schemaError = e1.message;
     } else {
-      tier1 = (data ?? []) as SpacedReviewWithReading[];
+      tier1 = ((data ?? []) as unknown as SpacedReviewWithReading[]).map((review) => ({
+        ...review,
+        reading: {
+          ...review.reading,
+          pages_read: progressByReading.get(review.reading.id)?.pages_read ?? 0,
+        },
+      }));
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : undefined;
@@ -614,7 +674,12 @@ export async function getDashboardData() {
       console.warn("Aviso na busca de readings:", e2.message);
       if (!schemaError) schemaError = e2.message;
     } else {
-      allPendingReadings = (data ?? []) as ReadingWithSubject[];
+      const rows = data ?? [];
+      warnIfTruncated(rows, "getDashboardData.readings");
+      allPendingReadings = (rows as unknown as ReadingWithSubject[]).map((reading) => ({
+        ...reading,
+        pages_read: progressByReading.get(reading.id)?.pages_read ?? 0,
+      }));
     }
   } catch (err: unknown) {
     console.warn(
@@ -739,27 +804,27 @@ export async function getReadingProjection(readingId: string) {
   if (sessionsError) throw new Error(sessionsError.message);
 
   const pagesRead = sessions.reduce((sum, s) => sum + s.pages_read, 0);
-  const pagesRemaining = Math.max(0, reading.target_pages - pagesRead);
-  const hoursRemaining =
-    reading.current_speed_pph > 0
-      ? Math.round((pagesRemaining / reading.current_speed_pph) * 100) / 100
-      : 0;
+  const remaining = computeRemaining({
+    targetPages: reading.target_pages,
+    pagesRead,
+    speedPph: reading.current_speed_pph,
+  });
 
   const daysRemaining = Math.max(0, daysUntil(reading.deadline));
 
   const hoursPerDay =
     daysRemaining > 0
-      ? Math.round((hoursRemaining / daysRemaining) * 100) / 100
-      : hoursRemaining;
+      ? Math.round((remaining.hoursRemaining / daysRemaining) * 100) / 100
+      : Math.round(remaining.hoursRemaining * 100) / 100;
 
   return {
     totalPages: reading.target_pages,
     pagesRead,
-    pagesRemaining,
+    pagesRemaining: remaining.pagesRemaining,
     speedPph: reading.current_speed_pph,
-    hoursRemaining,
+    hoursRemaining: Math.round(remaining.hoursRemaining * 100) / 100,
     daysRemaining,
     hoursPerDay,
-    isOverdue: daysRemaining === 0 && pagesRemaining > 0,
+    isOverdue: daysRemaining === 0 && remaining.pagesRemaining > 0,
   };
 }

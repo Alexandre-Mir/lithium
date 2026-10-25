@@ -12,6 +12,7 @@ import { ReadingTierCard } from "./reading-tier-card";
 import { SubjectStats } from "./subject-stats";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
 import { formatTodayLongBR } from "@/lib/dates";
+import { computeRemaining } from "@/lib/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ interface DashboardViewProps {
   readingDeliverableMap: Record<string, string>;
   allDeliverables: Deliverable[];
   subjectStats?: SubjectStat[];
+  subjectStatsTruncated?: boolean;
 }
 
 export function DashboardView({
@@ -42,6 +44,7 @@ export function DashboardView({
   readingDeliverableMap,
   allDeliverables,
   subjectStats = [],
+  subjectStatsTruncated = false,
 }: DashboardViewProps) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
@@ -69,14 +72,22 @@ export function DashboardView({
   };
 
   const totalTasks = tier1.length + tier2.length + tier3.length + tier4.length;
-  const totalUrgentPages = tier2.reduce((acc, r) => acc + r.target_pages, 0);
+  const totalUrgentPages = tier2.reduce((acc, r) => acc + computeRemaining({
+    targetPages: r.target_pages,
+    pagesRead: r.pages_read,
+    speedPph: Number(r.current_speed_pph),
+  }).pagesRemaining, 0);
 
   const totalReadingHours = [...tier2, ...tier3, ...tier4].reduce((acc, r) => {
-    const sp = Number(r.current_speed_pph) || 20;
-    return acc + (r.target_pages / sp);
+    return acc + computeRemaining({
+      targetPages: r.target_pages,
+      pagesRead: r.pages_read,
+      speedPph: Number(r.current_speed_pph),
+    }).hoursRemaining;
   }, 0);
 
   const todayFormatted = formatTodayLongBR();
+  const formattedRemainingHours = totalReadingHours.toFixed(1).replace(".", ",");
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-8">
@@ -158,9 +169,9 @@ export function DashboardView({
           </div>
 
           <div className="bg-gray-950/60 rounded p-2.5 border border-gray-800">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Carga Estimada</span>
+            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Carga restante</span>
             <span className="text-xl font-bold font-mono text-amber-400">
-              ~{totalReadingHours.toFixed(1)}h
+              ~{formattedRemainingHours}h
             </span>
           </div>
         </div>
@@ -169,7 +180,7 @@ export function DashboardView({
       {/* ============================================================ */}
       {/* MÉTRICAS POR DISCIPLINA (Calculadas em tempo real)           */}
       {/* ============================================================ */}
-      {subjectStats.length > 0 && <SubjectStats stats={subjectStats} />}
+      {(subjectStats.length > 0 || subjectStatsTruncated) && <SubjectStats stats={subjectStats} truncated={subjectStatsTruncated} />}
 
       {/* ============================================================ */}
       {/* TIER 1: SPACED REVIEWS (Repetição Espaçada — D+1, D+7, D+21)  */}

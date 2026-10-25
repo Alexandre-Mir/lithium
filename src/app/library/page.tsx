@@ -1,13 +1,13 @@
 import { connection } from "next/server";
 import { getReadings, getSubjects } from "@/app/actions";
 import { LibraryView } from "@/components/library/library-view";
-import { Reading, Subject } from "@/types/database";
+import { ReadingWithProgress, Subject } from "@/types/database";
 
 export const instant = false;
 
 export default async function LibraryPage() {
   await connection();
-  let readings: Reading[] = [];
+  let readings: ReadingWithProgress[] = [];
   let subjects: Subject[] = [];
   let connectionError: string | null = null;
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Reading, Subject } from "@/types/database";
+import { Reading, ReadingWithProgress, Subject } from "@/types/database";
 import { BookCard } from "./book-card";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { backfillMissingMetadata } from "@/app/actions";
 import { Loader2 } from "lucide-react";
 
 interface LibraryViewProps {
-  initialReadings: Reading[];
+  initialReadings: ReadingWithProgress[];
   subjects: Subject[];
 }
 

@@ -19,10 +19,11 @@ export default async function HomePage() {
   let readingDeliverableMap: Record<string, string> = {};
   let allDeliverables: Deliverable[] = [];
   let subjectStats: SubjectStat[] = [];
+  let subjectStatsTruncated = false;
   let connectionError: string | null = null;
 
   try {
-    const [data, stats] = await Promise.all([
+    const [data, statsResult] = await Promise.all([
       getDashboardData(),
       getSubjectStats(),
     ]);
@@ -33,7 +34,8 @@ export default async function HomePage() {
     tier4 = (data.tier4 as unknown as ReadingWithSubject[]) || [];
     readingDeliverableMap = data.readingDeliverableMap || {};
     allDeliverables = data.allDeliverables || [];
-    subjectStats = stats || [];
+    subjectStats = statsResult.stats || [];
+    subjectStatsTruncated = statsResult.truncated;
 
     if (data.schemaError) {
       connectionError = data.schemaError;
@@ -68,6 +70,7 @@ export default async function HomePage() {
         readingDeliverableMap={readingDeliverableMap}
         allDeliverables={allDeliverables}
         subjectStats={subjectStats}
+        subjectStatsTruncated={subjectStatsTruncated}
       />
     </div>
   );

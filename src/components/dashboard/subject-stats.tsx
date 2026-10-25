@@ -5,10 +5,11 @@ import { Clock, BookOpen, GraduationCap } from "lucide-react";
 
 interface SubjectStatsProps {
   stats: SubjectStat[];
+  truncated?: boolean;
 }
 
-export function SubjectStats({ stats }: SubjectStatsProps) {
-  if (!stats || stats.length === 0) return null;
+export function SubjectStats({ stats, truncated = false }: SubjectStatsProps) {
+  if ((!stats || stats.length === 0) && !truncated) return null;
 
   const formatHours = (mins: number) => {
     const h = Math.floor(mins / 60);
@@ -18,7 +19,13 @@ export function SubjectStats({ stats }: SubjectStatsProps) {
   };
 
   return (
-    <section className="space-y-3">
+    <>
+      {truncated && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          Dados truncados em 1.000 registros
+        </div>
+      )}
+      {stats.length > 0 && <section className="space-y-3">
       <div className="flex items-center justify-between pb-1">
         <div className="flex items-center gap-2">
           <GraduationCap className="w-4 h-4 text-gray-700 dark:text-gray-300" />
@@ -97,6 +104,7 @@ export function SubjectStats({ stats }: SubjectStatsProps) {
           </div>
         ))}
       </div>
-    </section>
+      </section>}
+    </>
   );
 }

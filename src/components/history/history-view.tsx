@@ -17,9 +17,10 @@ import Link from "next/link";
 
 interface HistoryViewProps {
   initialSessions: ReadingSessionWithReading[];
+  truncated?: boolean;
 }
 
-export function HistoryView({ initialSessions }: HistoryViewProps) {
+export function HistoryView({ initialSessions, truncated = false }: HistoryViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredSessions = initialSessions.filter((s) => {
@@ -99,6 +100,12 @@ export function HistoryView({ initialSessions }: HistoryViewProps) {
           </div>
         </div>
       </div>
+
+      {truncated && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          Dados truncados em 1.000 registros
+        </div>
+      )}
 
       {/* Busca */}
       <div className="relative max-w-sm">

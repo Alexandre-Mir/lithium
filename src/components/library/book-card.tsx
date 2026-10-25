@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Reading, Subject } from "@/types/database";
+import { Reading, ReadingWithProgress, Subject } from "@/types/database";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { markReadingAsRead, markReadingAsUnread } from "@/app/actions";
 import { formatDateBR } from "@/lib/dates";
+import { computeRemaining } from "@/lib/progress";
 import { ReadingCover } from "@/components/library/reading-cover";
 import {
   Clock,
@@ -18,7 +19,7 @@ import {
 } from "lucide-react";
 
 interface BookCardProps {
-  reading: Reading;
+  reading: ReadingWithProgress;
   subject?: Subject;
   onOpenSessionModal?: (reading: Reading) => void;
   onRefresh?: () => void;
@@ -30,11 +31,12 @@ export function BookCard({
   onOpenSessionModal,
   onRefresh,
 }: BookCardProps) {
-  const [isRead, setIsRead] = useState(reading.is_read);
+  const [isReadOverride, setIsReadOverride] = useState<boolean | null>(null);
+  const isRead = isReadOverride ?? reading.is_read;
 
   const handleToggleRead = async () => {
     const nextVal = !isRead;
-    setIsRead(nextVal);
+    setIsReadOverride(nextVal);
     try {
       if (nextVal) {
         await markReadingAsRead(reading.id);
@@ -44,13 +46,17 @@ export function BookCard({
       onRefresh?.();
     } catch (err) {
       console.error(err);
-      setIsRead(!nextVal);
+      setIsReadOverride(null);
     }
   };
 
   const speed = Number(reading.current_speed_pph) || 20;
-  const estimatedHours =
-    speed > 0 ? (reading.target_pages / speed).toFixed(1) : "0";
+  const remaining = computeRemaining({
+    targetPages: reading.target_pages,
+    pagesRead: reading.pages_read,
+    speedPph: speed,
+  });
+  const estimatedHours = remaining.hoursRemaining.toFixed(1).replace(".", ",");
 
   const themeColor = subject?.theme_color || "#4f46e5";
 
@@ -124,7 +130,7 @@ export function BookCard({
         <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-600 dark:text-gray-400 font-mono">
           <div className="flex items-center gap-1">
             <Layers className="w-3 h-3 text-gray-400" />
-            <span>{reading.target_pages}p</span>
+            <span>{reading.pages_read}/{reading.target_pages}p</span>
           </div>
 
           <div className="flex items-center gap-1">
@@ -134,7 +140,7 @@ export function BookCard({
 
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3 text-gray-400" />
-            <span>~{estimatedHours}h</span>
+            <span>~{estimatedHours}h restantes</span>
           </div>
 
           <div className="flex items-center gap-1">
