@@ -91,8 +91,8 @@ export function DashboardView({
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-8">
-      {/* Top Hero Section - Flat Design (fundo sólido, sem gradientes ou sombras pesadas) */}
-      <div className="rounded-lg border border-gray-800 bg-gray-900 text-white p-6 shadow-sm">
+      {/* Top Hero Section - Flat Design (fundo sólido, sem gradientes ou sombras) */}
+      <div className="rounded-lg border border-gray-800 bg-gray-900 text-white p-6 shadow-none">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">

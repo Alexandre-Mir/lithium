@@ -48,6 +48,12 @@ function subjectPedagogicalValues(subject: Subject): SubjectPedagogicalValues {
 
 export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps) {
   const [subjects, setSubjects] = useState<Subject[]>(initialSubjects);
+  const [prevInitialSubjects, setPrevInitialSubjects] = useState(initialSubjects);
+
+  if (prevInitialSubjects !== initialSubjects) {
+    setPrevInitialSubjects(initialSubjects);
+    setSubjects(initialSubjects);
+  }
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

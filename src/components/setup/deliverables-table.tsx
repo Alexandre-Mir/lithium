@@ -29,6 +29,12 @@ export function DeliverablesTable({
   onRefresh,
 }: DeliverablesTableProps) {
   const [deliverables, setDeliverables] = useState<Deliverable[]>(initialDeliverables);
+  const [prevInitialDeliverables, setPrevInitialDeliverables] = useState(initialDeliverables);
+
+  if (prevInitialDeliverables !== initialDeliverables) {
+    setPrevInitialDeliverables(initialDeliverables);
+    setDeliverables(initialDeliverables);
+  }
   const [loading, setLoading] = useState(false);
 
   // Inserção rápida

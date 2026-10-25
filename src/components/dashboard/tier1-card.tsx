@@ -16,7 +16,8 @@ interface Tier1CardProps {
 
 export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
   const [loading, setLoading] = useState(false);
-  const [completed, setCompleted] = useState(review.status === "done");
+  const [optimisticCompleted, setOptimisticCompleted] = useState<boolean | null>(null);
+  const completed = optimisticCompleted ?? (review.status === "done");
 
   const reading = review.reading;
   const subject = reading?.subject;
@@ -24,12 +25,12 @@ export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
   const handleMarkDone = async () => {
     try {
       setLoading(true);
-      setCompleted(true);
+      setOptimisticCompleted(true);
       await markReviewAsDone(review.id);
       onRefresh?.();
     } catch (err) {
       console.error(err);
-      setCompleted(false);
+      setOptimisticCompleted(null);
       alert("Erro ao marcar revisão como concluída.");
     } finally {
       setLoading(false);

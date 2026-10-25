@@ -55,6 +55,12 @@ export function ReadingsTable({
   onRefresh,
 }: ReadingsTableProps) {
   const [readings, setReadings] = useState<Reading[]>(initialReadings);
+  const [prevInitialReadings, setPrevInitialReadings] = useState(initialReadings);
+
+  if (prevInitialReadings !== initialReadings) {
+    setPrevInitialReadings(initialReadings);
+    setReadings(initialReadings);
+  }
   const [loading, setLoading] = useState(false);
   const [fetchingMetadata, setFetchingMetadata] = useState(false);
 
