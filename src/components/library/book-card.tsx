@@ -16,7 +16,9 @@ import {
   Calendar,
   Layers,
   Sparkles,
+  Play,
 } from "lucide-react";
+import { startReadingTimer } from "@/lib/reading-timer-store";
 
 interface BookCardProps {
   reading: ReadingWithProgress;
@@ -167,15 +169,25 @@ export function BookCard({
       </div>
 
       {/* Footer */}
-      <div className="p-3.5 pt-0">
+      <div className="flex gap-1.5 p-3.5 pt-0">
         <Button
           onClick={() => onOpenSessionModal?.(reading)}
           disabled={isRead}
           size="sm"
-          className="w-full bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded shadow-none"
+          className="min-w-0 flex-1 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded shadow-none"
         >
-          <Sparkles className="w-3 h-3 mr-1.5" />
-          Sessão de Leitura
+          <Sparkles className="w-3 h-3 mr-1" /> Sessão
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => startReadingTimer(reading.id, reading.title)}
+          aria-label={`Iniciar cronômetro para ${reading.title}`}
+          title="Iniciar cronômetro"
+          className="relative z-10 h-8 border-gray-300 px-2 text-[10px] dark:border-gray-700"
+        >
+          <Play className="h-3 w-3" /> Iniciar
         </Button>
       </div>
     </div>

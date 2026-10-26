@@ -1,6 +1,6 @@
 -- ============================================================
 -- LITHIUM — Motor Cognitivo de Estudos
--- Schema v1.4 (Totalmente idempotente e seguro contra reexecuções)
+-- Schema v1.5 (Totalmente idempotente e seguro contra reexecuções)
 -- ============================================================
 
 -- 0. Extensions
@@ -133,11 +133,33 @@ CREATE TABLE IF NOT EXISTS reading_sessions (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   reading_id       UUID NOT NULL REFERENCES readings(id) ON DELETE CASCADE,
   duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
+  duration_seconds INTEGER,
+  started_at       TIMESTAMPTZ,
+  ended_at         TIMESTAMPTZ,
+  source           TEXT NOT NULL DEFAULT 'manual',
   pages_read       INTEGER NOT NULL CHECK (pages_read > 0),
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE reading_sessions ADD COLUMN IF NOT EXISTS duration_seconds INTEGER;
+ALTER TABLE reading_sessions ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE reading_sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ;
+ALTER TABLE reading_sessions ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual';
+
+UPDATE reading_sessions
+   SET duration_seconds = duration_minutes * 60
+ WHERE duration_seconds IS NULL;
+
+ALTER TABLE reading_sessions DROP CONSTRAINT IF EXISTS reading_sessions_duration_seconds_check;
+ALTER TABLE reading_sessions ADD CONSTRAINT reading_sessions_duration_seconds_check
+  CHECK (duration_seconds IS NULL OR duration_seconds > 0);
+
+ALTER TABLE reading_sessions DROP CONSTRAINT IF EXISTS reading_sessions_source_check;
+ALTER TABLE reading_sessions ADD CONSTRAINT reading_sessions_source_check
+  CHECK (source IN ('manual', 'timer', 'timer_adjusted'));
+
 CREATE INDEX IF NOT EXISTS idx_sessions_reading ON reading_sessions(reading_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_started ON reading_sessions(started_at);
 
 -- ============================================================
 -- TABELA 5: spaced_reviews (Gatilhos de Repetição Espaçada)
@@ -197,7 +219,8 @@ SELECT
   r.type::text                               AS reading_type,
   COUNT(*)::int                              AS sessions,
   COALESCE(SUM(s.pages_read), 0)::int        AS total_pages,
-  COALESCE(SUM(s.duration_minutes), 0)::int  AS total_minutes
+  ROUND(COALESCE(SUM(COALESCE(s.duration_seconds, s.duration_minutes * 60)), 0) / 60.0)::int AS total_minutes,
+  COALESCE(SUM(COALESCE(s.duration_seconds, s.duration_minutes * 60)), 0)::int AS total_seconds
 FROM reading_sessions s
 JOIN readings r ON r.id = s.reading_id
 GROUP BY r.type;
@@ -205,18 +228,18 @@ GROUP BY r.type;
 GRANT SELECT ON reading_speed_stats TO anon, authenticated;
 
 -- ============================================================
--- VIEW: progresso agregado por leitura (v1.4)
+-- VIEW: progresso agregado por leitura (v1.4 + tempo real v1.5)
 -- ============================================================
 CREATE OR REPLACE VIEW reading_progress
 WITH (security_invoker = true) AS
 SELECT
-  r.id                                      AS reading_id,
-  COUNT(s.id)::int                          AS sessions,
-  COALESCE(SUM(s.pages_read), 0)::int       AS pages_read,
-  COALESCE(SUM(s.duration_minutes), 0)::int AS total_minutes
-FROM readings r
-LEFT JOIN reading_sessions s ON s.reading_id = r.id
-GROUP BY r.id;
+  reading_id,
+  COUNT(*)::int AS sessions,
+  COALESCE(SUM(pages_read), 0)::int AS pages_read,
+  ROUND(COALESCE(SUM(COALESCE(duration_seconds, duration_minutes * 60)), 0) / 60.0)::int AS total_minutes,
+  COALESCE(SUM(COALESCE(duration_seconds, duration_minutes * 60)), 0)::int AS total_seconds
+FROM reading_sessions
+GROUP BY reading_id;
 
 GRANT SELECT ON reading_progress TO anon, authenticated;
 

@@ -1,113 +1,124 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Reading } from "@/types/database";
+import { useState } from "react";
 import { createReadingSession } from "@/app/actions";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Zap, Play, Pause, RotateCcw, Check } from "lucide-react";
+import { elapsedSeconds, type TimerState } from "@/lib/reading-timer";
+import { formatDuration, pph } from "@/lib/session-time";
+import { validateSessionInput } from "@/lib/session-validation";
+import type { ReadingSessionSource } from "@/types/database";
+import { Check, Zap } from "lucide-react";
+
+export interface ReadingSessionTarget {
+  id: string;
+  title: string;
+}
+
+type SessionMode = "manual" | "timer";
 
 interface ReadingSessionModalProps {
-  reading: Reading | null;
+  reading: ReadingSessionTarget | null;
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  mode?: SessionMode;
+  timerState?: TimerState | null;
+  endedAt?: string | null;
+  onDiscardTimer?: () => void;
+}
+
+function formatTimerInput(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
+}
+
+function parseTimerInput(value: string): number | null {
+  const match = /^(\d{1,4}):(\d{2})$/.exec(value.trim());
+  if (!match || Number(match[2]) > 59) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
 }
 
 function ReadingSessionModalContent({
   reading,
+  mode,
+  timerState,
+  endedAt,
   onClose,
   onSuccess,
+  onDiscardTimer,
 }: {
-  reading: Reading;
+  reading: ReadingSessionTarget;
+  mode: SessionMode;
+  timerState: TimerState | null;
+  endedAt: string | null;
   onClose: () => void;
   onSuccess?: () => void;
+  onDiscardTimer?: () => void;
 }) {
-  const [durationMinutes, setDurationMinutes] = useState<number | "">(25);
-  const [pagesRead, setPagesRead] = useState<number | "">(10);
+  const measuredSeconds = mode === "timer" && timerState ? elapsedSeconds(timerState) : 0;
+  const [durationMinutes, setDurationMinutes] = useState("25");
+  const [timerInput, setTimerInput] = useState(() => formatTimerInput(measuredSeconds));
+  const [pagesInput, setPagesInput] = useState("10");
   const [loading, setLoading] = useState(false);
-  const [newSpeedResult, setNewSpeedResult] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Timer embutido
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [secondsElapsed, setSecondsElapsed] = useState(0);
+  const durationSeconds = mode === "manual"
+    ? (/^\d+$/.test(durationMinutes) ? Number(durationMinutes) * 60 : 0)
+    : (parseTimerInput(timerInput) ?? 0);
+  const pagesRead = /^\d+$/.test(pagesInput) ? Number(pagesInput) : 0;
+  const previewSpeed = durationSeconds > 0 && pagesRead > 0
+    ? pph(pagesRead, durationSeconds)
+    : null;
+  const source: ReadingSessionSource = mode === "manual"
+    ? "manual"
+    : Math.abs(durationSeconds - measuredSeconds) > 5
+      ? "timer_adjusted"
+      : "timer";
+  const durationWarning = mode === "timer" && measuredSeconds > 10_800;
+  const tooShortToSave = mode === "timer" && measuredSeconds < 30;
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (timerRunning) {
-      interval = setInterval(() => {
-        setSecondsElapsed((prev) => {
-          const next = prev + 1;
-          if (next % 60 === 0) {
-            setDurationMinutes(Math.max(1, Math.floor(next / 60)));
-          }
-          return next;
-        });
-      }, 1000);
+  const validationInput = {
+    pages_read: pagesRead,
+    duration_seconds: durationSeconds,
+    source,
+    started_at: mode === "timer" ? timerState?.startedAt ?? null : null,
+    ended_at: mode === "timer" ? endedAt : null,
+  };
+  const validationMessage = validateSessionInput(validationInput);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    if (validationMessage) {
+      setError(validationMessage);
+      return;
     }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [timerRunning]);
-
-  const formatTimer = (totalSec: number) => {
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const handleStopAndFill = () => {
-    setTimerRunning(false);
-    const calculatedMinutes = Math.max(1, Math.round(secondsElapsed / 60));
-    setDurationMinutes(calculatedMinutes);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const duration = typeof durationMinutes === "number" ? durationMinutes : 0;
-    const pages = typeof pagesRead === "number" ? pagesRead : 0;
-
-    if (duration <= 0 || pages <= 0) {
-      alert("Preencha valores válidos de duração e páginas.");
+    if (mode === "timer" && !timerState) {
+      setError("Não foi possível recuperar o cronômetro desta sessão.");
       return;
     }
 
     try {
       setLoading(true);
-      const res = await createReadingSession({
+      await createReadingSession({
         reading_id: reading.id,
-        duration_minutes: duration,
-        pages_read: pages,
+        pages_read: pagesRead,
+        duration_seconds: durationSeconds,
+        started_at: mode === "timer" ? timerState?.startedAt : null,
+        ended_at: mode === "timer" ? endedAt : null,
+        source,
       });
-
-      setNewSpeedResult(res.newSpeedPph);
       onSuccess?.();
-      setTimeout(() => {
-        onClose();
-      }, 1500);
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao registrar sessão de leitura.");
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Erro ao registrar sessão de leitura.");
     } finally {
       setLoading(false);
     }
   };
-
-  const previewSpeed =
-    typeof durationMinutes === "number" &&
-    typeof pagesRead === "number" &&
-    durationMinutes > 0
-      ? ((pagesRead / durationMinutes) * 60).toFixed(1)
-      : null;
 
   return (
     <DialogContent className="sm:max-w-md rounded-md border border-gray-200 dark:border-gray-800">
@@ -117,137 +128,108 @@ function ReadingSessionModalContent({
           Calibração Cognitiva
         </div>
         <DialogTitle className="text-base font-bold">
-          Registrar Sessão de Leitura
+          {mode === "timer" ? "Finalizar sessão cronometrada" : "Registrar Sessão de Leitura"}
         </DialogTitle>
-        <DialogDescription className="line-clamp-1 text-xs">
-          {reading.title}
-        </DialogDescription>
+        <DialogDescription className="line-clamp-1 text-xs">{reading.title}</DialogDescription>
       </DialogHeader>
 
-      {newSpeedResult !== null ? (
-        <div className="py-4 flex flex-col items-center justify-center text-center space-y-2 bg-emerald-50 dark:bg-emerald-950/40 rounded border border-emerald-200 dark:border-emerald-800">
-          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center">
-            <Check className="w-4 h-4" />
-          </div>
-          <h4 className="font-bold text-xs text-emerald-900 dark:text-emerald-100">
-            Velocidade Atualizada!
-          </h4>
-          <p className="text-xs text-emerald-700 dark:text-emerald-300">
-            Nova velocidade média calibrada:{" "}
-            <strong className="font-mono">{newSpeedResult} p/h</strong>
-          </p>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-3.5">
-          {/* Cronômetro Flat */}
-          <div className="rounded border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-2.5 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="font-mono text-xl font-bold text-gray-900 dark:text-gray-100">
-                {formatTimer(secondsElapsed)}
-              </div>
-              <span className="text-[11px] text-gray-500 font-mono">Cronômetro</span>
-            </div>
-
-            <div className="flex items-center gap-1">
-              {!timerRunning ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setTimerRunning(true)}
-                  className="h-7 text-xs rounded border-gray-300 dark:border-gray-700"
-                >
-                  <Play className="w-3 h-3 mr-1 text-emerald-600" /> Iniciar
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  onClick={handleStopAndFill}
-                  className="h-7 text-xs rounded"
-                >
-                  <Pause className="w-3 h-3 mr-1" /> Usar tempo
-                </Button>
-              )}
-              {secondsElapsed > 0 && !timerRunning && (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={() => setSecondsElapsed(0)}
-                  className="h-7 w-7"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Inputs de Duração e Páginas */}
+      <form onSubmit={handleSubmit} className="space-y-3.5">
+        {mode === "manual" ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label htmlFor="duration" className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                Tempo (minutos)
-              </Label>
+              <Label htmlFor="duration-minutes" className="text-xs font-semibold">Tempo (minutos)</Label>
               <Input
-                id="duration"
+                id="duration-minutes"
                 type="number"
                 min="1"
+                max="720"
+                step="1"
                 required
                 value={durationMinutes}
-                onChange={(e) =>
-                  setDurationMinutes(e.target.value ? parseInt(e.target.value) : "")
-                }
+                onChange={(event) => setDurationMinutes(event.target.value)}
                 className="font-mono text-xs h-8 rounded border-gray-300 dark:border-gray-700"
               />
             </div>
-
             <div className="space-y-1">
-              <Label htmlFor="pages" className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                Páginas Lidas
-              </Label>
+              <Label htmlFor="pages-read" className="text-xs font-semibold">Páginas lidas</Label>
               <Input
-                id="pages"
+                id="pages-read"
                 type="number"
                 min="1"
+                step="1"
                 required
-                value={pagesRead}
-                onChange={(e) =>
-                  setPagesRead(e.target.value ? parseInt(e.target.value) : "")
-                }
+                value={pagesInput}
+                onChange={(event) => setPagesInput(event.target.value)}
                 className="font-mono text-xs h-8 rounded border-gray-300 dark:border-gray-700"
               />
             </div>
           </div>
-
-          {previewSpeed && (
-            <div className="rounded bg-gray-100 dark:bg-gray-800 px-2.5 py-1.5 text-xs flex items-center justify-between font-mono text-gray-700 dark:text-gray-300">
-              <span>Taxa desta sessão:</span>
-              <span className="font-bold">{previewSpeed} p/h</span>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="timer-duration" className="text-xs font-semibold">Tempo (mm:ss)</Label>
+                <Input
+                  id="timer-duration"
+                  inputMode="numeric"
+                  required
+                  value={timerInput}
+                  onChange={(event) => setTimerInput(event.target.value)}
+                  aria-invalid={parseTimerInput(timerInput) === null}
+                  className="font-mono text-xs h-8 rounded border-gray-300 dark:border-gray-700"
+                />
+                <p className="text-[10px] text-gray-500">Medido: {formatDuration(measuredSeconds)}</p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="timer-pages-read" className="text-xs font-semibold">Páginas lidas</Label>
+                <Input
+                  id="timer-pages-read"
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  value={pagesInput}
+                  onChange={(event) => setPagesInput(event.target.value)}
+                  className="font-mono text-xs h-8 rounded border-gray-300 dark:border-gray-700"
+                />
+              </div>
             </div>
-          )}
+            {durationWarning && (
+              <p className="border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">Cronômetro aberto há mais de 3 h; confirme o tempo.</p>
+            )}
+            {tooShortToSave && (
+              <div className="border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 flex items-center justify-between gap-2">
+                <span>Menos de 30 s medidos. Descarte este cronômetro em vez de salvar.</span>
+                <Button type="button" variant="outline" size="sm" onClick={onDiscardTimer}>Descartar</Button>
+              </div>
+            )}
+          </>
+        )}
 
-          <DialogFooter className="pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={loading}
-              className="h-8 text-xs rounded"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading || !durationMinutes || !pagesRead}
-              className="bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded shadow-none"
-            >
-              {loading ? "Salvando..." : "Salvar & Calibrar"}
-            </Button>
-          </DialogFooter>
-        </form>
-      )}
+        {previewSpeed !== null && (
+          <div className="rounded border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950 px-2.5 py-1.5 text-xs flex items-center justify-between font-mono">
+            <span>Velocidade desta sessão:</span>
+            <span className="font-bold">{previewSpeed.toFixed(1)} p/h</span>
+          </div>
+        )}
+        {previewSpeed !== null && (previewSpeed > 300 || previewSpeed < 2) && (
+          <p className="text-xs text-amber-700">Velocidade incomum; confira páginas e tempo.</p>
+        )}
+        {(error || validationMessage) && <p role="alert" className="border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs text-red-800">{error || validationMessage}</p>}
+
+        <DialogFooter className="pt-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="h-8 text-xs rounded">
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            disabled={loading || tooShortToSave || Boolean(validationMessage) || !pagesRead}
+            className="bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded shadow-none"
+          >
+            {loading ? "Salvando..." : <><Check className="mr-1 h-3.5 w-3.5" /> Salvar sessão</>}
+          </Button>
+        </DialogFooter>
+      </form>
     </DialogContent>
   );
 }
@@ -257,6 +239,10 @@ export function ReadingSessionModal({
   isOpen,
   onClose,
   onSuccess,
+  mode = "manual",
+  timerState = null,
+  endedAt = null,
+  onDiscardTimer,
 }: ReadingSessionModalProps) {
   if (!reading) return null;
 
@@ -264,9 +250,14 @@ export function ReadingSessionModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       {isOpen && (
         <ReadingSessionModalContent
+          key={`${reading.id}:${mode}:${timerState?.startedAt ?? ""}`}
           reading={reading}
+          mode={mode}
+          timerState={timerState}
+          endedAt={endedAt}
           onClose={onClose}
           onSuccess={onSuccess}
+          onDiscardTimer={onDiscardTimer}
         />
       )}
     </Dialog>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Reading, ReadingWithProgress, Subject } from "@/types/database";
 import { BookCard } from "./book-card";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
+import type { ReadingSessionTarget } from "@/components/reading-session-modal";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, BookOpen } from "lucide-react";
@@ -24,7 +25,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
   const [selectedStatus, setSelectedStatus] = useState<"all" | "pending" | "read">("all");
 
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
-  const [activeReadingForSession, setActiveReadingForSession] = useState<Reading | null>(null);
+  const [activeReadingForSession, setActiveReadingForSession] = useState<ReadingSessionTarget | null>(null);
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillSummary, setBackfillSummary] = useState<string | null>(null);
 
@@ -66,7 +67,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
   });
 
   const handleOpenSession = (reading: Reading) => {
-    setActiveReadingForSession(reading);
+    setActiveReadingForSession({ id: reading.id, title: reading.title });
     setSessionModalOpen(true);
   };
 
@@ -199,6 +200,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
       <ReadingSessionModal
         reading={activeReadingForSession}
         isOpen={sessionModalOpen}
+        mode="manual"
         onClose={() => setSessionModalOpen(false)}
         onSuccess={handleRefresh}
       />

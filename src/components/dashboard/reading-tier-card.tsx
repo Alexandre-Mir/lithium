@@ -18,7 +18,9 @@ import {
   AlertTriangle,
   BookOpen,
   FileText,
+  Play,
 } from "lucide-react";
+import { startReadingTimer } from "@/lib/reading-timer-store";
 
 interface ReadingTierCardProps {
   reading: ReadingWithSubject;
@@ -184,6 +186,17 @@ export function ReadingTierCard({
 
         {/* Botões de Ação */}
         <div className="relative z-10 flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t border-gray-100 dark:border-gray-800 md:border-t-0">
+          <Button
+            type="button"
+            onClick={() => startReadingTimer(reading.id, reading.title)}
+            size="sm"
+            variant="outline"
+            aria-label={`Iniciar cronômetro para ${reading.title}`}
+            title="Iniciar cronômetro"
+            className="h-8 border-gray-300 dark:border-gray-700"
+          >
+            <Play className="mr-1 h-3.5 w-3.5" /> Iniciar
+          </Button>
           <Button
             onClick={() => onOpenSession(reading)}
             size="sm"

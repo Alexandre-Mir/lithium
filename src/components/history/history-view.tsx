@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { ReadingSessionWithReading } from "@/types/database";
 import { formatDateTimeBR } from "@/lib/dates";
+import { formatDuration, pph, sessionSeconds, sessionSourceLabel } from "@/lib/session-time";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -35,25 +37,15 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
     );
   });
 
-  const totalMinutes = initialSessions.reduce(
-    (acc, s) => acc + (s.duration_minutes || 0),
+  const totalSeconds = initialSessions.reduce(
+    (acc, session) => acc + sessionSeconds(session),
     0
   );
   const totalPages = initialSessions.reduce(
     (acc, s) => acc + (s.pages_read || 0),
     0
   );
-  const avgSpeed =
-    totalMinutes > 0
-      ? ((totalPages / totalMinutes) * 60).toFixed(1)
-      : "0";
-
-  const formatHours = (mins: number) => {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    if (h === 0) return `${m}m`;
-    return `${h}h ${m}m`;
-  };
+  const avgSpeed = pph(totalPages, totalSeconds).toFixed(1);
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-6">
@@ -81,7 +73,7 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
           <div className="rounded-md border border-gray-200 bg-white p-2.5 dark:border-gray-800 dark:bg-gray-900">
             <span className="text-[10px] font-semibold text-gray-500 uppercase block">Tempo Total</span>
             <span className="text-base font-bold font-mono text-gray-900 dark:text-gray-100">
-              {formatHours(totalMinutes)}
+              {formatDuration(totalSeconds)}
             </span>
           </div>
 
@@ -129,12 +121,13 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
               <TableHead className="w-[100px] p-2 text-xs font-mono">Páginas Lidas</TableHead>
               <TableHead className="w-[100px] p-2 text-xs font-mono">Tempo Gasto</TableHead>
               <TableHead className="w-[110px] p-2 text-xs font-mono">Velocidade Calculada</TableHead>
+              <TableHead className="w-[100px] p-2 text-xs">Origem</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredSessions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-xs text-gray-500">
+                <TableCell colSpan={7} className="text-center py-8 text-xs text-gray-500">
                   Nenhuma sessão de leitura registrada ainda. Inicie uma sessão no Dashboard ou na Biblioteca!
                 </TableCell>
               </TableRow>
@@ -142,12 +135,9 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
               filteredSessions.map((session) => {
                 const reading = session.reading;
                 const subject = reading?.subject;
-                const speed =
-                  session.duration_minutes > 0
-                    ? ((session.pages_read / session.duration_minutes) * 60).toFixed(1)
-                    : "0";
+                const speed = pph(session.pages_read, sessionSeconds(session)).toFixed(1);
 
-                const dateStr = formatDateTimeBR(session.created_at);
+                const dateStr = formatDateTimeBR(session.started_at ?? session.created_at);
 
                 return (
                   <TableRow
@@ -195,11 +185,16 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
                     </TableCell>
 
                     <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
-                      {session.duration_minutes} min
+                      {formatDuration(sessionSeconds(session))}
                     </TableCell>
 
                     <TableCell className="p-2 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
                       {speed} p/h
+                    </TableCell>
+                    <TableCell className="p-2 text-[11px] text-gray-600 dark:text-gray-400">
+                      <Badge variant="outline" className="text-[10px]">
+                        {sessionSourceLabel(session.source)}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 );

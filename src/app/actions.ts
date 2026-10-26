@@ -9,6 +9,8 @@ import { pickInitialSpeed } from "@/lib/speed";
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { warnIfTruncated } from "@/lib/warn-if-truncated";
 import { computeRemaining } from "@/lib/progress";
+import { pph, secondsToMinutes } from "@/lib/session-time";
+import { validateSessionInput } from "@/lib/session-validation";
 import type {
   SubjectInsert,
   SubjectUpdate,
@@ -22,7 +24,6 @@ import type {
   Subject,
   Reading,
   ReadingWithProgress,
-  ReadingSession,
   Deliverable,
   ReadingWithSubject,
   SpacedReviewWithReading,
@@ -183,7 +184,7 @@ export async function deleteDeliverable(id: string) {
 interface ReadingProgressSummary {
   pages_read: number;
   sessions: number;
-  total_minutes: number;
+  total_seconds: number;
 }
 
 interface ReadingProgressViewRow extends ReadingProgressSummary {
@@ -194,7 +195,7 @@ async function getReadingProgressMap(): Promise<Map<string, ReadingProgressSumma
   try {
     const { data, error } = await supabase
       .from("reading_progress")
-      .select("reading_id, sessions, pages_read, total_minutes");
+      .select("reading_id, sessions, pages_read, total_seconds");
 
     if (error) {
       console.warn("Não foi possível consultar reading_progress; páginas lidas serão consideradas zero:", error.message);
@@ -208,7 +209,7 @@ async function getReadingProgressMap(): Promise<Map<string, ReadingProgressSumma
       {
         pages_read: Number(row.pages_read) || 0,
         sessions: Number(row.sessions) || 0,
-        total_minutes: Number(row.total_minutes) || 0,
+        total_seconds: Number(row.total_seconds) || 0,
       },
     ]));
   } catch (error: unknown) {
@@ -260,7 +261,7 @@ export async function getSpacedReviewsByReading(readingId: string) {
 export async function getSpeedStats(): Promise<ReadingSpeedStat[]> {
   const { data, error } = await supabase
     .from("reading_speed_stats")
-    .select("reading_type, sessions, total_pages, total_minutes");
+    .select("reading_type, sessions, total_pages, total_minutes, total_seconds");
 
   if (error) {
     console.warn("Não foi possível consultar reading_speed_stats:", error.message);
@@ -281,13 +282,13 @@ export async function getReadingDetail(id: string) {
     getSpeedStats(),
   ]);
   const totalPages = speedStats.reduce((sum, stat) => sum + stat.total_pages, 0);
-  const totalMinutes = speedStats.reduce((sum, stat) => sum + stat.total_minutes, 0);
+  const totalSeconds = speedStats.reduce((sum, stat) => sum + stat.total_seconds, 0);
   return {
     reading,
     sessions,
     reviews,
     deliverables,
-    globalAverageSpeed: totalMinutes > 0 ? (totalPages / totalMinutes) * 60 : 0,
+    globalAverageSpeed: pph(totalPages, totalSeconds),
   };
 }
 
@@ -415,31 +416,36 @@ export async function getAllReadingSessions() {
 
 /**
  * Cria uma sessão de leitura e executa a CALIBRAÇÃO:
- * - Calcula a velocidade real: (pages_read / duration_minutes) * 60
+ * - Calcula a velocidade real a partir dos segundos agregados em reading_progress.
  * - Atualiza current_speed_pph na leitura correspondente
  */
 export async function createReadingSession(input: ReadingSessionInsert) {
+  const validationError = validateSessionInput(input);
+  if (validationError) throw new Error(validationError);
+
+  const durationSeconds = input.duration_seconds;
   const { data: session, error: sessionError } = await supabase
     .from("reading_sessions")
-    .insert(input)
+    .insert({
+      ...input,
+      duration_minutes: secondsToMinutes(durationSeconds),
+      started_at: input.started_at ?? null,
+      ended_at: input.ended_at ?? null,
+    })
     .select()
     .single();
   if (sessionError) throw new Error(sessionError.message);
 
-  // Recalcular velocidade com base em TODAS as sessões
-  const { data: allSessions, error: sessionsError } = await supabase
-    .from("reading_sessions")
-    .select("pages_read, duration_minutes")
-    .eq("reading_id", input.reading_id);
-  if (sessionsError) throw new Error(sessionsError.message);
+  const { data: progress, error: progressError } = await supabase
+    .from("reading_progress")
+    .select("pages_read, total_seconds")
+    .eq("reading_id", input.reading_id)
+    .maybeSingle();
+  if (progressError) throw new Error(progressError.message);
 
-  const totalPages = allSessions.reduce((sum, s) => sum + s.pages_read, 0);
-  const totalMinutes = allSessions.reduce((sum, s) => sum + s.duration_minutes, 0);
-
-  const newSpeedPph =
-    totalMinutes > 0
-      ? Math.round((totalPages / totalMinutes) * 60 * 100) / 100
-      : 20.0;
+  const newSpeedPph = progress
+    ? Math.round(pph(Number(progress.pages_read) || 0, Number(progress.total_seconds) || 0) * 100) / 100
+    : 20;
 
   const { error: updateError } = await supabase
     .from("readings")
@@ -449,6 +455,7 @@ export async function createReadingSession(input: ReadingSessionInsert) {
 
   revalidatePath("/");
   revalidatePath("/library");
+  revalidatePath(`/library/${input.reading_id}`);
   revalidatePath("/history");
   return { session, newSpeedPph };
 }
@@ -559,29 +566,26 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
       return { stats: [], truncated: false };
     }
 
-    const { data: sessions, error: e3 } = await supabase
-      .from("reading_sessions")
-      .select("reading_id, duration_minutes, pages_read");
+    const { data: progress, error: e3 } = await supabase
+      .from("reading_progress")
+      .select("reading_id, total_seconds, pages_read");
     if (e3) {
       console.warn("Aviso ao carregar sessions para stats:", e3.message);
       return { stats: [], truncated: false };
     }
 
-    const truncated = warnIfTruncated(sessions ?? [], "getSubjectStats.sessions");
-
-    // Mapa de reading_id -> subject_id
-    const readingToSubject = new Map<string, string>();
-    for (const r of readings || []) {
-      readingToSubject.set(r.id, r.subject_id);
-    }
+    const progressRows = progress ?? [];
+    const truncated = warnIfTruncated(progressRows, "getSubjectStats.reading_progress");
 
     // Agregar estatísticas por disciplina
     const subjectRows = (subjects ?? []) as Subject[];
     const readingRows = (readings ?? []) as Pick<Reading, "id" | "subject_id" | "is_read">[];
-    const sessionRows = (sessions ?? []) as Pick<
-      ReadingSession,
-      "reading_id" | "duration_minutes" | "pages_read"
-    >[];
+    const progressByReading = new Map(
+      progressRows.map((row) => [
+        row.reading_id,
+        { total_seconds: Number(row.total_seconds) || 0, pages_read: Number(row.pages_read) || 0 },
+      ]),
+    );
 
     const stats: SubjectStat[] = subjectRows.map((sub) => {
       const subReadings = readingRows.filter((reading) => reading.subject_id === sub.id);
@@ -590,20 +594,11 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
       const progressPercent =
         totalReadings > 0 ? Math.round((completedReadings / totalReadings) * 100) : 0;
 
-      // Somar sessões das leituras desta disciplina
-      const subReadingIds = new Set(subReadings.map((reading) => reading.id));
-      const subSessions = sessionRows.filter((session) =>
-        subReadingIds.has(session.reading_id)
-      );
-
-      const totalMinutes = subSessions.reduce(
-        (acc, session) => acc + (session.duration_minutes || 0),
-        0
-      );
-      const totalPages = subSessions.reduce(
-        (acc, session) => acc + (session.pages_read || 0),
-        0
-      );
+      const subProgress = subReadings
+        .map((reading) => progressByReading.get(reading.id))
+        .filter((row): row is { total_seconds: number; pages_read: number } => Boolean(row));
+      const totalSeconds = subProgress.reduce((sum, row) => sum + row.total_seconds, 0);
+      const totalPages = subProgress.reduce((sum, row) => sum + row.pages_read, 0);
 
       return {
         id: sub.id,
@@ -614,7 +609,7 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
         totalReadings,
         completedReadings,
         progressPercent,
-        totalMinutes,
+        totalSeconds,
         totalPages,
       };
     });

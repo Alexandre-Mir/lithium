@@ -1,9 +1,10 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.4)
+// Lithium — Database Types (mirrors Supabase schema v1.5)
 // ============================================================
 
 export type ReadingType = "book" | "article";
 export type ReviewStatus = "pending" | "done";
+export type ReadingSessionSource = "manual" | "timer" | "timer_adjusted";
 
 // ---- Row types ----
 
@@ -58,7 +59,11 @@ export interface Reading {
 export interface ReadingSession {
   id: string;
   reading_id: string;
-  duration_minutes: number;
+  duration_minutes: number; // Legado obrigatório no banco; derivado dos segundos ao gravar.
+  duration_seconds: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+  source: ReadingSessionSource;
   pages_read: number;
   created_at: string;
 }
@@ -67,7 +72,8 @@ export interface ReadingSpeedStat {
   reading_type: ReadingType;
   sessions: number;
   total_pages: number;
-  total_minutes: number;
+  total_minutes: number; // Coluna legada das views; cálculos usam total_seconds.
+  total_seconds: number;
 }
 
 export interface SpacedReview {
@@ -112,7 +118,14 @@ export type ReadingInsert = Omit<
   >;
 export type ReadingUpdate = Partial<ReadingInsert>;
 
-export type ReadingSessionInsert = Omit<ReadingSession, "id" | "created_at">;
+export interface ReadingSessionInsert {
+  reading_id: string;
+  pages_read: number;
+  duration_seconds: number;
+  started_at?: string | null;
+  ended_at?: string | null;
+  source: ReadingSessionSource;
+}
 
 export type SpacedReviewInsert = Omit<SpacedReview, "id" | "created_at">;
 export type SpacedReviewUpdate = Partial<Pick<SpacedReview, "status">>;
@@ -152,6 +165,6 @@ export interface SubjectStat {
   totalReadings: number;
   completedReadings: number;
   progressPercent: number;
-  totalMinutes: number;
+  totalSeconds: number;
   totalPages: number;
 }

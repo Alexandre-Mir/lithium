@@ -19,6 +19,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ### Convenções que o código não deixa óbvias
 - UI em pt-BR; Flat Design estrito (sem sombra, sem gradiente).
 - Datas: só via src/lib/dates.ts (fuso America/Sao_Paulo). Proibido toISOString().split("T") e toLocaleString sem timeZone.
+- Tempo: segundos (duration_seconds) são a fonte da verdade; duration_minutes é legado/exibição. Contas via src/lib/session-time.ts.
 - Vínculo prova↔leitura: só via src/lib/cascade.ts.
 - APIs externas: só no servidor e nunca durante o render; segredos sem prefixo NEXT_PUBLIC_.
 - O Supabase corta respostas em 1.000 linhas sem avisar: para somas, médias e listas grandes use view/agregação em SQL ou paginação.

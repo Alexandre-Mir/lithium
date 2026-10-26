@@ -29,12 +29,16 @@ function makeReading(overrides: Partial<Reading> = {}): Reading {
   };
 }
 
-function makeSession(pagesRead: number, durationMinutes: number): ReadingSession {
+function makeSession(pagesRead: number, durationSeconds: number): ReadingSession {
   return {
-    id: `session-${pagesRead}-${durationMinutes}`,
+    id: `session-${pagesRead}-${durationSeconds}`,
     reading_id: "reading-1",
     pages_read: pagesRead,
-    duration_minutes: durationMinutes,
+    duration_minutes: Math.round(durationSeconds / 60),
+    duration_seconds: durationSeconds,
+    started_at: null,
+    ended_at: null,
+    source: "manual",
     created_at: "2026-10-23T12:00:00Z",
   };
 }
@@ -62,7 +66,7 @@ describe("computeProjection", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
 
-    const projection = computeProjection(makeReading(), [makeSession(30, 90), makeSession(20, 60)]);
+    const projection = computeProjection(makeReading(), [makeSession(30, 5_400), makeSession(20, 3_600)]);
     expect(projection).toEqual({
       pagesRead: 50,
       pagesRemaining: 50,
@@ -79,7 +83,7 @@ describe("computeProjection", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
 
-    const projection = computeProjection(makeReading(), [makeSession(130, 390)]);
+    const projection = computeProjection(makeReading(), [makeSession(130, 23_400)]);
     expect(projection.progressPercent).toBe(100);
     expect(projection.overTarget).toBe(30);
     expect(projection.pagesRemaining).toBe(0);
@@ -98,7 +102,7 @@ describe("computeProjection", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
 
-    const projection = computeProjection(makeReading({ deadline: "2026-10-24" }), [makeSession(20, 60)]);
+    const projection = computeProjection(makeReading({ deadline: "2026-10-24" }), [makeSession(20, 3_600)]);
     expect(projection.hoursRemaining).toBe(4);
     expect(projection.daysRemaining).toBe(0);
     expect(projection.hoursPerDay).toBe(4);

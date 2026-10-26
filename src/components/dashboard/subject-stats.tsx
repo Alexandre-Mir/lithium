@@ -1,6 +1,7 @@
 "use client";
 
 import { SubjectStat } from "@/types/database";
+import { formatDuration } from "@/lib/session-time";
 import { Clock, BookOpen, GraduationCap } from "lucide-react";
 
 interface SubjectStatsProps {
@@ -10,13 +11,6 @@ interface SubjectStatsProps {
 
 export function SubjectStats({ stats, truncated = false }: SubjectStatsProps) {
   if ((!stats || stats.length === 0) && !truncated) return null;
-
-  const formatHours = (mins: number) => {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    if (h === 0) return `${m}m`;
-    return `${h}h ${m}m`;
-  };
 
   return (
     <>
@@ -71,7 +65,7 @@ export function SubjectStats({ stats, truncated = false }: SubjectStatsProps) {
               <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
                 <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 <span className="font-mono font-medium text-gray-800 dark:text-gray-200">
-                  {formatHours(stat.totalMinutes)}
+                  {formatDuration(stat.totalSeconds)}
                 </span>
               </div>
 

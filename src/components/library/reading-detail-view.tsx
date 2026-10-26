@@ -10,10 +10,12 @@ import { computeProjection } from "@/lib/projection";
 import { daysUntil, formatDateBR, formatDateTimeBR, todayISO } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { ReadingCover } from "@/components/library/reading-cover";
+import { startReadingTimer } from "@/lib/reading-timer-store";
+import { formatDuration, pph, sessionSeconds, sessionSourceLabel } from "@/lib/session-time";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { metadataAttemptsSummary } from "@/lib/metadata-labels";
-import { ArrowLeft, Calendar, Clock, RefreshCw } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, Play, RefreshCw } from "lucide-react";
 
 interface Props {
   reading: Reading & { subject: Subject };
@@ -44,8 +46,8 @@ export function ReadingDetailView({
   const days = daysUntil(reading.deadline);
 
   const totalPagesRead = sessions.reduce((sum, session) => sum + session.pages_read, 0);
-  const totalMinutesSpent = sessions.reduce((sum, session) => sum + session.duration_minutes, 0);
-  const speed = totalMinutesSpent > 0 ? (totalPagesRead / totalMinutesSpent) * 60 : 0;
+  const totalSecondsSpent = sessions.reduce((sum, session) => sum + sessionSeconds(session), 0);
+  const speed = pph(totalPagesRead, totalSecondsSpent);
   const calibratedSpeed = sessions.length > 0 ? speed : reading.current_speed_pph;
 
   const toggleRead = async () => {
@@ -89,7 +91,7 @@ export function ReadingDetailView({
     .map(
       (session, index) =>
         `${(index * 100) / Math.max(1, chart.length - 1)},${
-          50 - Math.min(45, (session.pages_read / session.duration_minutes) * 60 / 4)
+          50 - Math.min(45, pph(session.pages_read, sessionSeconds(session)) / 4)
         }`,
     )
     .join(" ");
@@ -146,6 +148,9 @@ export function ReadingDetailView({
           </div>
 
           <div className="flex flex-wrap items-start gap-2">
+            <Button size="sm" variant="outline" onClick={() => startReadingTimer(reading.id, reading.title)} aria-label="Iniciar cronômetro">
+              <Play className="w-3.5 h-3.5 mr-1" /> Iniciar
+            </Button>
             <Button size="sm" onClick={() => setModalOpen(true)}>
               <Clock className="w-3.5 h-3.5 mr-1" />
               Registrar sessão
@@ -176,9 +181,9 @@ export function ReadingDetailView({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           ["Páginas", `${projection.pagesRead}/${reading.target_pages}p`],
-          ["Tempo total", `${totalMinutesSpent} min`],
+          ["Tempo real acumulado", formatDuration(totalSecondsSpent)],
           ["Velocidade", `${calibratedSpeed.toFixed(1)} p/h`],
-          ["Restante", `${projection.hoursRemaining.toFixed(1)}h · ${projection.hoursPerDay.toFixed(1)}h/d`],
+          ["Restante estimado", `${projection.hoursRemaining.toFixed(1)}h · ${projection.hoursPerDay.toFixed(1)}h/d`],
         ].map(([label, value]) => (
           <div
             key={label}
@@ -239,23 +244,25 @@ export function ReadingDetailView({
               <th className="p-2 text-left">Páginas</th>
               <th className="p-2 text-left">Tempo</th>
               <th className="p-2 text-left">Velocidade</th>
+              <th className="p-2 text-left">Origem</th>
             </tr>
           </thead>
           <tbody>
             {sessions.length ? (
               sessions.map((session) => (
                 <tr key={session.id} className="border-t border-gray-100 dark:border-gray-800">
-                  <td className="p-2 font-mono">{formatDateTimeBR(session.created_at)}</td>
+                  <td className="p-2 font-mono">{formatDateTimeBR(session.started_at ?? session.created_at)}</td>
                   <td className="p-2">{session.pages_read}</td>
-                  <td className="p-2">{session.duration_minutes} min</td>
+                  <td className="p-2">{formatDuration(sessionSeconds(session))}</td>
                   <td className="p-2 font-mono">
-                    {((session.pages_read / session.duration_minutes) * 60).toFixed(1)} p/h
+                    {pph(session.pages_read, sessionSeconds(session)).toFixed(1)} p/h
                   </td>
+                  <td className="p-2"><Badge variant="outline">{sessionSourceLabel(session.source)}</Badge></td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={4} className="p-6 text-center text-gray-500">
+                <td colSpan={5} className="p-6 text-center text-gray-500">
                   Nenhuma sessão registrada.
                 </td>
               </tr>
@@ -336,8 +343,9 @@ export function ReadingDetailView({
       </section>
 
       <ReadingSessionModal
-        reading={reading}
+        reading={{ id: reading.id, title: reading.title }}
         isOpen={modalOpen}
+        mode="manual"
         onClose={() => setModalOpen(false)}
         onSuccess={() => {
           setModalOpen(false);

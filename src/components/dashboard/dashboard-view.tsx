@@ -11,6 +11,7 @@ import { Tier1Card } from "./tier1-card";
 import { ReadingTierCard } from "./reading-tier-card";
 import { SubjectStats } from "./subject-stats";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
+import type { ReadingSessionTarget } from "@/components/reading-session-modal";
 import { formatTodayLongBR } from "@/lib/dates";
 import { computeRemaining } from "@/lib/progress";
 import { Badge } from "@/components/ui/badge";
@@ -48,19 +49,19 @@ export function DashboardView({
 }: DashboardViewProps) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
-  const [activeReading, setActiveReading] = useState<ReadingWithSubject | null>(null);
+  const [activeReading, setActiveReading] = useState<ReadingSessionTarget | null>(null);
 
   const deliverableMap = new Map(allDeliverables.map((d) => [d.id, d]));
 
   const handleOpenSession = (reading: ReadingWithSubject) => {
-    setActiveReading(reading);
+    setActiveReading({ id: reading.id, title: reading.title });
     setModalOpen(true);
   };
 
   const handleQuickSessionAny = () => {
     const topReading = tier2[0] || tier3[0] || tier4[0];
     if (topReading) {
-      setActiveReading(topReading);
+      setActiveReading({ id: topReading.id, title: topReading.title });
       setModalOpen(true);
     } else {
       alert("Nenhuma leitura pendente para iniciar sessão. Cadastre leituras no Setup!");
@@ -353,6 +354,7 @@ export function DashboardView({
       <ReadingSessionModal
         reading={activeReading}
         isOpen={modalOpen}
+        mode="manual"
         onClose={() => setModalOpen(false)}
         onSuccess={handleRefresh}
       />
