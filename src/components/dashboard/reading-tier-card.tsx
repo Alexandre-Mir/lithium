@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ReadingWithSubject, Deliverable } from "@/types/database";
 import { markReadingAsRead } from "@/app/actions";
+import { markReadingAsUnread } from "@/app/actions";
 import { daysUntil, formatDateBR } from "@/lib/dates";
 import { computeRemaining } from "@/lib/progress";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import {
   Play,
 } from "lucide-react";
 import { startReadingTimer } from "@/lib/reading-timer-store";
+import { addToast } from "@/lib/toast-store";
 
 interface ReadingTierCardProps {
   reading: ReadingWithSubject;
@@ -58,6 +60,15 @@ export function ReadingTierCard({
       setOptimisticIsRead(true);
       await markReadingAsRead(reading.id);
       onRefresh?.();
+      addToast({
+        message: `«${reading.title}» concluída`,
+        actionLabel: "Desfazer",
+        onAction: async () => {
+          await markReadingAsUnread(reading.id);
+          setOptimisticIsRead(null);
+          onRefresh?.();
+        },
+      });
     } catch (err) {
       console.error(err);
       setOptimisticIsRead(null);
@@ -170,7 +181,7 @@ export function ReadingTierCard({
             </div>
           </div>
 
-          <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
             <div
               className="h-full rounded-full"
               style={{ width: `${progress.progressPercent}%`, backgroundColor: themeColor }}
@@ -185,15 +196,14 @@ export function ReadingTierCard({
         </div>
 
         {/* Botões de Ação */}
-        <div className="relative z-10 flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t border-gray-100 dark:border-gray-800 md:border-t-0">
+        <div className="relative z-10 flex items-center gap-1.5 shrink-0 pt-2 md:pt-0 border-t border-gray-100 dark:border-gray-800 md:border-t-0">
           <Button
             type="button"
             onClick={() => startReadingTimer(reading.id, reading.title)}
             size="sm"
-            variant="outline"
             aria-label={`Iniciar cronômetro para ${reading.title}`}
             title="Iniciar cronômetro"
-            className="h-8 border-gray-300 dark:border-gray-700"
+            className="h-8 bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
           >
             <Play className="mr-1 h-3.5 w-3.5" /> Iniciar
           </Button>
@@ -207,11 +217,13 @@ export function ReadingTierCard({
             Sessão
           </Button>
 
+          <div className="mx-1 h-6 border-l border-gray-200 dark:border-gray-800" aria-hidden="true" />
           <Button
             onClick={handleMarkAsRead}
             disabled={loading}
             size="sm"
-            className={`${progress.goalReached ? "bg-emerald-700 hover:bg-emerald-800 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700" : "bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900"} text-xs font-semibold h-8 rounded shadow-none`}
+            variant={progress.goalReached ? "default" : "ghost"}
+            className={`${progress.goalReached ? "bg-emerald-700 hover:bg-emerald-800 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700" : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"} text-xs font-semibold h-8 rounded shadow-none`}
           >
             <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
             Concluir

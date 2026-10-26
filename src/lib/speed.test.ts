@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickInitialSpeed } from "@/lib/speed";
+import { pickInitialSpeed, speedFromTotals } from "@/lib/speed";
 import type { ReadingSpeedStat } from "@/types/database";
 
 function stat(
@@ -27,5 +27,27 @@ describe("pickInitialSpeed", () => {
 
   it("não divide por zero quando os segundos acumulados são zero", () => {
     expect(pickInitialSpeed([stat("article", 3, 30, 0)], "article")).toBe(20);
+  });
+});
+
+describe("speedFromTotals", () => {
+  it("calcula a velocidade com precisão de duas casas a partir dos totais", () => {
+    expect(speedFromTotals(
+      { sessions: 2, pages_read: 5, total_seconds: 900 },
+      [],
+      "book",
+    )).toBe(20);
+  });
+
+  it("usa a velocidade inicial do tipo quando não há sessões na leitura", () => {
+    expect(speedFromTotals(
+      { sessions: 0, pages_read: 0, total_seconds: 0 },
+      [stat("article", 3, 50, 2_700)],
+      "article",
+    )).toBe(66.7);
+  });
+
+  it("usa a referência de 20 p/h quando não há sessões nem estatísticas suficientes", () => {
+    expect(speedFromTotals(null, [], "book")).toBe(20);
   });
 });

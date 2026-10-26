@@ -11,8 +11,9 @@ export function computeProjection(reading: Reading, sessions: ReadingSession[]) 
     targetPages: reading.target_pages,
     pagesRead,
     speedPph: speed,
+    isRead: reading.is_read,
   });
-  const daysRemaining = Math.max(0, daysUntil(reading.deadline));
+  const daysRemaining = reading.is_read ? 0 : Math.max(0, daysUntil(reading.deadline));
   return {
     pagesRead,
     pagesRemaining: remaining.pagesRemaining,
@@ -20,9 +21,9 @@ export function computeProjection(reading: Reading, sessions: ReadingSession[]) 
     overTarget: remaining.overTarget,
     hoursRemaining: remaining.hoursRemaining,
     daysRemaining,
-    hoursPerDay: daysRemaining > 0
+    hoursPerDay: reading.is_read ? 0 : daysRemaining > 0
       ? remaining.hoursRemaining / daysRemaining
       : remaining.hoursRemaining,
-    isOverdue: daysUntil(reading.deadline) < 0,
+    isOverdue: !reading.is_read && daysUntil(reading.deadline) < 0,
   };
 }

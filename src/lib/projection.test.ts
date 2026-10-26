@@ -98,6 +98,32 @@ describe("computeProjection", () => {
     expect(projection.daysRemaining).toBe(0);
   });
 
+  it("zera prazos e carga quando a leitura está concluída mesmo com progresso parcial", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-30T15:00:00Z"));
+
+    expect(computeProjection(makeReading({ deadline: "2026-10-29", is_read: true }), [makeSession(67, 12_060)])).toEqual({
+      pagesRead: 67,
+      pagesRemaining: 0,
+      progressPercent: 100,
+      overTarget: 0,
+      hoursRemaining: 0,
+      daysRemaining: 0,
+      hoursPerDay: 0,
+      isOverdue: false,
+    });
+  });
+
+  it("mantém a projeção das sessões para uma leitura pendente", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
+
+    const projection = computeProjection(makeReading({ is_read: false }), [makeSession(20, 3_600)]);
+    expect(projection.pagesRemaining).toBe(80);
+    expect(projection.progressPercent).toBe(20);
+    expect(projection.hoursRemaining).toBe(4);
+  });
+
   it("usa todo o tempo restante como horas por dia quando o prazo é hoje", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));

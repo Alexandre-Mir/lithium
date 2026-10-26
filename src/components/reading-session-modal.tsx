@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { createReadingSession } from "@/app/actions";
+import { createReadingSession, updateReadingSession } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { elapsedSeconds, type TimerState } from "@/lib/reading-timer";
-import { formatDuration, pph } from "@/lib/session-time";
+import { formatDuration, pph, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
-import type { ReadingSessionSource } from "@/types/database";
+import type { ReadingSession, ReadingSessionSource } from "@/types/database";
 import { Check, Zap } from "lucide-react";
 
 export interface ReadingSessionTarget {
@@ -17,7 +17,7 @@ export interface ReadingSessionTarget {
   title: string;
 }
 
-type SessionMode = "manual" | "timer";
+type SessionMode = "manual" | "timer" | "edit";
 
 interface ReadingSessionModalProps {
   reading: ReadingSessionTarget | null;
@@ -25,6 +25,7 @@ interface ReadingSessionModalProps {
   onClose: () => void;
   onSuccess?: () => void;
   mode?: SessionMode;
+  session?: ReadingSession | null;
   timerState?: TimerState | null;
   endedAt?: string | null;
   onDiscardTimer?: () => void;
@@ -44,6 +45,7 @@ function parseTimerInput(value: string): number | null {
 function ReadingSessionModalContent({
   reading,
   mode,
+  session,
   timerState,
   endedAt,
   onClose,
@@ -52,6 +54,7 @@ function ReadingSessionModalContent({
 }: {
   reading: ReadingSessionTarget;
   mode: SessionMode;
+  session: ReadingSession | null;
   timerState: TimerState | null;
   endedAt: string | null;
   onClose: () => void;
@@ -59,9 +62,12 @@ function ReadingSessionModalContent({
   onDiscardTimer?: () => void;
 }) {
   const measuredSeconds = mode === "timer" && timerState ? elapsedSeconds(timerState) : 0;
+  const initialSeconds = mode === "edit" && session
+    ? sessionSeconds(session)
+    : measuredSeconds;
   const [durationMinutes, setDurationMinutes] = useState("25");
-  const [timerInput, setTimerInput] = useState(() => formatTimerInput(measuredSeconds));
-  const [pagesInput, setPagesInput] = useState("10");
+  const [timerInput, setTimerInput] = useState(() => formatTimerInput(initialSeconds));
+  const [pagesInput, setPagesInput] = useState(String(session?.pages_read ?? 10));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,7 +80,9 @@ function ReadingSessionModalContent({
     : null;
   const source: ReadingSessionSource = mode === "manual"
     ? "manual"
-    : Math.abs(durationSeconds - measuredSeconds) > 5
+    : mode === "edit" && session
+      ? session.source
+      : Math.abs(durationSeconds - measuredSeconds) > 5
       ? "timer_adjusted"
       : "timer";
   const durationWarning = mode === "timer" && measuredSeconds > 10_800;
@@ -84,8 +92,8 @@ function ReadingSessionModalContent({
     pages_read: pagesRead,
     duration_seconds: durationSeconds,
     source,
-    started_at: mode === "timer" ? timerState?.startedAt ?? null : null,
-    ended_at: mode === "timer" ? endedAt : null,
+    started_at: mode === "timer" ? timerState?.startedAt ?? null : mode === "edit" ? session?.started_at : null,
+    ended_at: mode === "timer" ? endedAt : mode === "edit" ? session?.ended_at : null,
   };
   const validationMessage = validateSessionInput(validationInput);
 
@@ -100,17 +108,28 @@ function ReadingSessionModalContent({
       setError("Não foi possível recuperar o cronômetro desta sessão.");
       return;
     }
+    if (mode === "edit" && !session) {
+      setError("Não foi possível recuperar a sessão para edição.");
+      return;
+    }
 
     try {
       setLoading(true);
-      await createReadingSession({
-        reading_id: reading.id,
-        pages_read: pagesRead,
-        duration_seconds: durationSeconds,
-        started_at: mode === "timer" ? timerState?.startedAt : null,
-        ended_at: mode === "timer" ? endedAt : null,
-        source,
-      });
+      if (mode === "edit" && session) {
+        await updateReadingSession(session.id, {
+          pages_read: pagesRead,
+          duration_seconds: durationSeconds,
+        });
+      } else {
+        await createReadingSession({
+          reading_id: reading.id,
+          pages_read: pagesRead,
+          duration_seconds: durationSeconds,
+          started_at: mode === "timer" ? timerState?.startedAt : null,
+          ended_at: mode === "timer" ? endedAt : null,
+          source,
+        });
+      }
       onSuccess?.();
       onClose();
     } catch (cause) {
@@ -128,7 +147,7 @@ function ReadingSessionModalContent({
           Calibração Cognitiva
         </div>
         <DialogTitle className="text-base font-bold">
-          {mode === "timer" ? "Finalizar sessão cronometrada" : "Registrar Sessão de Leitura"}
+          {mode === "timer" ? "Finalizar sessão cronometrada" : mode === "edit" ? "Editar sessão" : "Registrar Sessão de Leitura"}
         </DialogTitle>
         <DialogDescription className="line-clamp-1 text-xs">{reading.title}</DialogDescription>
       </DialogHeader>
@@ -178,7 +197,7 @@ function ReadingSessionModalContent({
                   aria-invalid={parseTimerInput(timerInput) === null}
                   className="font-mono text-xs h-8 rounded border-gray-300 dark:border-gray-700"
                 />
-                <p className="text-[10px] text-gray-500">Medido: {formatDuration(measuredSeconds)}</p>
+                {mode === "timer" && <p className="text-[10px] text-gray-500">Medido: {formatDuration(measuredSeconds)}</p>}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="timer-pages-read" className="text-xs font-semibold">Páginas lidas</Label>
@@ -226,7 +245,7 @@ function ReadingSessionModalContent({
             disabled={loading || tooShortToSave || Boolean(validationMessage) || !pagesRead}
             className="bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded shadow-none"
           >
-            {loading ? "Salvando..." : <><Check className="mr-1 h-3.5 w-3.5" /> Salvar sessão</>}
+            {loading ? "Salvando..." : <><Check className="mr-1 h-3.5 w-3.5" /> {mode === "edit" ? "Salvar alterações" : "Salvar sessão"}</>}
           </Button>
         </DialogFooter>
       </form>
@@ -240,6 +259,7 @@ export function ReadingSessionModal({
   onClose,
   onSuccess,
   mode = "manual",
+  session = null,
   timerState = null,
   endedAt = null,
   onDiscardTimer,
@@ -250,9 +270,10 @@ export function ReadingSessionModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       {isOpen && (
         <ReadingSessionModalContent
-          key={`${reading.id}:${mode}:${timerState?.startedAt ?? ""}`}
+          key={`${reading.id}:${mode}:${session?.id ?? ""}:${timerState?.startedAt ?? ""}`}
           reading={reading}
           mode={mode}
+          session={session}
           timerState={timerState}
           endedAt={endedAt}
           onClose={onClose}

@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Deliverable, Reading, ReadingSession, SpacedReview, Subject } from "@/types/database";
-import { markReadingAsRead, markReadingAsUnread, refreshReadingMetadata } from "@/app/actions";
+import { deleteReadingSession, markReadingAsRead, markReadingAsUnread, refreshReadingMetadata } from "@/app/actions";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { computeProjection } from "@/lib/projection";
 import { daysUntil, formatDateBR, formatDateTimeBR, todayISO } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
@@ -15,7 +16,8 @@ import { formatDuration, pph, sessionSeconds, sessionSourceLabel } from "@/lib/s
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { metadataAttemptsSummary } from "@/lib/metadata-labels";
-import { ArrowLeft, Calendar, Clock, Play, RefreshCw } from "lucide-react";
+import { isUnusualSession } from "@/lib/session-anomaly";
+import { ArrowLeft, Calendar, Clock, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 
 interface Props {
   reading: Reading & { subject: Subject };
@@ -39,8 +41,14 @@ export function ReadingDetailView({
   const [modalOpen, setModalOpen] = useState(false);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataResult, setMetadataResult] = useState<string | null>(null);
+  const [unmarkConfirmOpen, setUnmarkConfirmOpen] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
-  const projection = computeProjection(reading, sessions);
+  const editingSession = sessions.find((session) => session.id === editingSessionId);
+  const deletingSession = sessions.find((session) => session.id === deletingSessionId);
+
+  const projection = computeProjection({ ...reading, is_read: isRead }, sessions);
   const subject = reading.subject;
   const linked = findLinkedDeliverable(deliverables, reading.deadline);
   const days = daysUntil(reading.deadline);
@@ -50,18 +58,32 @@ export function ReadingDetailView({
   const speed = pph(totalPagesRead, totalSecondsSpent);
   const calibratedSpeed = sessions.length > 0 ? speed : reading.current_speed_pph;
 
-  const toggleRead = async () => {
-    const next = !isRead;
-    setOptimisticIsRead(next);
+  const markAsRead = async () => {
+    setOptimisticIsRead(true);
     try {
-      if (next) {
-        await markReadingAsRead(reading.id);
-      } else {
-        await markReadingAsUnread(reading.id);
-      }
+      await markReadingAsRead(reading.id);
       router.refresh();
     } catch {
       setOptimisticIsRead(null);
+    }
+  };
+
+  const toggleRead = () => {
+    if (isRead) {
+      setUnmarkConfirmOpen(true);
+      return;
+    }
+    void markAsRead();
+  };
+
+  const unmarkAsRead = async () => {
+    setOptimisticIsRead(false);
+    try {
+      await markReadingAsUnread(reading.id);
+      router.refresh();
+    } catch (error) {
+      setOptimisticIsRead(null);
+      throw error;
     }
   };
 
@@ -183,7 +205,7 @@ export function ReadingDetailView({
           ["Páginas", `${projection.pagesRead}/${reading.target_pages}p`],
           ["Tempo real acumulado", formatDuration(totalSecondsSpent)],
           ["Velocidade", `${calibratedSpeed.toFixed(1)} p/h`],
-          ["Restante estimado", `${projection.hoursRemaining.toFixed(1)}h · ${projection.hoursPerDay.toFixed(1)}h/d`],
+          ["Restante estimado", isRead ? "Concluída" : `${projection.hoursRemaining.toFixed(1)}h · ${projection.hoursPerDay.toFixed(1)}h/d`],
         ].map(([label, value]) => (
           <div
             key={label}
@@ -211,8 +233,8 @@ export function ReadingDetailView({
         <div className="flex justify-between text-xs font-mono mb-2">
           <span>Progresso</span>
           <span>
-            {projection.progressPercent}%{" "}
-            {projection.overTarget > 0 && `(+${projection.overTarget} páginas além da meta)`}
+            {isRead ? "Concluída" : <>{projection.progressPercent}%{" "}
+              {projection.overTarget > 0 && `(+${projection.overTarget} páginas além da meta)`}</>}
           </span>
         </div>
         <div className="h-2 bg-gray-100 dark:bg-gray-800">
@@ -245,24 +267,56 @@ export function ReadingDetailView({
               <th className="p-2 text-left">Tempo</th>
               <th className="p-2 text-left">Velocidade</th>
               <th className="p-2 text-left">Origem</th>
+              <th className="p-2 text-right">Ações</th>
             </tr>
           </thead>
           <tbody>
             {sessions.length ? (
-              sessions.map((session) => (
-                <tr key={session.id} className="border-t border-gray-100 dark:border-gray-800">
-                  <td className="p-2 font-mono">{formatDateTimeBR(session.started_at ?? session.created_at)}</td>
-                  <td className="p-2">{session.pages_read}</td>
-                  <td className="p-2">{formatDuration(sessionSeconds(session))}</td>
-                  <td className="p-2 font-mono">
-                    {pph(session.pages_read, sessionSeconds(session)).toFixed(1)} p/h
-                  </td>
-                  <td className="p-2"><Badge variant="outline">{sessionSourceLabel(session.source)}</Badge></td>
-                </tr>
-              ))
+              sessions.map((session) => {
+                const sessionSpeed = pph(session.pages_read, sessionSeconds(session));
+                return (
+                  <tr key={session.id} className="border-t border-gray-100 dark:border-gray-800">
+                    <td className="p-2 font-mono">{formatDateTimeBR(session.started_at ?? session.created_at)}</td>
+                    <td className="p-2">{session.pages_read}</td>
+                    <td className="p-2">{formatDuration(sessionSeconds(session))}</td>
+                    <td className="p-2 font-mono">
+                      {sessionSpeed.toFixed(1)} p/h
+                      {isUnusualSession(session, sessions) && (
+                        <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">incomum</Badge>
+                      )}
+                    </td>
+                    <td className="p-2"><Badge variant="outline">{sessionSourceLabel(session.source)}</Badge></td>
+                    <td className="p-2 text-right">
+                      <div className="inline-flex items-center">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Editar sessão"
+                          title="Editar sessão"
+                          onClick={() => setEditingSessionId(session.id)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Excluir sessão"
+                          title="Excluir sessão"
+                          onClick={() => setDeletingSessionId(session.id)}
+                          className="text-gray-500 hover:text-red-600"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
-                <td colSpan={5} className="p-6 text-center text-gray-500">
+                <td colSpan={6} className="p-6 text-center text-gray-500">
                   Nenhuma sessão registrada.
                 </td>
               </tr>
@@ -351,6 +405,41 @@ export function ReadingDetailView({
           setModalOpen(false);
           router.refresh();
         }}
+      />
+      <ReadingSessionModal
+        reading={editingSession ? { id: reading.id, title: reading.title } : null}
+        session={editingSession ?? null}
+        isOpen={Boolean(editingSession)}
+        mode="edit"
+        onClose={() => setEditingSessionId(null)}
+        onSuccess={() => {
+          setEditingSessionId(null);
+          router.refresh();
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(deletingSession)}
+        onOpenChange={(open) => { if (!open) setDeletingSessionId(null); }}
+        title="Excluir sessão?"
+        description={deletingSession
+          ? `Excluir a sessão de ${deletingSession.pages_read} páginas em ${formatDuration(sessionSeconds(deletingSession))}, de ${formatDateTimeBR(deletingSession.started_at ?? deletingSession.created_at)}? A velocidade da leitura será recalculada.`
+          : ""}
+        confirmLabel="Excluir sessão"
+        destructive
+        onConfirm={async () => {
+          if (!deletingSession) return;
+          await deleteReadingSession(deletingSession.id);
+          setDeletingSessionId(null);
+          router.refresh();
+        }}
+      />
+      <ConfirmDialog
+        open={unmarkConfirmOpen}
+        onOpenChange={setUnmarkConfirmOpen}
+        title="Desmarcar leitura?"
+        description={`Desmarcar «${reading.title}»? As revisões D+1, D+7 e D+21 desta leitura serão apagadas.`}
+        confirmLabel="Desmarcar"
+        onConfirm={unmarkAsRead}
       />
     </div>
   );

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -88,6 +89,8 @@ export function ReadingsTable({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Reading>>({});
   const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null);
+  const [unmarkReadingId, setUnmarkReadingId] = useState<string | null>(null);
+  const unmarkReading = readings.find((reading) => reading.id === unmarkReadingId);
 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
 
@@ -221,23 +224,30 @@ export function ReadingsTable({
   };
 
   const handleToggleRead = async (reading: Reading) => {
-    const nextStatus = !reading.is_read;
-    setReadings((prev) =>
-      prev.map((r) => (r.id === reading.id ? { ...r, is_read: nextStatus } : r))
-    );
+    if (reading.is_read) {
+      setUnmarkReadingId(reading.id);
+      return;
+    }
+    setReadings((prev) => prev.map((r) => (r.id === reading.id ? { ...r, is_read: true } : r)));
     try {
-      if (nextStatus) {
-        await markReadingAsRead(reading.id);
-      } else {
-        await markReadingAsUnread(reading.id);
-      }
+      await markReadingAsRead(reading.id);
       onRefresh?.();
     } catch (err) {
       console.error(err);
-      setReadings((prev) =>
-        prev.map((r) => (r.id === reading.id ? { ...r, is_read: reading.is_read } : r))
-      );
+      setReadings((prev) => prev.map((r) => (r.id === reading.id ? { ...r, is_read: false } : r)));
       alert("Erro ao alterar status da leitura.");
+    }
+  };
+
+  const confirmUnmarkReading = async () => {
+    if (!unmarkReading) return;
+    setReadings((prev) => prev.map((r) => (r.id === unmarkReading.id ? { ...r, is_read: false } : r)));
+    try {
+      await markReadingAsUnread(unmarkReading.id);
+      onRefresh?.();
+    } catch (error) {
+      setReadings((prev) => prev.map((r) => (r.id === unmarkReading.id ? { ...r, is_read: true } : r)));
+      throw error;
     }
   };
 
@@ -823,6 +833,16 @@ export function ReadingsTable({
           </TableBody>
         </Table>
       </div>
+      <ConfirmDialog
+        open={Boolean(unmarkReading)}
+        onOpenChange={(open) => { if (!open) setUnmarkReadingId(null); }}
+        title="Desmarcar leitura?"
+        description={unmarkReading
+          ? `Desmarcar «${unmarkReading.title}»? As revisões D+1, D+7 e D+21 desta leitura serão apagadas.`
+          : ""}
+        confirmLabel="Desmarcar"
+        onConfirm={confirmUnmarkReading}
+      />
     </div>
   );
 }

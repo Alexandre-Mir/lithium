@@ -20,6 +20,7 @@ export default async function HomePage() {
   let allDeliverables: Deliverable[] = [];
   let subjectStats: SubjectStat[] = [];
   let subjectStatsTruncated = false;
+  let lastSessionReadingId: string | null = null;
   let connectionError: string | null = null;
 
   try {
@@ -34,6 +35,7 @@ export default async function HomePage() {
     tier4 = (data.tier4 as unknown as ReadingWithSubject[]) || [];
     readingDeliverableMap = data.readingDeliverableMap || {};
     allDeliverables = data.allDeliverables || [];
+    lastSessionReadingId = data.lastSessionReadingId ?? null;
     subjectStats = statsResult.stats || [];
     subjectStatsTruncated = statsResult.truncated;
 
@@ -71,6 +73,7 @@ export default async function HomePage() {
         allDeliverables={allDeliverables}
         subjectStats={subjectStats}
         subjectStatsTruncated={subjectStatsTruncated}
+        lastSessionReadingId={lastSessionReadingId}
       />
     </div>
   );

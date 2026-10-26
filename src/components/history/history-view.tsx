@@ -1,11 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { deleteReadingSession } from "@/app/actions";
 import { ReadingSessionWithReading } from "@/types/database";
 import { formatDateTimeBR } from "@/lib/dates";
 import { formatDuration, pph, sessionSeconds, sessionSourceLabel } from "@/lib/session-time";
+import { isUnusualSession } from "@/lib/session-anomaly";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ReadingSessionModal } from "@/components/reading-session-modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -14,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, ArrowLeft } from "lucide-react";
+import { Search, ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 interface HistoryViewProps {
@@ -23,7 +29,19 @@ interface HistoryViewProps {
 }
 
 export function HistoryView({ initialSessions, truncated = false }: HistoryViewProps) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+
+  const editingSession = initialSessions.find((session) => session.id === editingSessionId);
+  const deletingSession = initialSessions.find((session) => session.id === deletingSessionId);
+  const sessionsByReading = new Map<string, ReadingSessionWithReading[]>();
+  for (const session of initialSessions) {
+    const current = sessionsByReading.get(session.reading_id) ?? [];
+    current.push(session);
+    sessionsByReading.set(session.reading_id, current);
+  }
 
   const filteredSessions = initialSessions.filter((s) => {
     const title = s.reading?.title || "";
@@ -122,12 +140,13 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
               <TableHead className="w-[100px] p-2 text-xs font-mono">Tempo Gasto</TableHead>
               <TableHead className="w-[110px] p-2 text-xs font-mono">Velocidade Calculada</TableHead>
               <TableHead className="w-[100px] p-2 text-xs">Origem</TableHead>
+              <TableHead className="w-[76px] p-2 text-xs text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredSessions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-xs text-gray-500">
+                <TableCell colSpan={8} className="text-center py-8 text-xs text-gray-500">
                   Nenhuma sessão de leitura registrada ainda. Inicie uma sessão no Dashboard ou na Biblioteca!
                 </TableCell>
               </TableRow>
@@ -135,7 +154,9 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
               filteredSessions.map((session) => {
                 const reading = session.reading;
                 const subject = reading?.subject;
-                const speed = pph(session.pages_read, sessionSeconds(session)).toFixed(1);
+                const numericSpeed = pph(session.pages_read, sessionSeconds(session));
+                const speed = numericSpeed.toFixed(1);
+                const sameReadingSessions = sessionsByReading.get(session.reading_id) ?? [];
 
                 const dateStr = formatDateTimeBR(session.started_at ?? session.created_at);
 
@@ -189,12 +210,40 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
                     </TableCell>
 
                     <TableCell className="p-2 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
-                      {speed} p/h
+                      <span>{speed} p/h</span>
+                      {isUnusualSession(session, sameReadingSessions) && (
+                        <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">incomum</Badge>
+                      )}
                     </TableCell>
                     <TableCell className="p-2 text-[11px] text-gray-600 dark:text-gray-400">
                       <Badge variant="outline" className="text-[10px]">
                         {sessionSourceLabel(session.source)}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="p-2 text-right">
+                      <div className="inline-flex items-center">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Editar sessão"
+                          title="Editar sessão"
+                          onClick={() => setEditingSessionId(session.id)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Excluir sessão"
+                          title="Excluir sessão"
+                          onClick={() => setDeletingSessionId(session.id)}
+                          className="text-gray-500 hover:text-red-600"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -203,6 +252,34 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
           </TableBody>
         </Table>
       </div>
+
+      <ReadingSessionModal
+        reading={editingSession ? { id: editingSession.reading_id, title: editingSession.reading?.title || "Leitura" } : null}
+        session={editingSession ?? null}
+        isOpen={Boolean(editingSession)}
+        mode="edit"
+        onClose={() => setEditingSessionId(null)}
+        onSuccess={() => {
+          setEditingSessionId(null);
+          router.refresh();
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(deletingSession)}
+        onOpenChange={(open) => { if (!open) setDeletingSessionId(null); }}
+        title="Excluir sessão?"
+        description={deletingSession
+          ? `Excluir a sessão de ${deletingSession.pages_read} páginas em ${formatDuration(sessionSeconds(deletingSession))}, de ${formatDateTimeBR(deletingSession.started_at ?? deletingSession.created_at)}? A velocidade da leitura será recalculada.`
+          : ""}
+        confirmLabel="Excluir sessão"
+        destructive
+        onConfirm={async () => {
+          if (!deletingSession) return;
+          await deleteReadingSession(deletingSession.id);
+          setDeletingSessionId(null);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

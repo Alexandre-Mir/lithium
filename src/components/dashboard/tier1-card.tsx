@@ -3,11 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { SpacedReviewWithReading } from "@/types/database";
-import { markReviewAsDone } from "@/app/actions";
+import { markReviewAsDone, updateSpacedReview } from "@/app/actions";
 import { todayISO, formatDateBR } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2 } from "lucide-react";
+import { addToast } from "@/lib/toast-store";
 
 interface Tier1CardProps {
   review: SpacedReviewWithReading;
@@ -28,6 +29,15 @@ export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
       setOptimisticCompleted(true);
       await markReviewAsDone(review.id);
       onRefresh?.();
+      addToast({
+        message: `«${reading?.title || "Leitura"}» concluída`,
+        actionLabel: "Desfazer",
+        onAction: async () => {
+          await updateSpacedReview(review.id, { status: "pending" });
+          setOptimisticCompleted(null);
+          onRefresh?.();
+        },
+      });
     } catch (err) {
       console.error(err);
       setOptimisticCompleted(null);

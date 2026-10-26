@@ -12,8 +12,9 @@ import { ReadingTierCard } from "./reading-tier-card";
 import { SubjectStats } from "./subject-stats";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
 import type { ReadingSessionTarget } from "@/components/reading-session-modal";
+import { QuickSessionDialog } from "@/components/dashboard/quick-session-dialog";
 import { formatTodayLongBR } from "@/lib/dates";
-import { computeRemaining } from "@/lib/progress";
+import { sumPendingLoad } from "@/lib/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +22,6 @@ import {
   Sparkles,
   Flame,
   CheckCircle2,
-  Clock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -35,6 +35,7 @@ interface DashboardViewProps {
   allDeliverables: Deliverable[];
   subjectStats?: SubjectStat[];
   subjectStatsTruncated?: boolean;
+  lastSessionReadingId?: string | null;
 }
 
 export function DashboardView({
@@ -46,9 +47,11 @@ export function DashboardView({
   allDeliverables,
   subjectStats = [],
   subjectStatsTruncated = false,
+  lastSessionReadingId = null,
 }: DashboardViewProps) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
+  const [quickSessionOpen, setQuickSessionOpen] = useState(false);
   const [activeReading, setActiveReading] = useState<ReadingSessionTarget | null>(null);
 
   const deliverableMap = new Map(allDeliverables.map((d) => [d.id, d]));
@@ -58,34 +61,13 @@ export function DashboardView({
     setModalOpen(true);
   };
 
-  const handleQuickSessionAny = () => {
-    const topReading = tier2[0] || tier3[0] || tier4[0];
-    if (topReading) {
-      setActiveReading({ id: topReading.id, title: topReading.title });
-      setModalOpen(true);
-    } else {
-      alert("Nenhuma leitura pendente para iniciar sessão. Cadastre leituras no Setup!");
-    }
-  };
-
   const handleRefresh = () => {
     router.refresh();
   };
 
   const totalTasks = tier1.length + tier2.length + tier3.length + tier4.length;
-  const totalUrgentPages = tier2.reduce((acc, r) => acc + computeRemaining({
-    targetPages: r.target_pages,
-    pagesRead: r.pages_read,
-    speedPph: Number(r.current_speed_pph),
-  }).pagesRemaining, 0);
-
-  const totalReadingHours = [...tier2, ...tier3, ...tier4].reduce((acc, r) => {
-    return acc + computeRemaining({
-      targetPages: r.target_pages,
-      pagesRead: r.pages_read,
-      speedPph: Number(r.current_speed_pph),
-    }).hoursRemaining;
-  }, 0);
+  const totalUrgentPages = sumPendingLoad(tier2).pagesRemaining;
+  const totalReadingHours = sumPendingLoad([...tier2, ...tier3, ...tier4]).hoursRemaining;
 
   const todayFormatted = formatTodayLongBR();
   const formattedRemainingHours = totalReadingHours.toFixed(1).replace(".", ",");
@@ -117,32 +99,13 @@ export function DashboardView({
 
           <div className="flex flex-wrap sm:flex-nowrap gap-2.5 shrink-0">
             <Button
-              onClick={handleQuickSessionAny}
+              onClick={() => setQuickSessionOpen(true)}
               size="sm"
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 px-4 rounded shadow-none"
             >
               <Sparkles className="w-3.5 h-3.5 mr-1.5" />
               Sessão Rápida
             </Button>
-            <Link href="/history">
-              <Button
-                variant="outline"
-                size="sm"
-                className="bg-gray-800 hover:bg-gray-700 text-gray-200 border-gray-700 font-medium text-xs h-9 rounded"
-              >
-                <Clock className="w-3.5 h-3.5 mr-1.5 text-gray-400" />
-                Histórico
-              </Button>
-            </Link>
-            <Link href="/setup">
-              <Button
-                variant="outline"
-                size="sm"
-                className="bg-gray-800 hover:bg-gray-700 text-gray-200 border-gray-700 font-medium text-xs h-9 rounded"
-              >
-                Planilha
-              </Button>
-            </Link>
           </div>
         </div>
 
@@ -358,6 +321,17 @@ export function DashboardView({
         onClose={() => setModalOpen(false)}
         onSuccess={handleRefresh}
       />
+      {quickSessionOpen && (
+        <QuickSessionDialog
+          open={quickSessionOpen}
+          onOpenChange={setQuickSessionOpen}
+          tier2={tier2}
+          tier3={tier3}
+          tier4={tier4}
+          lastSessionReadingId={lastSessionReadingId}
+          onRegisterSession={handleOpenSession}
+        />
+      )}
     </div>
   );
 }

@@ -5,11 +5,11 @@ import { revalidatePath } from "next/cache";
 import { todayISO, addDaysISO, daysUntil } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
-import { pickInitialSpeed } from "@/lib/speed";
+import { pickInitialSpeed, speedFromTotals } from "@/lib/speed";
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { warnIfTruncated } from "@/lib/warn-if-truncated";
 import { computeRemaining } from "@/lib/progress";
-import { pph, secondsToMinutes } from "@/lib/session-time";
+import { pph, secondsToMinutes, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
 import type {
   SubjectInsert,
@@ -403,6 +403,47 @@ export async function getReadingSessions(readingId: string) {
   return data;
 }
 
+async function recalculateReadingSpeed(readingId: string) {
+  const [readingResult, progressResult, stats] = await Promise.all([
+    supabase.from("readings").select("type").eq("id", readingId).maybeSingle(),
+    supabase
+      .from("reading_progress")
+      .select("sessions, pages_read, total_seconds")
+      .eq("reading_id", readingId)
+      .maybeSingle(),
+    getSpeedStats(),
+  ]);
+  if (readingResult.error) throw new Error(readingResult.error.message);
+  if (!readingResult.data) throw new Error("Leitura não encontrada para recalcular a velocidade.");
+  if (progressResult.error) throw new Error(progressResult.error.message);
+
+  const progress = progressResult.data;
+  const newSpeedPph = speedFromTotals(
+    progress
+      ? {
+          sessions: Number(progress.sessions) || 0,
+          pages_read: Number(progress.pages_read) || 0,
+          total_seconds: Number(progress.total_seconds) || 0,
+        }
+      : null,
+    stats,
+    readingResult.data.type,
+  );
+  const { error } = await supabase
+    .from("readings")
+    .update({ current_speed_pph: newSpeedPph })
+    .eq("id", readingId);
+  if (error) throw new Error(error.message);
+  return newSpeedPph;
+}
+
+function revalidateReadingSessionPaths(readingId: string) {
+  revalidatePath("/");
+  revalidatePath("/library", "layout");
+  revalidatePath("/history");
+  revalidatePath(`/library/${readingId}`);
+}
+
 export async function getAllReadingSessions() {
   const { data, error } = await supabase
     .from("reading_sessions")
@@ -435,29 +476,68 @@ export async function createReadingSession(input: ReadingSessionInsert) {
     .select()
     .single();
   if (sessionError) throw new Error(sessionError.message);
-
-  const { data: progress, error: progressError } = await supabase
-    .from("reading_progress")
-    .select("pages_read, total_seconds")
-    .eq("reading_id", input.reading_id)
-    .maybeSingle();
-  if (progressError) throw new Error(progressError.message);
-
-  const newSpeedPph = progress
-    ? Math.round(pph(Number(progress.pages_read) || 0, Number(progress.total_seconds) || 0) * 100) / 100
-    : 20;
-
-  const { error: updateError } = await supabase
-    .from("readings")
-    .update({ current_speed_pph: newSpeedPph })
-    .eq("id", input.reading_id);
-  if (updateError) throw new Error(updateError.message);
-
-  revalidatePath("/");
-  revalidatePath("/library");
-  revalidatePath(`/library/${input.reading_id}`);
-  revalidatePath("/history");
+  const newSpeedPph = await recalculateReadingSpeed(input.reading_id);
+  revalidateReadingSessionPaths(input.reading_id);
   return { session, newSpeedPph };
+}
+
+export async function updateReadingSession(
+  id: string,
+  input: { pages_read: number; duration_seconds: number },
+) {
+  const { data: original, error: findError } = await supabase
+    .from("reading_sessions")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (findError) throw new Error(findError.message);
+  if (!original) throw new Error("Sessão não encontrada.");
+
+  const validationError = validateSessionInput({
+    ...input,
+    source: original.source,
+    started_at: original.started_at,
+    ended_at: original.ended_at,
+  });
+  if (validationError) throw new Error(validationError);
+
+  const adjustedSource = original.source !== "manual" &&
+    Math.abs(input.duration_seconds - sessionSeconds(original)) > 5
+    ? "timer_adjusted"
+    : original.source;
+  const { data: session, error } = await supabase
+    .from("reading_sessions")
+    .update({
+      pages_read: input.pages_read,
+      duration_seconds: input.duration_seconds,
+      duration_minutes: secondsToMinutes(input.duration_seconds),
+      source: adjustedSource,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  const newSpeedPph = await recalculateReadingSpeed(original.reading_id);
+  revalidateReadingSessionPaths(original.reading_id);
+  return { session, newSpeedPph };
+}
+
+export async function deleteReadingSession(id: string) {
+  const { data: original, error: findError } = await supabase
+    .from("reading_sessions")
+    .select("reading_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (findError) throw new Error(findError.message);
+  if (!original) throw new Error("Sessão não encontrada.");
+
+  const { error } = await supabase.from("reading_sessions").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+
+  const newSpeedPph = await recalculateReadingSpeed(original.reading_id);
+  revalidateReadingSessionPaths(original.reading_id);
+  return { success: true, newSpeedPph };
 }
 
 // ============================================================
@@ -628,7 +708,19 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
 export async function getDashboardData() {
   const today = todayISO();
   const sevenDaysStr = addDaysISO(today, 7);
-  const progressByReading = await getReadingProgressMap();
+  const [progressByReading, lastSessionResult] = await Promise.all([
+    getReadingProgressMap(),
+    supabase
+      .from("reading_sessions")
+      .select("reading_id")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (lastSessionResult.error) {
+    console.warn("Aviso ao buscar a leitura da sessão mais recente:", lastSessionResult.error.message);
+  }
+  const lastSessionReadingId = lastSessionResult.data?.reading_id ?? null;
 
   let tier1: SpacedReviewWithReading[] = [];
   let schemaError: string | null = null;
@@ -777,6 +869,7 @@ export async function getDashboardData() {
     urgentDeliverables: urgentDeliverables ?? [],
     allDeliverables: allDeliverables ?? [],
     schemaError,
+    lastSessionReadingId,
   };
 }
 

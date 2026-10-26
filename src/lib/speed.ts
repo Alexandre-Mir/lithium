@@ -1,11 +1,12 @@
 import type { ReadingSpeedStat, ReadingType } from "@/types/database";
+import { pph } from "@/lib/session-time";
 
 export const MIN_SESSIONS = 3;
 export const MIN_SECONDS = 2_700;
 export const DEFAULT_SPEED_PPH = 20;
 
 function roundSpeed(pages: number, seconds: number): number {
-  return Math.round((pages / seconds) * 3_600 * 10) / 10;
+  return Math.round(pph(pages, seconds) * 10) / 10;
 }
 
 function meetsMinimum(stats: Pick<ReadingSpeedStat, "sessions" | "total_seconds">): boolean {
@@ -34,4 +35,19 @@ export function pickInitialSpeed(stats: readonly ReadingSpeedStat[], type: Readi
   if (meetsMinimum(globalStats)) return roundSpeed(globalStats.total_pages, globalStats.total_seconds);
 
   return DEFAULT_SPEED_PPH;
+}
+
+export interface ReadingProgressTotals {
+  sessions: number;
+  pages_read: number;
+  total_seconds: number;
+}
+
+export function speedFromTotals(
+  totals: ReadingProgressTotals | null,
+  stats: readonly ReadingSpeedStat[],
+  type: ReadingType,
+): number {
+  if (!totals || totals.sessions < 1) return pickInitialSpeed(stats, type);
+  return Math.round(pph(totals.pages_read, totals.total_seconds) * 100) / 100;
 }

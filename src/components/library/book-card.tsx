@@ -9,6 +9,7 @@ import { markReadingAsRead, markReadingAsUnread } from "@/app/actions";
 import { formatDateBR } from "@/lib/dates";
 import { computeRemaining } from "@/lib/progress";
 import { ReadingCover } from "@/components/library/reading-cover";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Clock,
   Zap,
@@ -34,21 +35,28 @@ export function BookCard({
   onRefresh,
 }: BookCardProps) {
   const [isReadOverride, setIsReadOverride] = useState<boolean | null>(null);
+  const [unmarkConfirmOpen, setUnmarkConfirmOpen] = useState(false);
   const isRead = isReadOverride ?? reading.is_read;
 
-  const handleToggleRead = async () => {
-    const nextVal = !isRead;
-    setIsReadOverride(nextVal);
+  const handleMarkAsRead = async () => {
+    setIsReadOverride(true);
     try {
-      if (nextVal) {
-        await markReadingAsRead(reading.id);
-      } else {
-        await markReadingAsUnread(reading.id);
-      }
+      await markReadingAsRead(reading.id);
       onRefresh?.();
     } catch (err) {
       console.error(err);
       setIsReadOverride(null);
+    }
+  };
+
+  const handleUnmarkAsRead = async () => {
+    setIsReadOverride(false);
+    try {
+      await markReadingAsUnread(reading.id);
+      onRefresh?.();
+    } catch (error) {
+      setIsReadOverride(null);
+      throw error;
     }
   };
 
@@ -57,6 +65,7 @@ export function BookCard({
     targetPages: reading.target_pages,
     pagesRead: reading.pages_read,
     speedPph: speed,
+    isRead,
   });
   const estimatedHours = remaining.hoursRemaining.toFixed(1).replace(".", ",");
 
@@ -70,28 +79,11 @@ export function BookCard({
           <ReadingCover reading={reading} themeColor={themeColor} size="card" />
         </Link>
 
-        {/* Badges superiores flutuantes */}
-        <div className="absolute top-2 left-2 z-10 flex gap-1">
-          <Badge
-            variant="outline"
-            className="text-[10px] uppercase font-bold bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 py-0"
-          >
-            {reading.type === "book" ? "Livro" : "Artigo"}
-          </Badge>
-          {subject && (
-            <span
-              className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800"
-              style={{ color: themeColor }}
-            >
-              {subject.name}
-            </span>
-          )}
-        </div>
-
         <div className="absolute top-2 right-2 z-10">
           <button
             type="button"
-            onClick={handleToggleRead}
+            onClick={() => (isRead ? setUnmarkConfirmOpen(true) : void handleMarkAsRead())}
+            aria-label={isRead ? `Desmarcar ${reading.title} como lida` : `Marcar ${reading.title} como lida`}
             className={`p-1 rounded border transition-colors ${
               isRead
                 ? "bg-emerald-600 text-white border-emerald-600"
@@ -106,6 +98,23 @@ export function BookCard({
 
       {/* Conteúdo */}
       <div className="flex-1 p-3.5 space-y-2.5">
+        <div className="flex flex-wrap gap-1">
+          <Badge
+            variant="outline"
+            className="text-[10px] uppercase font-bold border-gray-200 py-0 dark:border-gray-800"
+          >
+            {reading.type === "book" ? "Livro" : "Artigo"}
+          </Badge>
+          {subject && (
+            <span
+              className="max-w-full truncate rounded border border-gray-200 px-1.5 py-0.5 text-[10px] font-semibold dark:border-gray-800"
+              style={{ color: themeColor }}
+              title={subject.name}
+            >
+              {subject.name}
+            </span>
+          )}
+        </div>
         <div>
             <Link href={`/library/${reading.id}`} className="relative z-10 block">
             <h3
@@ -142,7 +151,7 @@ export function BookCard({
 
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3 text-gray-400" />
-            <span>~{estimatedHours}h restantes</span>
+            <span>{isRead ? "Concluída" : `~${estimatedHours}h restantes`}</span>
           </div>
 
           <div className="flex items-center gap-1">
@@ -190,6 +199,14 @@ export function BookCard({
           <Play className="h-3 w-3" /> Iniciar
         </Button>
       </div>
+      <ConfirmDialog
+        open={unmarkConfirmOpen}
+        onOpenChange={setUnmarkConfirmOpen}
+        title="Desmarcar leitura?"
+        description={`Desmarcar «${reading.title}»? As revisões D+1, D+7 e D+21 desta leitura serão apagadas.`}
+        confirmLabel="Desmarcar"
+        onConfirm={handleUnmarkAsRead}
+      />
     </div>
   );
 }
