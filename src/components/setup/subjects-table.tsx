@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Subject } from "@/types/database";
+import { generateUniquePastelColor } from "@/lib/colors";
 import { createSubject, updateSubject, deleteSubject, validateClassDays } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,7 +63,6 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
   const [newProfessor, setNewProfessor] = useState("");
   const [newIsAutonomous, setNewIsAutonomous] = useState(false);
   const [newClassDays, setNewClassDays] = useState<string[]>([]);
-  const [newThemeColor, setNewThemeColor] = useState("#4f46e5");
 
   // Campos pedagógicos opcionais (Ementa, Objetivos, etc.)
   const [newPedagogicalValues, setNewPedagogicalValues] = useState(EMPTY_PEDAGOGICAL_VALUES);
@@ -115,6 +115,7 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
         return;
       }
 
+      const themeColor = generateUniquePastelColor(subjects.map((subject) => subject.theme_color));
       const newSub = await createSubject({
         name: newName.trim(),
         professor: newProfessor.trim(),
@@ -124,7 +125,7 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
         assessment: newPedagogicalValues.assessment.trim() || null,
         is_autonomous: newIsAutonomous,
         class_days: newClassDays,
-        theme_color: newThemeColor,
+        theme_color: themeColor,
       });
 
       if (newSub) {
@@ -276,7 +277,7 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
             </label>
           </div>
 
-          <div className="md:col-span-2 flex flex-wrap gap-1 items-center">
+          <div className="md:col-span-3 flex flex-wrap gap-1 items-center">
             {WEEK_DAYS.map((day) => {
               const active = newClassDays.includes(day);
               return (
@@ -294,16 +295,6 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
                 </button>
               );
             })}
-          </div>
-
-          <div className="md:col-span-1 flex items-center justify-center">
-            <input
-              type="color"
-              value={newThemeColor}
-              onChange={(e) => setNewThemeColor(e.target.value)}
-              className="w-7 h-7 rounded cursor-pointer border border-gray-300 dark:border-gray-700 p-0 bg-transparent"
-              title="Cor"
-            />
           </div>
 
           <div className="md:col-span-1">
@@ -349,21 +340,11 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
                     className="border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                   >
                     <TableCell className="p-2 text-center">
-                      {isEditing ? (
-                        <input
-                          type="color"
-                          value={editValues.theme_color ?? sub.theme_color}
-                          onChange={(e) =>
-                            setEditValues((prev) => ({ ...prev, theme_color: e.target.value }))
-                          }
-                          className="w-5 h-5 rounded cursor-pointer border-0 p-0"
-                        />
-                      ) : (
-                        <div
-                          className="w-3.5 h-3.5 rounded-full mx-auto"
-                          style={{ backgroundColor: sub.theme_color }}
-                        />
-                      )}
+                      <div
+                        className="w-3.5 h-3.5 rounded-full mx-auto"
+                        style={{ backgroundColor: sub.theme_color }}
+                        aria-label={`Cor de ${sub.name}`}
+                      />
                     </TableCell>
 
                     <TableCell className="p-2">
@@ -526,7 +507,6 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
                                 professor: sub.professor,
                                 is_autonomous: sub.is_autonomous,
                                 class_days: sub.class_days,
-                                theme_color: sub.theme_color,
                               });
                             }}
                             className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 h-6 px-1.5"
