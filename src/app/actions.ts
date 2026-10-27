@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { todayISO, addDaysISO, daysUntil } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
-import { pickInitialSpeed, speedFromTotals } from "@/lib/speed";
+import { pickInitialSpeed, pickUserPacePagesPerDay, speedFromTotals } from "@/lib/speed";
+import { projectReadingQueue } from "@/lib/projection";
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { warnIfTruncated } from "@/lib/warn-if-truncated";
 import { computeRemaining } from "@/lib/progress";
@@ -191,6 +192,35 @@ interface ReadingProgressViewRow extends ReadingProgressSummary {
   reading_id: string;
 }
 
+type ReadingQueueSource = Pick<Reading, "id" | "target_pages" | "created_at" | "deadline" | "is_read"> & {
+  pages_read: number;
+};
+
+function attachSuggestedDeadlines<T extends ReadingQueueSource>(
+  readings: readonly T[],
+  stats: readonly ReadingSpeedStat[],
+): Array<T & { suggested_deadline: string | null }> {
+  const queue = projectReadingQueue(readings, pickUserPacePagesPerDay(stats));
+  const suggestions = new Map(queue.map((reading) => [reading.id, reading.suggestedDeadline]));
+  return readings.map((reading) => ({
+    ...reading,
+    suggested_deadline: suggestions.get(reading.id) ?? null,
+  }));
+}
+
+async function getUndatedActiveReadings() {
+  const { data, error } = await supabase
+    .from("readings")
+    .select("id, target_pages, created_at, deadline, is_read")
+    .eq("is_read", false)
+    .is("deadline", null)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  const rows = data ?? [];
+  warnIfTruncated(rows, "getUndatedActiveReadings");
+  return rows as Pick<Reading, "id" | "target_pages" | "created_at" | "deadline" | "is_read">[];
+}
+
 async function getReadingProgressMap(): Promise<Map<string, ReadingProgressSummary>> {
   try {
     const { data, error } = await supabase
@@ -231,11 +261,12 @@ export async function getReadings(subjectId?: string) {
   if (error) throw new Error(error.message);
   const rows = data ?? [];
   warnIfTruncated(rows, "getReadings");
-  const progressByReading = await getReadingProgressMap();
-  return (rows as unknown as Reading[]).map((reading) => ({
+  const [progressByReading, speedStats] = await Promise.all([getReadingProgressMap(), getSpeedStats()]);
+  const readingsWithProgress = (rows as unknown as Reading[]).map((reading) => ({
     ...reading,
     pages_read: progressByReading.get(reading.id)?.pages_read ?? 0,
-  })) as ReadingWithProgress[];
+  }));
+  return attachSuggestedDeadlines(readingsWithProgress, speedStats) as ReadingWithProgress[];
 }
 
 export async function getReadingById(id: string) {
@@ -275,12 +306,22 @@ export async function getReadingDetail(id: string) {
   const reading = await getReadingById(id);
   if (!reading) return null;
 
-  const [sessions, reviews, deliverables, speedStats] = await Promise.all([
+  const needsSuggestedDeadline = !reading.is_read && reading.deadline === null;
+  const [sessions, reviews, deliverables, speedStats, progressByReading, undatedReadings] = await Promise.all([
     getReadingSessions(id),
     getSpacedReviewsByReading(id),
     getDeliverables(reading.subject_id),
     getSpeedStats(),
+    getReadingProgressMap(),
+    needsSuggestedDeadline ? getUndatedActiveReadings() : Promise.resolve([]),
   ]);
+  const queueWithProgress = undatedReadings.map((queueReading) => ({
+    ...queueReading,
+    pages_read: progressByReading.get(queueReading.id)?.pages_read ?? 0,
+  }));
+  const suggestedDeadline = needsSuggestedDeadline
+    ? attachSuggestedDeadlines(queueWithProgress, speedStats).find((item) => item.id === id)?.suggested_deadline ?? null
+    : null;
   const totalPages = speedStats.reduce((sum, stat) => sum + stat.total_pages, 0);
   const totalSeconds = speedStats.reduce((sum, stat) => sum + stat.total_seconds, 0);
   return {
@@ -288,11 +329,15 @@ export async function getReadingDetail(id: string) {
     sessions,
     reviews,
     deliverables,
+    suggestedDeadline,
     globalAverageSpeed: pph(totalPages, totalSeconds),
   };
 }
 
 export async function createReading(input: ReadingInsert) {
+  const validationError = validateReadingUpdate({ deadline: input.deadline });
+  if (validationError) throw new Error(validationError);
+
   const currentSpeed = input.current_speed_pph ?? pickInitialSpeed(await getSpeedStats(), input.type);
   const insert = {
     ...input,
@@ -708,7 +753,7 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
 export async function getDashboardData() {
   const today = todayISO();
   const sevenDaysStr = addDaysISO(today, 7);
-  const [progressByReading, lastSessionResult] = await Promise.all([
+  const [progressByReading, lastSessionResult, speedStats] = await Promise.all([
     getReadingProgressMap(),
     supabase
       .from("reading_sessions")
@@ -716,6 +761,7 @@ export async function getDashboardData() {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    getSpeedStats(),
   ]);
   if (lastSessionResult.error) {
     console.warn("Aviso ao buscar a leitura da sessão mais recente:", lastSessionResult.error.message);
@@ -750,7 +796,7 @@ export async function getDashboardData() {
     schemaError = message ?? null;
   }
 
-  let allPendingReadings: ReadingWithSubject[] = [];
+  let allPendingReadings: Array<ReadingWithSubject & { suggested_deadline: string | null }> = [];
   try {
     const { data, error: e2 } = await supabase
       .from("readings")
@@ -763,10 +809,11 @@ export async function getDashboardData() {
     } else {
       const rows = data ?? [];
       warnIfTruncated(rows, "getDashboardData.readings");
-      allPendingReadings = (rows as unknown as ReadingWithSubject[]).map((reading) => ({
+      const readingsWithProgress = (rows as unknown as ReadingWithSubject[]).map((reading) => ({
         ...reading,
         pages_read: progressByReading.get(reading.id)?.pages_read ?? 0,
       }));
+      allPendingReadings = attachSuggestedDeadlines(readingsWithProgress, speedStats);
     }
   } catch (err: unknown) {
     console.warn(
@@ -829,7 +876,9 @@ export async function getDashboardData() {
     const subjectDeliverables = deliverablesBySubject.get(reading.subject_id);
     if (!subjectDeliverables) continue;
 
-    const linked = findLinkedDeliverable(subjectDeliverables, reading.deadline);
+    const linked = reading.deadline
+      ? findLinkedDeliverable(subjectDeliverables, reading.deadline)
+      : null;
     if (linked) {
       readingDeliverableMap.set(reading.id, linked.id);
     }
@@ -898,10 +947,26 @@ export async function getReadingProjection(readingId: string) {
     speedPph: reading.current_speed_pph,
   });
 
-  const daysRemaining = Math.max(0, daysUntil(reading.deadline));
+  const [speedStats, progressByReading, undatedReadings] = await Promise.all([
+    getSpeedStats(),
+    getReadingProgressMap(),
+    !reading.is_read && reading.deadline === null ? getUndatedActiveReadings() : Promise.resolve([]),
+  ]);
+  const queueWithProgress = undatedReadings.map((queueReading) => ({
+    ...queueReading,
+    pages_read: progressByReading.get(queueReading.id)?.pages_read ?? 0,
+  }));
+  const suggestedDeadline = !reading.is_read && reading.deadline === null
+    ? attachSuggestedDeadlines(queueWithProgress, speedStats).find((item) => item.id === readingId)?.suggested_deadline ?? null
+    : null;
+  const effectiveDeadline = reading.deadline ?? suggestedDeadline;
+  const daysRemaining = reading.is_read || !effectiveDeadline
+    ? 0
+    : Math.max(0, daysUntil(effectiveDeadline));
 
-  const hoursPerDay =
-    daysRemaining > 0
+  const hoursPerDay = reading.is_read
+    ? 0
+    : daysRemaining > 0
       ? Math.round((remaining.hoursRemaining / daysRemaining) * 100) / 100
       : Math.round(remaining.hoursRemaining * 100) / 100;
 
@@ -909,10 +974,16 @@ export async function getReadingProjection(readingId: string) {
     totalPages: reading.target_pages,
     pagesRead,
     pagesRemaining: remaining.pagesRemaining,
+    pagesPerDay: reading.is_read
+      ? 0
+      : daysRemaining > 0
+        ? Math.ceil(remaining.pagesRemaining / daysRemaining)
+      : remaining.pagesRemaining,
     speedPph: reading.current_speed_pph,
     hoursRemaining: Math.round(remaining.hoursRemaining * 100) / 100,
     daysRemaining,
     hoursPerDay,
-    isOverdue: daysRemaining === 0 && remaining.pagesRemaining > 0,
+    isOverdue: !reading.is_read && reading.deadline !== null && daysUntil(reading.deadline) < 0,
+    suggestedDeadline,
   };
 }

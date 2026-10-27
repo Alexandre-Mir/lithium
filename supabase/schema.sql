@@ -1,6 +1,6 @@
 -- ============================================================
 -- LITHIUM — Motor Cognitivo de Estudos
--- Schema v1.5 (Totalmente idempotente e seguro contra reexecuções)
+-- Schema v1.6 (Totalmente idempotente e seguro contra reexecuções)
 -- ============================================================
 
 -- 0. Extensions
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS readings (
   full_book_pages     INTEGER,
   target_pages        INTEGER NOT NULL DEFAULT 0,
   read_full_book      BOOLEAN NOT NULL DEFAULT false,
-  deadline            DATE NOT NULL,
+  deadline            DATE,
   is_read             BOOLEAN NOT NULL DEFAULT false,
   current_speed_pph   NUMERIC(6, 2) NOT NULL DEFAULT 20.00,
   cover_url           TEXT,
@@ -116,6 +116,7 @@ ALTER TABLE readings ADD COLUMN IF NOT EXISTS publisher TEXT;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS published_year INTEGER;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS metadata_source TEXT;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS metadata_fetched_at TIMESTAMPTZ;
+ALTER TABLE readings ALTER COLUMN deadline DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_readings_subject  ON readings(subject_id);
 CREATE INDEX IF NOT EXISTS idx_readings_deadline ON readings(deadline);

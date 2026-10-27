@@ -8,6 +8,10 @@ describe("validateReadingUpdate", () => {
     ).toBeNull();
   });
 
+  it("aceita null como ausência de prazo fixo", () => {
+    expect(validateReadingUpdate({ deadline: null })).toBeNull();
+  });
+
   it("rejeita título vazio", () => {
     expect(validateReadingUpdate({ title: "   " })).toBe("O título da leitura é obrigatório.");
   });

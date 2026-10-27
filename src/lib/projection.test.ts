@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { computeProjection } from "@/lib/projection";
+import {
+  calculateSuggestedDeadline,
+  computeProjection,
+  projectReadingQueue,
+} from "@/lib/projection";
 import type { Reading, ReadingSession } from "@/types/database";
 
 function makeReading(overrides: Partial<Reading> = {}): Reading {
@@ -57,6 +61,7 @@ describe("computeProjection", () => {
       overTarget: 0,
       hoursRemaining: 5,
       daysRemaining: 5,
+      pagesPerDay: 20,
       hoursPerDay: 1,
       isOverdue: false,
     });
@@ -74,6 +79,7 @@ describe("computeProjection", () => {
       overTarget: 0,
       hoursRemaining: 2.5,
       daysRemaining: 5,
+      pagesPerDay: 10,
       hoursPerDay: 0.5,
       isOverdue: false,
     });
@@ -109,6 +115,7 @@ describe("computeProjection", () => {
       overTarget: 0,
       hoursRemaining: 0,
       daysRemaining: 0,
+      pagesPerDay: 0,
       hoursPerDay: 0,
       isOverdue: false,
     });
@@ -132,5 +139,70 @@ describe("computeProjection", () => {
     expect(projection.hoursRemaining).toBe(4);
     expect(projection.daysRemaining).toBe(0);
     expect(projection.hoursPerDay).toBe(4);
+  });
+
+  it("usa o prazo sugerido para o ritmo diário sem marcar atraso real", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
+
+    const projection = computeProjection(makeReading({ deadline: null }), [], "2026-10-29");
+    expect(projection.daysRemaining).toBe(5);
+    expect(projection.pagesPerDay).toBe(20);
+    expect(projection.isOverdue).toBe(false);
+  });
+
+  it("não inventa atraso quando a leitura sem prazo ainda não tem projeção", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
+
+    const projection = computeProjection(makeReading({ deadline: null }), []);
+    expect(projection.daysRemaining).toBe(0);
+    expect(projection.isOverdue).toBe(false);
+  });
+});
+
+describe("calculateSuggestedDeadline", () => {
+  it("calcula dias inteiros a partir das páginas restantes e do ritmo diário", () => {
+    expect(calculateSuggestedDeadline(
+      { target_pages: 100, pages_read: 26 },
+      15,
+      "2026-10-24",
+    )).toBe("2026-10-29");
+  });
+
+  it("usa 15 páginas por dia para ritmo inválido e não estende meta concluída", () => {
+    expect(calculateSuggestedDeadline(
+      { target_pages: 30, pages_read: 0 },
+      0,
+      "2026-10-24",
+    )).toBe("2026-10-26");
+    expect(calculateSuggestedDeadline(
+      { target_pages: 30, pages_read: 30 },
+      15,
+      "2026-10-24",
+    )).toBe("2026-10-24");
+  });
+});
+
+describe("projectReadingQueue", () => {
+  it("ordena por criação e encadeia as datas sugeridas", () => {
+    const queue = projectReadingQueue([
+      { id: "b", title: "B", target_pages: 30, pages_read: 0, created_at: "2026-10-02T00:00:00Z", deadline: null },
+      { id: "a", title: "A", target_pages: 30, pages_read: 0, created_at: "2026-10-01T00:00:00Z", deadline: null },
+    ], 10, "2026-10-24");
+
+    expect(queue.map(({ id, suggestedDeadline }) => [id, suggestedDeadline])).toEqual([
+      ["a", "2026-10-27"],
+      ["b", "2026-10-30"],
+    ]);
+  });
+
+  it("ignora leituras concluídas ou com prazo fixo", () => {
+    const queue = projectReadingQueue([
+      { id: "done", target_pages: 30, pages_read: 30, created_at: "2026-10-01", deadline: null, is_read: true },
+      { id: "fixed", target_pages: 30, pages_read: 0, created_at: "2026-10-02", deadline: "2026-11-01" },
+    ], 15, "2026-10-24");
+
+    expect(queue).toEqual([]);
   });
 });

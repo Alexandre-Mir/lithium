@@ -4,6 +4,8 @@ import { pph } from "@/lib/session-time";
 export const MIN_SESSIONS = 3;
 export const MIN_SECONDS = 2_700;
 export const DEFAULT_SPEED_PPH = 20;
+export const DEFAULT_PAGES_PER_DAY = 15;
+const PLANNED_READING_HOURS_PER_DAY = 1;
 
 function roundSpeed(pages: number, seconds: number): number {
   return Math.round(pph(pages, seconds) * 10) / 10;
@@ -35,6 +37,20 @@ export function pickInitialSpeed(stats: readonly ReadingSpeedStat[], type: Readi
   if (meetsMinimum(globalStats)) return roundSpeed(globalStats.total_pages, globalStats.total_seconds);
 
   return DEFAULT_SPEED_PPH;
+}
+
+/**
+ * Converte a média histórica p/h em um ritmo diário de planejamento.
+ * Como o app não guarda horas planejadas por dia, a estimativa considera
+ * um bloco diário de uma hora. Sem sessões válidas, usa 15 páginas/dia.
+ */
+export function pickUserPacePagesPerDay(stats: readonly ReadingSpeedStat[]): number {
+  const globalStats = aggregate(stats);
+  if (globalStats.total_pages <= 0 || globalStats.total_seconds <= 0) {
+    return DEFAULT_PAGES_PER_DAY;
+  }
+
+  return Math.max(1, Math.round(pph(globalStats.total_pages, globalStats.total_seconds) * PLANNED_READING_HOURS_PER_DAY));
 }
 
 export interface ReadingProgressTotals {

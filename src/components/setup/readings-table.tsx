@@ -12,7 +12,7 @@ import {
   lookupBookByIsbn,
   lookupArticleByDoi,
 } from "@/app/actions";
-import { formatDateBR } from "@/lib/dates";
+import { formatDateBR, todayISO } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { metadataAttemptsSummary } from "@/lib/metadata-labels";
@@ -49,6 +49,13 @@ interface ReadingsTableProps {
   onRefresh?: () => void;
 }
 
+function compareReadingDeadlines(left: Reading, right: Reading): number {
+  if (left.deadline === null && right.deadline !== null) return 1;
+  if (left.deadline !== null && right.deadline === null) return -1;
+  if (left.deadline && right.deadline) return left.deadline.localeCompare(right.deadline);
+  return left.created_at.localeCompare(right.created_at);
+}
+
 export function ReadingsTable({
   initialReadings,
   subjects,
@@ -77,6 +84,7 @@ export function ReadingsTable({
   const [newReadFull, setNewReadFull] = useState(false);
   const [newTargetPages, setNewTargetPages] = useState<number | "">(30);
   const [newDeadline, setNewDeadline] = useState("");
+  const [newHasDeadline, setNewHasDeadline] = useState(true);
   const [newCover, setNewCover] = useState<string | null>(null);
   const [newPublisher, setNewPublisher] = useState<string | null>(null);
   const [newPublishedYear, setNewPublishedYear] = useState<number | null>(null);
@@ -168,7 +176,7 @@ export function ReadingsTable({
   };
 
   const handleCreate = async () => {
-    if (!newTitle.trim() || !newSubjectId || !newDeadline) return;
+    if (!newTitle.trim() || !newSubjectId || (newHasDeadline && !newDeadline)) return;
     try {
       setLoading(true);
       const targetP = typeof newTargetPages === "number" ? newTargetPages : 0;
@@ -185,7 +193,7 @@ export function ReadingsTable({
         full_book_pages: fullP,
         target_pages: targetP,
         read_full_book: newReadFull,
-        deadline: newDeadline,
+        deadline: newHasDeadline ? newDeadline : null,
         is_read: false,
         cover_url: newCover,
         publisher: newPublisher,
@@ -196,7 +204,7 @@ export function ReadingsTable({
 
       if (created) {
         setReadings((prev) =>
-          [...prev, created].sort((a, b) => a.deadline.localeCompare(b.deadline))
+          [...prev, created].sort(compareReadingDeadlines)
         );
         setNewTitle("");
         setNewChapterTitle("");
@@ -213,6 +221,7 @@ export function ReadingsTable({
         setNewReadFull(false);
         setNewTargetPages(30);
         setNewDeadline("");
+        setNewHasDeadline(true);
         onRefresh?.();
       }
     } catch (err) {
@@ -266,7 +275,7 @@ export function ReadingsTable({
         setReadings((prev) =>
           prev
             .map((r) => (r.id === id ? { ...r, ...updated } : r))
-            .sort((a, b) => a.deadline.localeCompare(b.deadline))
+            .sort(compareReadingDeadlines)
         );
         setEditingId(null);
         setEditValues({});
@@ -522,20 +531,31 @@ export function ReadingsTable({
 
           <div className={newType === "book" ? "md:col-span-2" : "md:col-span-4"}>
             <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-              Deadline *
+              Prazo
             </label>
-            <Input
-              type="date"
-              value={newDeadline}
-              onChange={(e) => setNewDeadline(e.target.value)}
-              className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
-            />
+            <label className="mb-1 flex items-center gap-1.5 text-[10px] text-gray-600 dark:text-gray-400">
+              <input
+                type="checkbox"
+                checked={newHasDeadline}
+                onChange={(event) => setNewHasDeadline(event.target.checked)}
+                className="h-3 w-3 accent-gray-800"
+              />
+              Possui prazo fixo? (Ex: Faculdade)
+            </label>
+            {newHasDeadline && (
+              <Input
+                type="date"
+                value={newDeadline}
+                onChange={(e) => setNewDeadline(e.target.value)}
+                className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
+              />
+            )}
           </div>
 
           <div className={newType === "book" ? "md:col-span-1" : "md:col-span-2"}>
             <Button
               onClick={handleCreate}
-              disabled={loading || !newTitle.trim() || !newDeadline || !newSubjectId}
+              disabled={loading || !newTitle.trim() || (newHasDeadline && !newDeadline) || !newSubjectId}
               size="sm"
               className="w-full h-8 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold rounded shadow-none"
             >
@@ -590,14 +610,13 @@ export function ReadingsTable({
                   ? editValues.subject_id ?? reading.subject_id
                   : reading.subject_id;
                 const deadline = isEditing
-                  ? editValues.deadline ?? reading.deadline
+                  ? editValues.deadline === undefined ? reading.deadline : editValues.deadline
                   : reading.deadline;
                 const sub = subjectMap.get(subjectId);
                 const subDeliverables = deliverablesBySubject.get(subjectId) || [];
-                const linkedDeliverable = findLinkedDeliverable(
-                  subDeliverables,
-                  deadline
-                );
+                const linkedDeliverable = deadline
+                  ? findLinkedDeliverable(subDeliverables, deadline)
+                  : null;
 
                 return (
                   <TableRow
@@ -743,17 +762,39 @@ export function ReadingsTable({
 
                     <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
                       {isEditing ? (
-                        <Input
-                          type="date"
-                          value={deadline}
-                          onChange={(event) =>
-                            setEditValues((prev) => ({ ...prev, deadline: event.target.value }))
-                          }
-                          className="h-7 w-[125px] rounded px-1 text-[11px]"
-                          aria-label="Prazo da leitura"
-                        />
-                      ) : (
+                        <div className="space-y-1">
+                          <label className="flex items-center gap-1 text-[10px]">
+                            <input
+                              type="checkbox"
+                              checked={deadline !== null}
+                              onChange={(event) =>
+                                setEditValues((prev) => ({
+                                  ...prev,
+                                  deadline: event.target.checked ? deadline ?? todayISO() : null,
+                                }))
+                              }
+                              className="h-3 w-3 accent-gray-800"
+                            />
+                            Prazo fixo
+                          </label>
+                          {deadline !== null ? (
+                            <Input
+                              type="date"
+                              value={deadline}
+                              onChange={(event) =>
+                                setEditValues((prev) => ({ ...prev, deadline: event.target.value }))
+                              }
+                              className="h-7 w-[125px] rounded px-1 text-[11px]"
+                              aria-label="Prazo da leitura"
+                            />
+                          ) : (
+                            <span className="text-[10px] text-gray-400">Sem prazo fixo</span>
+                          )}
+                        </div>
+                      ) : reading.deadline ? (
                         formatDateBR(reading.deadline, { day: "2-digit", month: "2-digit" })
+                      ) : (
+                        <span className="text-[10px] text-gray-400">Sem prazo</span>
                       )}
                     </TableCell>
 

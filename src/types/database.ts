@@ -1,5 +1,5 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.5)
+// Lithium — Database Types (mirrors Supabase schema v1.6)
 // ============================================================
 
 export type ReadingType = "book" | "article";
@@ -44,7 +44,7 @@ export interface Reading {
   full_book_pages: number | null;
   target_pages: number;
   read_full_book: boolean;
-  deadline: string;
+  deadline: string | null;
   is_read: boolean;
   current_speed_pph: number;
   cover_url: string | null;
@@ -98,6 +98,7 @@ export type ReadingInsert = Omit<
   | "id"
   | "created_at"
   | "updated_at"
+  | "deadline"
   | "current_speed_pph"
   | "cover_url"
   | "publisher"
@@ -109,6 +110,7 @@ export type ReadingInsert = Omit<
     Pick<
       Reading,
       | "current_speed_pph"
+      | "deadline"
       | "cover_url"
       | "publisher"
       | "published_year"
@@ -132,11 +134,15 @@ export type SpacedReviewUpdate = Partial<Pick<SpacedReview, "status">>;
 
 // ---- Joined / view types ----
 
-export type ReadingWithProgress = Reading & { pages_read: number };
+export type ReadingWithProgress = Reading & {
+  pages_read: number;
+  suggested_deadline?: string | null;
+};
 
 export interface ReadingWithSubject extends Reading {
   subject: Subject;
   pages_read: number;
+  suggested_deadline?: string | null;
 }
 
 export interface SpacedReviewWithReading extends SpacedReview {

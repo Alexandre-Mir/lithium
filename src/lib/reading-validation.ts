@@ -31,7 +31,7 @@ export function validateReadingUpdate(input: ReadingUpdateFields): string | null
     return "A meta deve ser um número inteiro de pelo menos 1 página.";
   }
 
-  if (input.deadline !== undefined && !isValidDateISO(input.deadline)) {
+  if (input.deadline !== undefined && input.deadline !== null && !isValidDateISO(input.deadline)) {
     return "Informe um prazo válido no formato AAAA-MM-DD.";
   }
 

@@ -25,6 +25,7 @@ interface Props {
   reviews: SpacedReview[];
   deliverables: Deliverable[];
   globalAverageSpeed: number;
+  suggestedDeadline?: string | null;
 }
 
 export function ReadingDetailView({
@@ -33,6 +34,7 @@ export function ReadingDetailView({
   reviews,
   deliverables,
   globalAverageSpeed,
+  suggestedDeadline = null,
 }: Props) {
   const router = useRouter();
   const [optimisticIsRead, setOptimisticIsRead] = useState<boolean | null>(null);
@@ -48,10 +50,12 @@ export function ReadingDetailView({
   const editingSession = sessions.find((session) => session.id === editingSessionId);
   const deletingSession = sessions.find((session) => session.id === deletingSessionId);
 
-  const projection = computeProjection({ ...reading, is_read: isRead }, sessions);
+  const projection = computeProjection({ ...reading, is_read: isRead }, sessions, suggestedDeadline);
   const subject = reading.subject;
-  const linked = findLinkedDeliverable(deliverables, reading.deadline);
-  const days = daysUntil(reading.deadline);
+  const linked = reading.deadline ? findLinkedDeliverable(deliverables, reading.deadline) : null;
+  const displayedDeadline = reading.deadline ?? suggestedDeadline;
+  const isSuggestedDeadline = !reading.deadline && Boolean(suggestedDeadline);
+  const days = displayedDeadline ? daysUntil(displayedDeadline) : null;
 
   const totalPagesRead = sessions.reduce((sum, session) => sum + session.pages_read, 0);
   const totalSecondsSpent = sessions.reduce((sum, session) => sum + sessionSeconds(session), 0);
@@ -153,13 +157,23 @@ export function ReadingDetailView({
 
             {reading.author && <p className="text-xs italic text-gray-500">por {reading.author}</p>}
 
-            <p
-              className={`text-xs font-mono ${
-                days <= 2 ? "text-red-600 font-bold" : "text-gray-500"
-              }`}
-            >
+            <p className={`text-xs font-mono ${
+              isSuggestedDeadline
+                ? "italic text-indigo-700 dark:text-indigo-300"
+                : days !== null && days <= 2
+                  ? "text-red-600 font-bold"
+                  : "text-gray-500"
+            }`}>
               <Calendar className="inline w-3.5 h-3.5 mr-1" />
-              Prazo: {formatDateBR(reading.deadline)} {days < 0 ? "(Atrasado)" : `(${days}d)`}
+              {displayedDeadline ? (
+                <>
+                  {isSuggestedDeadline ? "Prazo sugerido: " : "Prazo: "}
+                  {formatDateBR(displayedDeadline)}
+                  {days !== null && (isSuggestedDeadline
+                    ? ` (estimativa: ${days}d)`
+                    : days < 0 ? " (Atrasado)" : ` (${days}d)`)}
+                </>
+              ) : "Sem prazo fixo"}
             </p>
 
             {linked && (
@@ -221,6 +235,13 @@ export function ReadingDetailView({
           </div>
         ))}
       </div>
+
+      {!isRead && projection.pagesRemaining > 0 && displayedDeadline && (
+        <p className="text-xs italic text-indigo-700 dark:text-indigo-300">
+          Ritmo diário estimado: ~{projection.pagesPerDay} páginas/dia
+          {isSuggestedDeadline ? " até o prazo sugerido" : " até o prazo"}.
+        </p>
+      )}
 
       {!sessions.length && (
         <p className="text-xs text-gray-500">

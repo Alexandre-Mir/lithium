@@ -78,7 +78,12 @@ export function ReadingTierCard({
     }
   };
 
-  const daysUntilDeadline = daysUntil(reading.deadline);
+  const displayedDeadline = reading.deadline ?? reading.suggested_deadline ?? null;
+  const isSuggestedDeadline = !reading.deadline && Boolean(reading.suggested_deadline);
+  const daysUntilDeadline = displayedDeadline ? daysUntil(displayedDeadline) : null;
+  const pagesPerDay = daysUntilDeadline !== null && progress.pagesRemaining > 0
+    ? Math.ceil(progress.pagesRemaining / Math.max(1, daysUntilDeadline))
+    : 0;
 
   if (isRead) {
     return (
@@ -135,18 +140,22 @@ export function ReadingTierCard({
               </Badge>
             )}
 
-            <span
-              className={`text-[11px] font-mono flex items-center gap-1 ${
-                daysUntilDeadline <= 2 ? "text-red-600 font-bold" : "text-gray-500"
-              }`}
-            >
-              <Calendar className="w-3 h-3" />
-              {formatDateBR(reading.deadline, {
-                day: "2-digit",
-                month: "2-digit",
-              })}
-              {daysUntilDeadline >= 0 ? ` (${daysUntilDeadline}d)` : " (Atrasado)"}
-            </span>
+            {displayedDeadline && daysUntilDeadline !== null && (
+              <span className={`text-[11px] font-mono flex items-center gap-1 ${
+                isSuggestedDeadline
+                  ? "italic text-indigo-700 dark:text-indigo-300"
+                  : daysUntilDeadline <= 2
+                    ? "text-red-600 font-bold"
+                    : "text-gray-500"
+              }`}>
+                <Calendar className="w-3 h-3" />
+                {isSuggestedDeadline ? "Sugestão: " : ""}
+                {formatDateBR(displayedDeadline, { day: "2-digit", month: "2-digit" })}
+                {isSuggestedDeadline
+                  ? ` (estimativa: ${daysUntilDeadline}d)`
+                  : daysUntilDeadline >= 0 ? ` (${daysUntilDeadline}d)` : " (Atrasado)"}
+              </span>
+            )}
           </div>
 
           <div>
@@ -179,6 +188,13 @@ export function ReadingTierCard({
               <Clock className="w-3 h-3 text-gray-400" />
               <span>~{formattedHours}h restantes</span>
             </div>
+
+            {pagesPerDay > 0 && (
+              <div className="flex items-center gap-1 text-[10px] italic text-indigo-700 dark:text-indigo-300">
+                <Calendar className="w-3 h-3 text-gray-400" />
+                ~{pagesPerDay} págs/dia
+              </div>
+            )}
           </div>
 
           <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">

@@ -156,12 +156,15 @@ export function BookCard({
 
           <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3 text-gray-400" />
-            <span>
-              {formatDateBR(reading.deadline, {
-                day: "2-digit",
-                month: "2-digit",
-              })}
-            </span>
+            {reading.deadline ? (
+              <span>{formatDateBR(reading.deadline, { day: "2-digit", month: "2-digit" })}</span>
+            ) : reading.suggested_deadline ? (
+              <span className="truncate italic text-indigo-700 dark:text-indigo-300" title="Prazo sugerido">
+                Sug.: {formatDateBR(reading.suggested_deadline, { day: "2-digit", month: "2-digit" })}
+              </span>
+            ) : (
+              <span className="text-gray-400">Sem prazo</span>
+            )}
           </div>
         </div>
 
