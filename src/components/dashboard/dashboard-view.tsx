@@ -14,6 +14,7 @@ import { ReadingSessionModal } from "@/components/reading-session-modal";
 import type { ReadingSessionTarget } from "@/components/reading-session-modal";
 import { QuickSessionDialog } from "@/components/dashboard/quick-session-dialog";
 import { DailyGoalCard } from "@/components/dashboard/daily-goal-card";
+import { RecommendationCard } from "@/components/dashboard/recommendation-card";
 import { formatTodayLongBR } from "@/lib/dates";
 import { sumPendingLoad } from "@/lib/progress";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +40,8 @@ interface DashboardViewProps {
   lastSessionReadingId?: string | null;
   todayReadingMinutes: number;
   dailyGoalMinutes: number;
+  recommendedReadingId: string | null;
+  recommendedPages: number;
 }
 
 export function DashboardView({
@@ -53,17 +56,28 @@ export function DashboardView({
   lastSessionReadingId = null,
   todayReadingMinutes,
   dailyGoalMinutes,
+  recommendedReadingId,
+  recommendedPages,
 }: DashboardViewProps) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [quickSessionOpen, setQuickSessionOpen] = useState(false);
+  const [quickSessionInitialReadingId, setQuickSessionInitialReadingId] = useState<string | null>(null);
   const [activeReading, setActiveReading] = useState<ReadingSessionTarget | null>(null);
 
   const deliverableMap = new Map(allDeliverables.map((d) => [d.id, d]));
+  const recommendedReading = [...tier2, ...tier3, ...tier4].find(
+    (reading) => reading.id === recommendedReadingId,
+  ) ?? null;
 
   const handleOpenSession = (reading: ReadingWithSubject) => {
     setActiveReading({ id: reading.id, title: reading.title });
     setModalOpen(true);
+  };
+
+  const handleStartRecommendedSession = (reading: ReadingWithSubject) => {
+    setQuickSessionInitialReadingId(reading.id);
+    setQuickSessionOpen(true);
   };
 
   const handleRefresh = () => {
@@ -104,7 +118,10 @@ export function DashboardView({
 
           <div className="flex flex-wrap sm:flex-nowrap gap-2.5 shrink-0">
             <Button
-              onClick={() => setQuickSessionOpen(true)}
+              onClick={() => {
+                setQuickSessionInitialReadingId(null);
+                setQuickSessionOpen(true);
+              }}
               size="sm"
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 px-4 rounded shadow-none"
             >
@@ -149,6 +166,12 @@ export function DashboardView({
       <DailyGoalCard
         todayReadingMinutes={todayReadingMinutes}
         goalMinutes={dailyGoalMinutes}
+      />
+
+      <RecommendationCard
+        reading={recommendedReading}
+        suggestedPages={recommendedPages}
+        onStartSession={handleStartRecommendedSession}
       />
 
       {/* ============================================================ */}
@@ -334,11 +357,15 @@ export function DashboardView({
       {quickSessionOpen && (
         <QuickSessionDialog
           open={quickSessionOpen}
-          onOpenChange={setQuickSessionOpen}
+          onOpenChange={(open) => {
+            setQuickSessionOpen(open);
+            if (!open) setQuickSessionInitialReadingId(null);
+          }}
           tier2={tier2}
           tier3={tier3}
           tier4={tier4}
           lastSessionReadingId={lastSessionReadingId}
+          initialReadingId={quickSessionInitialReadingId}
           onRegisterSession={handleOpenSession}
         />
       )}

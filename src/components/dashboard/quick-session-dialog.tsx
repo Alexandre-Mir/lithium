@@ -15,6 +15,7 @@ interface QuickSessionDialogProps {
   tier3: ReadingWithSubject[];
   tier4: ReadingWithSubject[];
   lastSessionReadingId: string | null;
+  initialReadingId?: string | null;
   onRegisterSession: (reading: ReadingWithSubject) => void;
 }
 
@@ -25,15 +26,18 @@ export function QuickSessionDialog({
   tier3,
   tier4,
   lastSessionReadingId,
+  initialReadingId = null,
   onRegisterSession,
 }: QuickSessionDialogProps) {
-  const [selectedReadingId, setSelectedReadingId] = useState("");
+  const [selectedReadingId, setSelectedReadingId] = useState<string | null>(null);
   const prioritized = [...tier2, ...tier3, ...tier4];
   const pending = new Map(prioritized.map((reading) => [reading.id, reading]));
-  const preferredId = lastSessionReadingId && pending.has(lastSessionReadingId)
-    ? lastSessionReadingId
-    : prioritized[0]?.id ?? "";
-  const activeReading = pending.get(selectedReadingId) ?? pending.get(preferredId) ?? null;
+  const preferredId = initialReadingId && pending.has(initialReadingId)
+    ? initialReadingId
+    : lastSessionReadingId && pending.has(lastSessionReadingId)
+      ? lastSessionReadingId
+      : prioritized[0]?.id ?? "";
+  const activeReading = pending.get(selectedReadingId ?? preferredId) ?? null;
 
   const renderOptions = (readings: ReadingWithSubject[]) => readings.map((reading) => {
     const chapter = reading.chapter_title ? ` (↳ ${reading.chapter_title})` : "";

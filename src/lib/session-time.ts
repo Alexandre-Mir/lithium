@@ -1,24 +1,11 @@
 import type { ReadingSession, ReadingSessionSource } from "@/types/database";
-import { APP_TIMEZONE, todayISO } from "@/lib/dates";
+import { todayISO, timestampToDateISO } from "@/lib/dates";
 
 type SessionDuration = Pick<ReadingSession, "duration_minutes"> &
   Partial<Pick<ReadingSession, "duration_seconds">>;
 
 type SessionWithTimestamps = SessionDuration &
   Partial<Pick<ReadingSession, "started_at" | "ended_at" | "created_at">>;
-
-const localDateFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: APP_TIMEZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-function timestampDateInAppTimezone(timestamp: string | null | undefined): string | null {
-  if (!timestamp) return null;
-  const date = new Date(timestamp);
-  return Number.isNaN(date.getTime()) ? null : localDateFormatter.format(date);
-}
 
 export function sessionSeconds(session: SessionDuration): number {
   // Compatibilidade com sessões anteriores à coluna duration_seconds.
@@ -29,12 +16,12 @@ export function sessionSeconds(session: SessionDuration): number {
 export function getTodayTotalReadingTime(sessions: readonly SessionWithTimestamps[]): number {
   const today = todayISO();
   const totalSeconds = sessions.reduce((total, session) => {
-    const startedToday = timestampDateInAppTimezone(session.started_at) === today;
-    const endedToday = timestampDateInAppTimezone(session.ended_at) === today;
+    const startedToday = timestampToDateISO(session.started_at) === today;
+    const endedToday = timestampToDateISO(session.ended_at) === today;
     const legacyManualSession =
       !session.started_at &&
       !session.ended_at &&
-      timestampDateInAppTimezone(session.created_at) === today;
+      timestampToDateISO(session.created_at) === today;
 
     return startedToday || endedToday || legacyManualSession
       ? total + sessionSeconds(session)

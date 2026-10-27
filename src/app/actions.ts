@@ -7,6 +7,7 @@ import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
 import { pickInitialSpeed, pickUserPacePagesPerDay, speedFromTotals } from "@/lib/speed";
 import { projectReadingQueue } from "@/lib/projection";
+import { calculateSuggestedPages, getSuggestedReading } from "@/lib/recommendation";
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { warnIfTruncated } from "@/lib/warn-if-truncated";
 import { computeRemaining } from "@/lib/progress";
@@ -255,6 +256,47 @@ async function getReadingProgressMap(): Promise<Map<string, ReadingProgressSumma
     );
     return new Map();
   }
+}
+
+async function getLatestSessionDateMap(
+  readings: readonly ReadingWithSubject[],
+  progressByReading: ReadonlyMap<string, ReadingProgressSummary>,
+): Promise<Map<string, string>> {
+  const readingIds = readings
+    .filter((reading) => (progressByReading.get(reading.id)?.sessions ?? 0) > 0)
+    .map((reading) => reading.id);
+  const latestDates = new Map<string, string>();
+  if (readingIds.length === 0) return latestDates;
+
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from("reading_sessions")
+      .select("reading_id, started_at, ended_at, created_at")
+      .in("reading_id", readingIds)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      console.warn("Não foi possível consultar a última sessão por leitura:", error.message);
+      return latestDates;
+    }
+
+    const rows = (data ?? []) as Array<Pick<ReadingSession, "reading_id" | "started_at" | "ended_at" | "created_at">>;
+    for (const session of rows) {
+      if (!latestDates.has(session.reading_id)) {
+        latestDates.set(
+          session.reading_id,
+          session.ended_at ?? session.started_at ?? session.created_at,
+        );
+      }
+    }
+
+    if (latestDates.size === readingIds.length || rows.length < pageSize) break;
+  }
+
+  return latestDates;
 }
 
 export async function getReadings(subjectId?: string) {
@@ -891,6 +933,8 @@ export async function getDashboardData() {
     );
   }
 
+  const latestSessionDatesPromise = getLatestSessionDateMap(allPendingReadings, progressByReading);
+
   let urgentDeliverables: Deliverable[] = [];
   try {
     const { data, error: e3 } = await supabase
@@ -928,6 +972,12 @@ export async function getDashboardData() {
       err instanceof Error ? err.message : undefined
     );
   }
+
+  const latestSessionDates = await latestSessionDatesPromise;
+  allPendingReadings = allPendingReadings.map((reading) => ({
+    ...reading,
+    last_session_at: latestSessionDates.get(reading.id) ?? null,
+  }));
 
   const urgentSubjectIds = new Set(
     urgentDeliverables?.map((d) => d.subject_id) ?? []
@@ -978,6 +1028,16 @@ export async function getDashboardData() {
     }
   }
 
+  const userPacePagesPerDay = pickUserPacePagesPerDay(speedStats);
+  const recommendedReading = getSuggestedReading(
+    [...tier2, ...tier3, ...tier4],
+    userPacePagesPerDay,
+    today,
+  );
+  const recommendedPages = recommendedReading
+    ? calculateSuggestedPages(recommendedReading, userPacePagesPerDay, today)
+    : 0;
+
   return {
     tier1: tier1 ?? [],
     tier2,
@@ -990,6 +1050,8 @@ export async function getDashboardData() {
     lastSessionReadingId,
     todayReadingMinutes,
     dailyGoalMinutes,
+    recommendedReadingId: recommendedReading?.id ?? null,
+    recommendedPages,
   };
 }
 

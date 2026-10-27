@@ -19,6 +19,13 @@ export function todayISO(): string {
   return isoFormatter.format(new Date());
 }
 
+/** Retorna a data local de São Paulo para um timestamp, ou null se inválido. */
+export function timestampToDateISO(timestamp: string | null | undefined): string | null {
+  if (!timestamp) return null;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : isoFormatter.format(date);
+}
+
 /**
  * Adiciona `n` dias de calendário a uma string de data "YYYY-MM-DD" via Date.UTC,
  * retornando a nova data no formato "YYYY-MM-DD" sem depender do fuso da máquina.
