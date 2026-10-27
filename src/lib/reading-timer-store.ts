@@ -11,6 +11,17 @@ import {
 } from "@/lib/reading-timer";
 
 export const READING_TIMER_STORAGE_KEY = "lithium:reading-timer:v1";
+export const SPRINT_DURATION_SEC = 25 * 60;
+
+export function remainingSprintSeconds(elapsedTime: number): number {
+  const elapsed = Number.isFinite(elapsedTime) ? Math.max(0, elapsedTime) : 0;
+  return Math.max(0, SPRINT_DURATION_SEC - elapsed);
+}
+
+export function sprintProgressPercent(elapsedTime: number): number {
+  const elapsed = Number.isFinite(elapsedTime) ? Math.max(0, elapsedTime) : 0;
+  return Math.min(100, (elapsed / SPRINT_DURATION_SEC) * 100);
+}
 
 let snapshot: TimerState | null = null;
 let hydratedFromStorage = false;
@@ -100,6 +111,16 @@ export function startReadingTimer(readingId: string, readingTitle: string): bool
 export function pauseReadingTimer() {
   const current = getReadingTimerSnapshot();
   if (current) commit(pauseTimer(current));
+}
+
+export function completeReadingSprint() {
+  const current = getReadingTimerSnapshot();
+  if (!current) return;
+  const paused = current.status === "running" ? pauseTimer(current) : current;
+  commit({
+    ...paused,
+    accumulatedMs: Math.min(paused.accumulatedMs, SPRINT_DURATION_SEC * 1_000),
+  });
 }
 
 export function resumeReadingTimer() {

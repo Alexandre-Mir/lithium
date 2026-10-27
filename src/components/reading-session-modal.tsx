@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { elapsedSeconds, type TimerState } from "@/lib/reading-timer";
 import { formatDuration, pph, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
+import { remainingSprintSeconds } from "@/lib/reading-timer-store";
 import type { ReadingSession, ReadingSessionSource } from "@/types/database";
 import { Check, Zap } from "lucide-react";
 
@@ -33,7 +34,7 @@ interface ReadingSessionModalProps {
 
 function formatTimerInput(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
-  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
+  return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
 }
 
 function parseTimerInput(value: string): number | null {
@@ -65,6 +66,7 @@ function ReadingSessionModalContent({
   const initialSeconds = mode === "edit" && session
     ? sessionSeconds(session)
     : measuredSeconds;
+  const remainingSeconds = remainingSprintSeconds(measuredSeconds);
   const [durationMinutes, setDurationMinutes] = useState("25");
   const [timerInput, setTimerInput] = useState(() => formatTimerInput(initialSeconds));
   const [pagesInput, setPagesInput] = useState(String(session?.pages_read ?? 10));
@@ -185,6 +187,16 @@ function ReadingSessionModalContent({
           </div>
         ) : (
           <>
+            {mode === "timer" && (
+              <div className="flex items-center justify-between border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs dark:border-gray-800 dark:bg-gray-950">
+                <span className="text-gray-600 dark:text-gray-400">
+                  {remainingSeconds === 0 ? "Sprint concluído" : "Tempo restante do sprint"}
+                </span>
+                <span className="font-mono font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                  {formatTimerInput(remainingSeconds)}
+                </span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="timer-duration" className="text-xs font-semibold">Tempo (mm:ss)</Label>
