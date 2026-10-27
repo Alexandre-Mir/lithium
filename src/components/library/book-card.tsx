@@ -20,6 +20,7 @@ import {
   Play,
 } from "lucide-react";
 import { startReadingTimer } from "@/lib/reading-timer-store";
+import { calculateSuggestedTimerDurationSeconds } from "@/lib/recommendation";
 
 interface BookCardProps {
   reading: ReadingWithProgress;
@@ -187,7 +188,7 @@ export function BookCard({
           onClick={() => startReadingTimer(reading.id, reading.title, {
             currentPage: reading.pages_read,
             totalPages: reading.full_book_pages ?? reading.target_pages,
-          })}
+          }, calculateSuggestedTimerDurationSeconds(reading, speed))}
           size="sm"
           aria-label={`Iniciar cronômetro para ${reading.title}`}
           className="h-8 min-w-0 flex-1 whitespace-nowrap bg-gray-900 px-2 text-[10px] font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"

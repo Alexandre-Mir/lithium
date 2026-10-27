@@ -6,6 +6,9 @@ import type { ReadingWithSubject } from "@/types/database";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { startReadingTimer } from "@/lib/reading-timer-store";
+import { calculateSuggestedTimerDurationSeconds } from "@/lib/recommendation";
+import { estimateTimerDurationSeconds } from "@/lib/reading-timer";
+import { todayISO } from "@/lib/dates";
 import { Play, Sparkles } from "lucide-react";
 
 interface QuickSessionDialogProps {
@@ -16,6 +19,8 @@ interface QuickSessionDialogProps {
   tier4: ReadingWithSubject[];
   lastSessionReadingId: string | null;
   initialReadingId?: string | null;
+  recommendedReadingId: string | null;
+  recommendedPages: number;
   onRegisterSession: (reading: ReadingWithSubject) => void;
 }
 
@@ -27,6 +32,8 @@ export function QuickSessionDialog({
   tier4,
   lastSessionReadingId,
   initialReadingId = null,
+  recommendedReadingId,
+  recommendedPages,
   onRegisterSession,
 }: QuickSessionDialogProps) {
   const [selectedReadingId, setSelectedReadingId] = useState<string | null>(null);
@@ -50,10 +57,14 @@ export function QuickSessionDialog({
 
   const startTimer = () => {
     if (!activeReading) return;
+    const pace = Number(activeReading.current_speed_pph) || 20;
+    const durationSeconds = activeReading.id === recommendedReadingId
+      ? estimateTimerDurationSeconds(recommendedPages, activeReading.current_speed_pph)
+      : calculateSuggestedTimerDurationSeconds(activeReading, pace, todayISO());
     if (startReadingTimer(activeReading.id, activeReading.title, {
       currentPage: activeReading.pages_read,
       totalPages: activeReading.full_book_pages ?? activeReading.target_pages,
-    })) onOpenChange(false);
+    }, durationSeconds)) onOpenChange(false);
   };
 
   const registerSession = () => {

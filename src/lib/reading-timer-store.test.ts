@@ -32,6 +32,25 @@ describe("sprint countdown", () => {
     expect(sprintProgressPercent(1_700)).toBe(100);
   });
 
+  it("usa duração dinâmica em contagem regressiva e progresso", () => {
+    expect(remainingSprintSeconds(600, 3_600)).toBe(3_000);
+    expect(sprintProgressPercent(600, 3_600)).toBeCloseTo(16.67, 1);
+  });
+
+  it("conclui cronômetros longos no limite dinâmico, não em 25 minutos", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-27T12:00:00.000Z"));
+    startReadingTimer("reading-1", "Livro", undefined, 3_600);
+    vi.setSystemTime(new Date("2026-10-27T13:10:00.000Z"));
+
+    completeReadingSprint();
+
+    const timer = getReadingTimerSnapshot();
+    expect(timer?.durationSeconds).toBe(3_600);
+    expect(timer && elapsedSeconds(timer)).toBe(3_600);
+    expect(remainingSprintSeconds(timer ? elapsedSeconds(timer) : 0, timer?.durationSeconds)).toBe(0);
+  });
+
   it("pauses the completed sprint at exactly 25 minutes", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-27T12:00:00.000Z"));

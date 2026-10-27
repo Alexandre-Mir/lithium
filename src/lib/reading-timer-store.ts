@@ -7,21 +7,35 @@ import {
   resumeTimer,
   serialize,
   startTimer,
+  DEFAULT_TIMER_DURATION_SECONDS,
+  MIN_TIMER_DURATION_SECONDS,
   type TimerReadingProgress,
   type TimerState,
 } from "@/lib/reading-timer";
 
 export const READING_TIMER_STORAGE_KEY = "lithium:reading-timer:v1";
-export const SPRINT_DURATION_SEC = 25 * 60;
+export const SPRINT_DURATION_SEC = DEFAULT_TIMER_DURATION_SECONDS;
 
-export function remainingSprintSeconds(elapsedTime: number): number {
-  const elapsed = Number.isFinite(elapsedTime) ? Math.max(0, elapsedTime) : 0;
-  return Math.max(0, SPRINT_DURATION_SEC - elapsed);
+function safeDuration(durationSeconds: number = SPRINT_DURATION_SEC): number {
+  return Number.isFinite(durationSeconds)
+    ? Math.max(MIN_TIMER_DURATION_SECONDS, Math.ceil(durationSeconds))
+    : SPRINT_DURATION_SEC;
 }
 
-export function sprintProgressPercent(elapsedTime: number): number {
+export function remainingSprintSeconds(
+  elapsedTime: number,
+  durationSeconds: number = SPRINT_DURATION_SEC,
+): number {
   const elapsed = Number.isFinite(elapsedTime) ? Math.max(0, elapsedTime) : 0;
-  return Math.min(100, (elapsed / SPRINT_DURATION_SEC) * 100);
+  return Math.max(0, safeDuration(durationSeconds) - elapsed);
+}
+
+export function sprintProgressPercent(
+  elapsedTime: number,
+  durationSeconds: number = SPRINT_DURATION_SEC,
+): number {
+  const elapsed = Number.isFinite(elapsedTime) ? Math.max(0, elapsedTime) : 0;
+  return Math.min(100, (elapsed / safeDuration(durationSeconds)) * 100);
 }
 
 let snapshot: TimerState | null = null;
@@ -101,6 +115,7 @@ export function startReadingTimer(
   readingId: string,
   readingTitle: string,
   progress?: TimerReadingProgress,
+  durationSeconds: number = SPRINT_DURATION_SEC,
 ): boolean {
   const current = getReadingTimerSnapshot();
   if (current && typeof window !== "undefined") {
@@ -109,7 +124,7 @@ export function startReadingTimer(
     );
     if (!confirmed) return false;
   }
-  commit(startTimer(readingId, readingTitle, new Date(), progress));
+  commit(startTimer(readingId, readingTitle, new Date(), progress, safeDuration(durationSeconds)));
   return true;
 }
 
@@ -124,7 +139,7 @@ export function completeReadingSprint() {
   const paused = current.status === "running" ? pauseTimer(current) : current;
   commit({
     ...paused,
-    accumulatedMs: Math.min(paused.accumulatedMs, SPRINT_DURATION_SEC * 1_000),
+    accumulatedMs: Math.min(paused.accumulatedMs, paused.durationSeconds * 1_000),
   });
 }
 

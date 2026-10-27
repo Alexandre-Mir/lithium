@@ -73,7 +73,7 @@ function ReadingSessionModalContent({
   const initialSeconds = mode === "edit" && session
     ? sessionSeconds(session)
     : measuredSeconds;
-  const remainingSeconds = remainingSprintSeconds(measuredSeconds);
+  const remainingSeconds = remainingSprintSeconds(measuredSeconds, timerState?.durationSeconds);
   const [durationMinutes, setDurationMinutes] = useState("25");
   const [timerInput, setTimerInput] = useState(() => formatTimerInput(initialSeconds));
   const initialEndPage = currentPage + (session?.pages_read ?? 10);
@@ -210,7 +210,7 @@ function ReadingSessionModalContent({
             {mode === "timer" && (
               <div className="flex items-center justify-between border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs dark:border-gray-800 dark:bg-gray-950">
                 <span className="text-gray-600 dark:text-gray-400">
-                  {remainingSeconds === 0 ? "Sprint concluído" : "Tempo restante do sprint"}
+                  {remainingSeconds === 0 ? "Cota estimada concluída" : "Tempo estimado restante"}
                 </span>
                 <span className="font-mono font-bold tabular-nums text-gray-900 dark:text-gray-100">
                   {formatTimerInput(remainingSeconds)}

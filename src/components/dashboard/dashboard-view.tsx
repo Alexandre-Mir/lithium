@@ -41,6 +41,7 @@ interface DashboardViewProps {
   lastSessionReadingId?: string | null;
   todayReadingMinutes: number;
   dailyGoalMinutes: number;
+  averageSpeedPph: number;
   recommendedReadingId: string | null;
   recommendedPages: number;
 }
@@ -57,6 +58,7 @@ export function DashboardView({
   lastSessionReadingId = null,
   todayReadingMinutes,
   dailyGoalMinutes,
+  averageSpeedPph,
   recommendedReadingId,
   recommendedPages,
 }: DashboardViewProps) {
@@ -180,6 +182,7 @@ export function DashboardView({
         <DailyGoalCard
           todayReadingMinutes={todayReadingMinutes}
           goalMinutes={dailyGoalMinutes}
+          averageSpeedPph={averageSpeedPph}
         />
         <section className="flex flex-col justify-center rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
           <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
@@ -196,6 +199,7 @@ export function DashboardView({
       <RecommendationCard
         reading={recommendedReading}
         suggestedPages={recommendedPages}
+        goalReached={todayReadingMinutes >= dailyGoalMinutes}
         onStartSession={handleStartRecommendedSession}
       />
 
@@ -391,6 +395,8 @@ export function DashboardView({
           tier4={tier4}
           lastSessionReadingId={lastSessionReadingId}
           initialReadingId={quickSessionInitialReadingId}
+          recommendedReadingId={recommendedReadingId}
+          recommendedPages={recommendedPages}
           onRegisterSession={handleOpenSession}
         />
       )}

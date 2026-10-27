@@ -39,8 +39,8 @@ export function ReadingTimerBar() {
   const previousTitle = useRef<string | null>(null);
   const notifiedSprint = useRef<string | null>(null);
   const elapsed = timer ? elapsedSeconds(timer, new Date(now)) : 0;
-  const remaining = remainingSprintSeconds(elapsed);
-  const progress = sprintProgressPercent(elapsed);
+  const remaining = remainingSprintSeconds(elapsed, timer?.durationSeconds);
+  const progress = sprintProgressPercent(elapsed, timer?.durationSeconds);
   const sprintEndedAt = timer && sprintCompletion?.startedAt === timer.startedAt
     ? sprintCompletion?.endedAt ?? null
     : null;
@@ -50,7 +50,7 @@ export function ReadingTimerBar() {
     const current = getReadingTimerSnapshot();
     if (!current) return;
 
-    if (remainingSprintSeconds(elapsedSeconds(current)) === 0) {
+    if (remainingSprintSeconds(elapsedSeconds(current), current.durationSeconds) === 0) {
       if (!endedAt) endedAt = new Date().toISOString();
       completeReadingSprint();
       setSprintCompletion({ startedAt: current.startedAt, endedAt });
@@ -73,7 +73,7 @@ export function ReadingTimerBar() {
     const tick = () => {
       const tickNow = Date.now();
       setNow(tickNow);
-      if (remainingSprintSeconds(elapsedSeconds(timer, new Date(tickNow))) > 0) return;
+      if (remainingSprintSeconds(elapsedSeconds(timer, new Date(tickNow)), timer.durationSeconds) > 0) return;
 
       const timerKey = timer.startedAt;
       if (notifiedSprint.current === timerKey) return;
@@ -83,7 +83,7 @@ export function ReadingTimerBar() {
       completeReadingSprint();
       setSprintCompletion({ startedAt: timerKey, endedAt: completedAt });
       addToast({
-        message: "Sprint concluído! 🎉 Registre as páginas para salvar a sessão.",
+        message: "Tempo estimado concluído! 🎉 Registre as páginas para salvar a sessão.",
         actionLabel: "Registrar páginas",
         onAction: () => openFinishDialog(completedAt),
       });
@@ -133,7 +133,7 @@ export function ReadingTimerBar() {
             <Link href={`/library/${timer.readingId}`} className="min-w-0 flex-1 truncate text-xs font-semibold text-gray-800 hover:underline dark:text-gray-100">
               {timer.readingTitle}
             </Link>
-            <span className="font-mono text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100" aria-label="Tempo restante do sprint" aria-live="off">
+            <span className="font-mono text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100" aria-label="Tempo estimado restante" aria-live="off">
               {formatClock(remaining)}
             </span>
             {timer.status === "running" ? (
@@ -145,7 +145,7 @@ export function ReadingTimerBar() {
                 <Play className="mr-1 h-3.5 w-3.5" /> Retomar
               </Button>
             ) : (
-              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Sprint concluído</span>
+              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Cota concluída</span>
             )}
             <Button size="sm" onClick={() => openFinishDialog()} className="h-7 text-xs">
               {remaining === 0 ? <Check className="mr-1 h-3.5 w-3.5" /> : <Square className="mr-1 h-3 w-3" />}
@@ -157,7 +157,7 @@ export function ReadingTimerBar() {
             <div
               className="h-1.5 w-full overflow-hidden border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
               role="progressbar"
-              aria-label="Progresso do sprint"
+              aria-label="Progresso do tempo estimado"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(progress)}

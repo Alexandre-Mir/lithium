@@ -1,6 +1,7 @@
 import { daysBetweenISO, timestampToDateISO, todayISO } from "@/lib/dates";
 import { projectReadingQueue } from "@/lib/projection";
 import { DEFAULT_PAGES_PER_DAY } from "@/lib/speed";
+import { estimateTimerDurationSeconds } from "@/lib/reading-timer";
 
 export interface RecommendationReading {
   id: string;
@@ -11,6 +12,12 @@ export interface RecommendationReading {
   is_read: boolean;
   created_at: string;
   last_session_at?: string | null;
+  current_speed_pph?: number;
+}
+
+export interface RecommendationProgress {
+  todayPagesByReading?: ReadonlyMap<string, number>;
+  dailyGoalReached?: boolean;
 }
 
 export const OVERDUE_URGENCY_SCORE = Number.MAX_SAFE_INTEGER;
@@ -35,12 +42,24 @@ export function getSuggestedReading<T extends RecommendationReading>(
   readings: readonly T[],
   userPace: number,
   today: string = todayISO(),
+  progress: RecommendationProgress = {},
 ): T | null {
+  if (progress.dailyGoalReached) return null;
+
   const activeReadings = readings.filter((reading) => !reading.is_read && remainingPages(reading) > 0);
   if (activeReadings.length === 0) return null;
 
+  const candidates = progress.todayPagesByReading
+    ? activeReadings.filter((reading) => {
+      const quota = calculateSuggestedPages(reading, userPace, today);
+      const pagesReadToday = progress.todayPagesByReading?.get(reading.id) ?? 0;
+      return pagesReadToday < quota;
+    })
+    : activeReadings;
+  if (candidates.length === 0) return null;
+
   const queue = projectReadingQueue(
-    activeReadings.filter((reading) => !reading.deadline),
+    candidates.filter((reading) => !reading.deadline),
     safeUserPace(userPace),
     today,
   );
@@ -49,7 +68,7 @@ export function getSuggestedReading<T extends RecommendationReading>(
   let suggested: T | null = null;
   let highestScore = Number.NEGATIVE_INFINITY;
 
-  for (const reading of activeReadings) {
+  for (const reading of candidates) {
     let urgencyScore: number;
     if (reading.deadline) {
       const daysRemaining = daysBetweenISO(today, reading.deadline);
@@ -93,4 +112,15 @@ export function calculateSuggestedPages(
     : Math.ceil(safeUserPace(userPace));
 
   return Math.min(pagesRemaining, Math.max(0, suggestedPages));
+}
+
+/** Estima o tempo para concluir a cota de hoje desta leitura. */
+export function calculateSuggestedTimerDurationSeconds(
+  reading: Pick<RecommendationReading, "target_pages" | "pages_read" | "deadline" | "current_speed_pph"> &
+    Partial<Pick<RecommendationReading, "is_read">>,
+  userPace: number,
+  today: string = todayISO(),
+): number {
+  const suggestedPages = calculateSuggestedPages(reading, userPace, today);
+  return estimateTimerDurationSeconds(suggestedPages, reading.current_speed_pph ?? 0);
 }

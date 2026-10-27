@@ -9,14 +9,30 @@ import { ReadingCover } from "@/components/library/reading-cover";
 interface RecommendationCardProps {
   reading: ReadingWithSubject | null;
   suggestedPages: number;
+  goalReached: boolean;
   onStartSession: (reading: ReadingWithSubject) => void;
 }
 
 export function RecommendationCard({
   reading,
   suggestedPages,
+  goalReached,
   onStartSession,
 }: RecommendationCardProps) {
+  if (goalReached) {
+    return (
+      <section className="rounded-md border border-emerald-400 bg-emerald-50 p-5 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+          <h2 className="text-xs font-bold uppercase tracking-wide">Meta diária concluída! 🎉</h2>
+        </div>
+        <p className="mt-2 text-xs text-emerald-900 dark:text-emerald-200">
+          Vá descansar ou leia por puro prazer.
+        </p>
+      </section>
+    );
+  }
+
   if (!reading) {
     return (
       <section className="rounded-md border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">

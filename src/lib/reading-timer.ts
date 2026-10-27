@@ -1,5 +1,8 @@
 export type TimerStatus = "running" | "paused";
 
+export const DEFAULT_TIMER_DURATION_SECONDS = 25 * 60;
+export const MIN_TIMER_DURATION_SECONDS = 60;
+
 export interface TimerState {
   readingId: string;
   readingTitle: string;
@@ -7,6 +10,7 @@ export interface TimerState {
   status: TimerStatus;
   accumulatedMs: number;
   segmentStartedAt: string | null;
+  durationSeconds: number;
   currentPage?: number;
   totalPages?: number | null;
 }
@@ -14,6 +18,16 @@ export interface TimerState {
 export interface TimerReadingProgress {
   currentPage: number;
   totalPages: number | null;
+}
+
+/** Estima a duração para uma cota; quando o ritmo não é válido, usa 25 min. */
+export function estimateTimerDurationSeconds(pages: number, speedPph: number): number {
+  const pageCount = Number.isFinite(pages) ? Math.max(0, pages) : 0;
+  const validSpeed = Number.isFinite(speedPph) && speedPph > 0;
+  const estimatedSeconds = validSpeed
+    ? Math.ceil((pageCount / speedPph) * 3_600)
+    : DEFAULT_TIMER_DURATION_SECONDS;
+  return Math.max(MIN_TIMER_DURATION_SECONDS, estimatedSeconds);
 }
 
 function timestamp(now: Date): string {
@@ -30,8 +44,12 @@ export function startTimer(
   readingTitle: string,
   now: Date = new Date(),
   progress?: TimerReadingProgress,
+  durationSeconds: number = DEFAULT_TIMER_DURATION_SECONDS,
 ): TimerState {
   const startedAt = timestamp(now);
+  const normalizedDuration = Number.isFinite(durationSeconds)
+    ? Math.max(MIN_TIMER_DURATION_SECONDS, Math.ceil(durationSeconds))
+    : DEFAULT_TIMER_DURATION_SECONDS;
   return {
     readingId,
     readingTitle,
@@ -39,6 +57,7 @@ export function startTimer(
     status: "running",
     accumulatedMs: 0,
     segmentStartedAt: startedAt,
+    durationSeconds: normalizedDuration,
     ...(progress ?? {}),
   };
 }
@@ -92,6 +111,7 @@ function isTimerState(value: unknown): value is TimerState {
   if (!isIsoTimestamp(record.startedAt)) return false;
   if (record.status !== "running" && record.status !== "paused") return false;
   if (typeof record.accumulatedMs !== "number" || !Number.isInteger(record.accumulatedMs) || record.accumulatedMs < 0) return false;
+  if (typeof record.durationSeconds !== "number" || !Number.isInteger(record.durationSeconds) || record.durationSeconds < MIN_TIMER_DURATION_SECONDS) return false;
 
   if (record.status === "running") return isIsoTimestamp(record.segmentStartedAt);
   return record.segmentStartedAt === null;
@@ -100,7 +120,12 @@ function isTimerState(value: unknown): value is TimerState {
 export function parse(serialized: string | null): TimerState | null {
   if (!serialized) return null;
   try {
-    const value: unknown = JSON.parse(serialized);
+    const parsed: unknown = JSON.parse(serialized);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const record = parsed as Record<string, unknown>;
+    const value: unknown = record.durationSeconds === undefined
+      ? { ...record, durationSeconds: DEFAULT_TIMER_DURATION_SECONDS }
+      : record;
     return isTimerState(value) ? value : null;
   } catch {
     return null;

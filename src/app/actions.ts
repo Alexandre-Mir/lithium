@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { todayISO, addDaysISO, daysUntil, startOfDayUtcISO } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
-import { pickInitialSpeed, pickUserPacePagesPerDay, speedFromTotals } from "@/lib/speed";
+import { globalAverageSpeedPph, pickInitialSpeed, pickUserPacePagesPerDay, speedFromTotals } from "@/lib/speed";
 import { projectReadingQueue } from "@/lib/projection";
 import { calculateSuggestedPages, getSuggestedReading } from "@/lib/recommendation";
 import { validateReadingUpdate } from "@/lib/reading-validation";
@@ -197,7 +197,7 @@ interface ReadingProgressViewRow extends ReadingProgressSummary {
 
 type TodayReadingSession = Pick<
   ReadingSession,
-  "duration_minutes" | "duration_seconds" | "started_at" | "ended_at" | "created_at"
+  "reading_id" | "pages_read" | "duration_minutes" | "duration_seconds" | "started_at" | "ended_at" | "created_at"
 >;
 
 type ReadingQueueSource = Pick<Reading, "id" | "target_pages" | "created_at" | "deadline" | "is_read"> & {
@@ -351,7 +351,10 @@ export async function getSpeedStats(): Promise<ReadingSpeedStat[]> {
   return (data ?? []) as unknown as ReadingSpeedStat[];
 }
 
-async function getTodayReadingMinutes(): Promise<number> {
+async function getTodayReadingSummary(): Promise<{
+  minutes: number;
+  pagesByReading: Map<string, number>;
+}> {
   const today = todayISO();
   const start = startOfDayUtcISO(today);
   const end = startOfDayUtcISO(addDaysISO(today, 1));
@@ -361,7 +364,7 @@ async function getTodayReadingMinutes(): Promise<number> {
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase
       .from("reading_sessions")
-      .select("duration_minutes, duration_seconds, started_at, ended_at, created_at")
+      .select("reading_id, pages_read, duration_minutes, duration_seconds, started_at, ended_at, created_at")
       .or(
         `and(started_at.gte.${start},started_at.lt.${end}),and(ended_at.gte.${start},ended_at.lt.${end}),and(started_at.is.null,ended_at.is.null,created_at.gte.${start},created_at.lt.${end})`,
       )
@@ -370,7 +373,7 @@ async function getTodayReadingMinutes(): Promise<number> {
 
     if (error) {
       console.warn("Não foi possível consultar as sessões de hoje:", error.message);
-      return 0;
+      return { minutes: 0, pagesByReading: new Map() };
     }
 
     const rows = (data ?? []) as unknown as TodayReadingSession[];
@@ -378,7 +381,18 @@ async function getTodayReadingMinutes(): Promise<number> {
     if (rows.length < pageSize) break;
   }
 
-  return getTodayTotalReadingTime(sessions);
+  const pagesByReading = new Map<string, number>();
+  for (const session of sessions) {
+    pagesByReading.set(
+      session.reading_id,
+      (pagesByReading.get(session.reading_id) ?? 0) + session.pages_read,
+    );
+  }
+
+  return {
+    minutes: getTodayTotalReadingTime(sessions),
+    pagesByReading,
+  };
 }
 
 export async function getDailyGoalMinutes(): Promise<number> {
@@ -865,7 +879,7 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
 export async function getDashboardData() {
   const today = todayISO();
   const sevenDaysStr = addDaysISO(today, 7);
-  const [progressByReading, lastSessionResult, speedStats, todayReadingMinutes, dailyGoalMinutes] = await Promise.all([
+  const [progressByReading, lastSessionResult, speedStats, todaySummary, dailyGoalMinutes] = await Promise.all([
     getReadingProgressMap(),
     supabase
       .from("reading_sessions")
@@ -874,9 +888,10 @@ export async function getDashboardData() {
       .limit(1)
       .maybeSingle(),
     getSpeedStats(),
-    getTodayReadingMinutes(),
+    getTodayReadingSummary(),
     getDailyGoalMinutes(),
   ]);
+  const todayReadingMinutes = todaySummary.minutes;
   if (lastSessionResult.error) {
     console.warn("Aviso ao buscar a leitura da sessão mais recente:", lastSessionResult.error.message);
   }
@@ -1036,6 +1051,10 @@ export async function getDashboardData() {
     [...tier2, ...tier3, ...tier4],
     userPacePagesPerDay,
     today,
+    {
+      todayPagesByReading: todaySummary.pagesByReading,
+      dailyGoalReached: todayReadingMinutes >= dailyGoalMinutes,
+    },
   );
   const recommendedPages = recommendedReading
     ? calculateSuggestedPages(recommendedReading, userPacePagesPerDay, today)
@@ -1053,6 +1072,7 @@ export async function getDashboardData() {
     lastSessionReadingId,
     todayReadingMinutes,
     dailyGoalMinutes,
+    averageSpeedPph: globalAverageSpeedPph(speedStats),
     recommendedReadingId: recommendedReading?.id ?? null,
     recommendedPages,
   };

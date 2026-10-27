@@ -1,7 +1,7 @@
 import { addDaysISO, daysUntil, todayISO } from "@/lib/dates";
 import { computeRemaining } from "@/lib/progress";
 import { pph, sessionSeconds } from "@/lib/session-time";
-import { DEFAULT_PAGES_PER_DAY } from "@/lib/speed";
+import { DEFAULT_PAGES_PER_DAY, DEFAULT_SPEED_PPH } from "@/lib/speed";
 import type { Reading, ReadingSession } from "@/types/database";
 
 export interface SuggestedDeadlineInput {
@@ -19,6 +19,35 @@ export interface QueueReadingInput extends SuggestedDeadlineInput {
 export type QueuedReading<T extends QueueReadingInput> = T & {
   suggestedDeadline: string;
 };
+
+export interface DailyGoalProjection {
+  pagesRemaining: number;
+  estimatedMinutesRemaining: number;
+}
+
+/** Converte o tempo restante da meta em páginas inteiras e estima o esforço. */
+export function computeDailyGoalProjection(
+  minutesRead: number,
+  goalMinutes: number,
+  speedPph: number,
+): DailyGoalProjection {
+  const safeRead = Number.isFinite(minutesRead) ? Math.max(0, minutesRead) : 0;
+  const safeGoal = Number.isFinite(goalMinutes) ? Math.max(0, goalMinutes) : 0;
+  const safeSpeed = Number.isFinite(speedPph) && speedPph > 0
+    ? speedPph
+    : DEFAULT_SPEED_PPH;
+  const remainingMinutes = Math.max(0, safeGoal - safeRead);
+  const pagesRemaining = remainingMinutes === 0
+    ? 0
+    : Math.ceil((remainingMinutes / 60) * safeSpeed);
+
+  return {
+    pagesRemaining,
+    estimatedMinutesRemaining: pagesRemaining === 0
+      ? 0
+      : (pagesRemaining / safeSpeed) * 60,
+  };
+}
 
 export function calculateSuggestedDeadline(
   reading: SuggestedDeadlineInput,

@@ -53,6 +53,13 @@ export function pickUserPacePagesPerDay(stats: readonly ReadingSpeedStat[]): num
   return Math.max(1, Math.round(pph(globalStats.total_pages, globalStats.total_seconds) * PLANNED_READING_HOURS_PER_DAY));
 }
 
+/** Média global ponderada; sem tempo válido, usa a referência padrão de 20 p/h. */
+export function globalAverageSpeedPph(stats: readonly ReadingSpeedStat[]): number {
+  const totals = aggregate(stats);
+  if (totals.total_pages <= 0 || totals.total_seconds <= 0) return DEFAULT_SPEED_PPH;
+  return roundSpeed(totals.total_pages, totals.total_seconds);
+}
+
 export interface ReadingProgressTotals {
   sessions: number;
   pages_read: number;

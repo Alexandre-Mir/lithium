@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickInitialSpeed, pickUserPacePagesPerDay, speedFromTotals } from "@/lib/speed";
+import { globalAverageSpeedPph, pickInitialSpeed, pickUserPacePagesPerDay, speedFromTotals } from "@/lib/speed";
 import type { ReadingSpeedStat } from "@/types/database";
 
 function stat(
@@ -60,5 +60,18 @@ describe("pickUserPacePagesPerDay", () => {
   it("usa 15 páginas por dia quando não há histórico aproveitável", () => {
     expect(pickUserPacePagesPerDay([])).toBe(15);
     expect(pickUserPacePagesPerDay([stat("article", 2, 0, 0)])).toBe(15);
+  });
+});
+
+describe("globalAverageSpeedPph", () => {
+  it("calcula a média ponderada entre tipos de leitura", () => {
+    expect(globalAverageSpeedPph([
+      stat("book", 2, 20, 3_600),
+      stat("article", 1, 30, 3_600),
+    ])).toBe(25);
+  });
+
+  it("usa 20 p/h quando não há segundos úteis", () => {
+    expect(globalAverageSpeedPph([stat("book", 1, 20, 0)])).toBe(20);
   });
 });

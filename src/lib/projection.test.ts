@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   calculateSuggestedDeadline,
+  computeDailyGoalProjection,
   computeProjection,
   projectReadingQueue,
 } from "@/lib/projection";
@@ -159,6 +160,29 @@ describe("computeProjection", () => {
     const projection = computeProjection(makeReading({ deadline: null }), []);
     expect(projection.daysRemaining).toBe(0);
     expect(projection.isOverdue).toBe(false);
+  });
+});
+
+describe("computeDailyGoalProjection", () => {
+  it("estima páginas e tempo a partir do ritmo global", () => {
+    expect(computeDailyGoalProjection(15, 60, 20)).toEqual({
+      pagesRemaining: 15,
+      estimatedMinutesRemaining: 45,
+    });
+  });
+
+  it("zera a projeção quando a meta diária já foi batida", () => {
+    expect(computeDailyGoalProjection(60, 60, 20)).toEqual({
+      pagesRemaining: 0,
+      estimatedMinutesRemaining: 0,
+    });
+  });
+
+  it("usa 20 p/h quando o ritmo estiver inválido", () => {
+    expect(computeDailyGoalProjection(0, 30, 0)).toEqual({
+      pagesRemaining: 10,
+      estimatedMinutesRemaining: 30,
+    });
   });
 });
 

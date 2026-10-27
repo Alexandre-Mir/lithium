@@ -23,6 +23,7 @@ export default async function HomePage() {
   let lastSessionReadingId: string | null = null;
   let todayReadingMinutes = 0;
   let dailyGoalMinutes = 60;
+  let averageSpeedPph = 20;
   let recommendedReadingId: string | null = null;
   let recommendedPages = 0;
   let connectionError: string | null = null;
@@ -42,6 +43,7 @@ export default async function HomePage() {
     lastSessionReadingId = data.lastSessionReadingId ?? null;
     todayReadingMinutes = data.todayReadingMinutes ?? 0;
     dailyGoalMinutes = data.dailyGoalMinutes ?? 60;
+    averageSpeedPph = data.averageSpeedPph ?? 20;
     recommendedReadingId = data.recommendedReadingId ?? null;
     recommendedPages = data.recommendedPages ?? 0;
     subjectStats = statsResult.stats || [];
@@ -84,6 +86,7 @@ export default async function HomePage() {
         lastSessionReadingId={lastSessionReadingId}
         todayReadingMinutes={todayReadingMinutes}
         dailyGoalMinutes={dailyGoalMinutes}
+        averageSpeedPph={averageSpeedPph}
         recommendedReadingId={recommendedReadingId}
         recommendedPages={recommendedPages}
       />

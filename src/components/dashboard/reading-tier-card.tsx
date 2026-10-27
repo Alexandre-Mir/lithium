@@ -23,6 +23,7 @@ import {
   Play,
 } from "lucide-react";
 import { startReadingTimer } from "@/lib/reading-timer-store";
+import { calculateSuggestedTimerDurationSeconds } from "@/lib/recommendation";
 import { addToast } from "@/lib/toast-store";
 
 interface ReadingTierCardProps {
@@ -238,7 +239,7 @@ export function ReadingTierCard({
             onClick={() => startReadingTimer(reading.id, reading.title, {
               currentPage: reading.pages_read,
               totalPages: reading.full_book_pages ?? reading.target_pages,
-            })}
+            }, calculateSuggestedTimerDurationSeconds(reading, speed))}
             size="sm"
             aria-label={`Iniciar cronômetro para ${reading.title}`}
             title="Iniciar cronômetro"

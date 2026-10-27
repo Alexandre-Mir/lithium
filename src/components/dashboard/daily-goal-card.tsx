@@ -6,19 +6,21 @@ import { useRouter } from "next/navigation";
 import { updateDailyGoalMinutes } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { computeDailyGoalProjection } from "@/lib/projection";
 
 const GOAL_SAVE_DEBOUNCE_MS = 600;
 
 interface DailyGoalCardProps {
   todayReadingMinutes: number;
   goalMinutes: number;
+  averageSpeedPph: number;
 }
 
 function formatMinutes(minutes: number): string {
   return minutes.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 }
 
-export function DailyGoalCard({ todayReadingMinutes, goalMinutes }: DailyGoalCardProps) {
+export function DailyGoalCard({ todayReadingMinutes, goalMinutes, averageSpeedPph }: DailyGoalCardProps) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -56,6 +58,7 @@ export function DailyGoalCard({ todayReadingMinutes, goalMinutes }: DailyGoalCar
 
   const progressPercent = Math.min(100, (todayReadingMinutes / goalMinutes) * 100);
   const goalReached = todayReadingMinutes >= goalMinutes;
+  const goalProjection = computeDailyGoalProjection(todayReadingMinutes, goalMinutes, averageSpeedPph);
   const parsedDraft = Number(draft);
   const draftIsValid = Number.isInteger(parsedDraft) && parsedDraft >= 1 && parsedDraft <= 1440;
 
@@ -111,6 +114,14 @@ export function DailyGoalCard({ todayReadingMinutes, goalMinutes }: DailyGoalCar
               style={{ width: `${progressPercent}%` }}
             />
           </div>
+          {!goalReached && (
+            <p className="text-[11px] text-gray-600 dark:text-gray-400">
+              Faltam aprox. {Math.ceil(goalProjection.estimatedMinutesRemaining)} min para bater a meta
+              <span className="ml-1 text-gray-500 dark:text-gray-500">
+                (~{goalProjection.pagesRemaining} págs. a {averageSpeedPph.toFixed(1)} p/h)
+              </span>
+            </p>
+          )}
         </div>
 
         <div className="shrink-0">

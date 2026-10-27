@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateSuggestedPages,
+  calculateSuggestedTimerDurationSeconds,
   getSuggestedReading,
   OVERDUE_URGENCY_SCORE,
   type RecommendationReading,
@@ -97,5 +98,29 @@ describe("motor de recomendação", () => {
     const reading = makeReading({ target_pages: 100, pages_read: 20 });
     expect(calculateSuggestedPages(reading, 12)).toBe(12);
     expect(calculateSuggestedPages(reading, 0)).toBe(15);
+  });
+
+  it("passa à próxima leitura quando a cota diária da principal foi atingida", () => {
+    const first = makeReading({ id: "first", created_at: "2026-10-20T12:00:00Z" });
+    const second = makeReading({ id: "second", created_at: "2026-10-21T12:00:00Z" });
+
+    expect(getSuggestedReading([first, second], 15, "2026-10-24", {
+      todayPagesByReading: new Map([["first", 15]]),
+    })?.id).toBe("second");
+  });
+
+  it("não recomenda leitura quando a meta global diária foi concluída", () => {
+    expect(getSuggestedReading([makeReading()], 15, "2026-10-24", {
+      dailyGoalReached: true,
+    })).toBeNull();
+  });
+
+  it("calcula o cronômetro pela cota diária e ritmo da leitura", () => {
+    expect(calculateSuggestedTimerDurationSeconds(makeReading({
+      target_pages: 100,
+      pages_read: 0,
+      deadline: "2026-10-28",
+      current_speed_pph: 50,
+    }), 15, "2026-10-24")).toBe(1_800);
   });
 });

@@ -13,6 +13,7 @@ import { getDeadlineTone } from "@/lib/deadline-tone";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { ReadingCover } from "@/components/library/reading-cover";
 import { startReadingTimer } from "@/lib/reading-timer-store";
+import { calculateSuggestedTimerDurationSeconds } from "@/lib/recommendation";
 import { formatDuration, pph, sessionSeconds, sessionSourceLabel } from "@/lib/session-time";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -222,7 +223,10 @@ export function ReadingDetailView({
             <Button size="sm" onClick={() => startReadingTimer(reading.id, reading.title, {
               currentPage: projection.pagesRead,
               totalPages: reading.full_book_pages ?? reading.target_pages,
-            })} aria-label="Iniciar cronômetro">
+            }, calculateSuggestedTimerDurationSeconds({
+              ...reading,
+              pages_read: projection.pagesRead,
+            }, Number(reading.current_speed_pph) || 20))} aria-label="Iniciar cronômetro">
               <Play className="w-3.5 h-3.5 mr-1" /> Iniciar Cronômetro
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setModalOpen(true)}>

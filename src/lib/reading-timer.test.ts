@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_TIMER_DURATION_SECONDS,
+  MIN_TIMER_DURATION_SECONDS,
   elapsedSeconds,
+  estimateTimerDurationSeconds,
   parse,
   pauseTimer,
   resumeTimer,
@@ -20,6 +23,7 @@ describe("reading-timer", () => {
       status: "running",
       accumulatedMs: 0,
       segmentStartedAt: base.toISOString(),
+      durationSeconds: DEFAULT_TIMER_DURATION_SECONDS,
     });
     expect(elapsedSeconds(timer, new Date(base.getTime() + 12_000))).toBe(12);
   });
@@ -53,5 +57,30 @@ describe("reading-timer", () => {
     expect(parse("{")).toBeNull();
     expect(parse(JSON.stringify({ readingId: "x", status: "running" }))).toBeNull();
     expect(parse(null)).toBeNull();
+  });
+
+  it("mantém a duração dinâmica no estado e no formato serializado", () => {
+    const timer = startTimer("reading-1", "Livro", base, undefined, 5_400);
+    expect(timer.durationSeconds).toBe(5_400);
+    expect(parse(serialize(timer))?.durationSeconds).toBe(5_400);
+  });
+
+  it("migra timers antigos para a duração padrão", () => {
+    const legacy = {
+      readingId: "reading-1",
+      readingTitle: "Livro",
+      startedAt: base.toISOString(),
+      status: "paused",
+      accumulatedMs: 0,
+      segmentStartedAt: null,
+    };
+    expect(parse(JSON.stringify(legacy))?.durationSeconds).toBe(DEFAULT_TIMER_DURATION_SECONDS);
+  });
+
+  it("estima a duração da cota, aceita mais de uma hora e aplica os limites", () => {
+    expect(estimateTimerDurationSeconds(20, 20)).toBe(3_600);
+    expect(estimateTimerDurationSeconds(100, 50)).toBe(7_200);
+    expect(estimateTimerDurationSeconds(0, 20)).toBe(MIN_TIMER_DURATION_SECONDS);
+    expect(estimateTimerDurationSeconds(10, 0)).toBe(DEFAULT_TIMER_DURATION_SECONDS);
   });
 });
