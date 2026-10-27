@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpenCheck, Play } from "lucide-react";
+import { BookOpenCheck, Sparkles } from "lucide-react";
 import type { ReadingWithSubject } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { ReadingCover } from "@/components/library/reading-cover";
@@ -79,8 +79,8 @@ export function RecommendationCard({
             className="h-8 rounded bg-gray-900 text-xs text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
             onClick={() => onStartSession(reading)}
           >
-            <Play className="mr-1 h-3.5 w-3.5" />
-            Iniciar Sessão
+            <Sparkles className="mr-1 h-3.5 w-3.5" />
+            Abrir sessão rápida
           </Button>
         </div>
       </div>

@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Brain,
+  Clock,
   Sparkles,
   Flame,
   CheckCircle2,
@@ -92,9 +93,16 @@ export function DashboardView({
   const totalTasks = tier1.length + tier2.length + tier3.length + tier4.length;
   const totalUrgentPages = sumPendingLoad(tier2).pagesRemaining;
   const totalReadingHours = sumPendingLoad([...tier2, ...tier3, ...tier4]).hoursRemaining;
+  const recommendedSpeed = recommendedReading
+    ? Number(recommendedReading.current_speed_pph) || 20
+    : null;
+  const recommendedEffortHours = recommendedSpeed === null
+    ? null
+    : recommendedPages / recommendedSpeed;
 
   const todayFormatted = formatTodayLongBR();
   const formattedRemainingHours = totalReadingHours.toFixed(1).replace(".", ",");
+  const formattedRecommendedEffort = recommendedEffortHours?.toFixed(1).replace(".", ",");
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-8">
@@ -153,25 +161,37 @@ export function DashboardView({
           </div>
 
           <div className="bg-gray-950/60 rounded p-2.5 border border-gray-800">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Zona de Perigo</span>
-            <span className="text-xl font-bold font-mono text-red-400">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Prazos próximos</span>
+            <span className="text-xl font-bold font-mono text-amber-300">
               {tier2.length}
             </span>
           </div>
 
           <div className="bg-gray-950/60 rounded p-2.5 border border-gray-800">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Carga restante</span>
+            <span className="text-[10px] font-semibold text-gray-400 uppercase block">Esforço hoje</span>
             <span className="text-xl font-bold font-mono text-amber-400">
-              ~{formattedRemainingHours}h
+              {formattedRecommendedEffort === undefined ? "—" : `~${formattedRecommendedEffort}h`}
             </span>
           </div>
         </div>
       </div>
 
-      <DailyGoalCard
-        todayReadingMinutes={todayReadingMinutes}
-        goalMinutes={dailyGoalMinutes}
-      />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
+        <DailyGoalCard
+          todayReadingMinutes={todayReadingMinutes}
+          goalMinutes={dailyGoalMinutes}
+        />
+        <section className="flex flex-col justify-center rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+            <Clock className="h-4 w-4" />
+            <h2 className="text-xs font-bold uppercase tracking-wide">Carga total pendente</h2>
+          </div>
+          <p className="mt-1 font-mono text-xl font-bold text-gray-900 dark:text-gray-100">
+            ~{formattedRemainingHours}h
+          </p>
+          <p className="text-[10px] text-gray-500">Tempo estimado de todas as leituras pendentes</p>
+        </section>
+      </div>
 
       <RecommendationCard
         reading={recommendedReading}
@@ -222,21 +242,21 @@ export function DashboardView({
       {tier2.length > 0 && <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-red-600 text-white flex items-center justify-center font-bold text-xs">
+            <div className="w-6 h-6 rounded bg-amber-500 text-white flex items-center justify-center font-bold text-xs">
               T2
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-bold tracking-wider text-gray-900 dark:text-gray-100 uppercase">
-                  Zona de Perigo — Provas e Entregas em &le; 7 dias
+                  Zona de Atenção — Provas e Entregas em até 7 dias
                 </h2>
-                <Badge variant="outline" className="text-[10px] border-red-300 text-red-700 dark:text-red-300 py-0 flex items-center gap-1">
+                <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-800 dark:border-amber-900 dark:text-amber-300 py-0 flex items-center gap-1">
                   <Flame className="w-3 h-3" /> Prazo Rígido
                 </Badge>
               </div>
             </div>
           </div>
-          <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
+          <span className="text-xs font-mono font-bold text-amber-700 dark:text-amber-400">
             {tier2.length} leitura(s) • {totalUrgentPages}p
           </span>
         </div>

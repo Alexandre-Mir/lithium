@@ -124,7 +124,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
 
       {/* Barra de Filtros */}
       <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
+        <div className="flex flex-col gap-2.5 md:grid md:grid-cols-12">
           <div className="md:col-span-4 relative">
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
             <Input
@@ -188,7 +188,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {filteredReadings.map((reading) => (
             <BookCard
               key={reading.id}

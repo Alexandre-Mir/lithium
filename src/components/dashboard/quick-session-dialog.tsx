@@ -83,7 +83,7 @@ export function QuickSessionDialog({
               onChange={(event) => setSelectedReadingId(event.target.value)}
               className="h-9 w-full rounded border border-gray-300 bg-white px-2 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
             >
-              {tier2.length > 0 && <optgroup label="Zona de Perigo">{renderOptions(tier2)}</optgroup>}
+              {tier2.length > 0 && <optgroup label="Zona de Atenção">{renderOptions(tier2)}</optgroup>}
               {tier3.length > 0 && <optgroup label="Leituras Regulares">{renderOptions(tier3)}</optgroup>}
               {tier4.length > 0 && <optgroup label="Estudos Autônomos">{renderOptions(tier4)}</optgroup>}
             </select>
@@ -108,11 +108,11 @@ export function QuickSessionDialog({
           </Button>
           {activeReading && (
             <>
-              <Button type="button" variant="outline" onClick={registerSession} className="h-8 rounded text-xs">
-                <Sparkles className="mr-1 h-3.5 w-3.5" /> Registrar sessão manual
-              </Button>
               <Button type="button" onClick={startTimer} className="h-8 rounded bg-gray-900 text-xs text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200">
-                <Play className="mr-1 h-3.5 w-3.5" /> Iniciar cronômetro
+                <Play className="mr-1 h-3.5 w-3.5" /> Iniciar Cronômetro
+              </Button>
+              <Button type="button" variant="ghost" onClick={registerSession} className="h-8 rounded text-xs">
+                <Sparkles className="mr-1 h-3.5 w-3.5" /> Registro Manual
               </Button>
             </>
           )}

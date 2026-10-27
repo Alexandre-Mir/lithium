@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Deliverable, Subject } from "@/types/database";
 import { createDeliverable, updateDeliverable, deleteDeliverable } from "@/app/actions";
 import { daysUntil, formatDateBR } from "@/lib/dates";
+import { getDeadlineTone } from "@/lib/deadline-tone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -111,7 +112,7 @@ export function DeliverablesTable({
       {/* Quick Add Row Flat */}
       <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
         <h3 className="text-xs font-bold tracking-wider text-gray-500 dark:text-gray-400 uppercase mb-3">
-          Cadastrar Entrega / Prova (Deadline)
+          Cadastrar Entrega / Prova
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
           <div className="md:col-span-3">
@@ -165,7 +166,8 @@ export function DeliverablesTable({
           Nenhuma entrega cadastrada. Adicione provas ou trabalhos para liberar o rastreamento de Metas (Tier 2).
         </div>
       ) : (
-      <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
+      <div className="w-full overflow-x-auto">
+      <div className="min-w-[760px] rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
         <Table>
           <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
             <TableRow className="border-b border-gray-200 dark:border-gray-800">
@@ -181,7 +183,7 @@ export function DeliverablesTable({
                 const isEditing = editingId === deliv.id;
                 const sub = subjectMap.get(deliv.subject_id);
                 const daysLeft = daysUntil(deliv.date);
-                const danger = daysLeft >= 0 && daysLeft <= 7;
+                const deadlineTone = getDeadlineTone(daysLeft);
 
                 return (
                   <TableRow
@@ -248,15 +250,16 @@ export function DeliverablesTable({
                     </TableCell>
 
                     <TableCell className="p-2">
-                      {danger ? (
-                        <Badge className="bg-red-600 text-white rounded text-[10px] font-bold py-0 flex items-center gap-1 w-fit">
+                      {deadlineTone === "danger" ? (
+                        <Badge className="w-fit rounded bg-red-600 py-0 text-[10px] font-bold text-white">
                           <AlertTriangle className="w-3 h-3" />
-                          Zona de Perigo ({daysLeft <= 0 ? "Hoje!" : `${daysLeft}d`})
+                          Atrasado há {Math.abs(daysLeft)}d
                         </Badge>
-                      ) : daysLeft < 0 ? (
-                        <span className="text-[11px] text-gray-400 font-mono">
-                          Encerrado
-                        </span>
+                      ) : deadlineTone === "warning" ? (
+                        <Badge className="w-fit rounded border border-amber-300 bg-amber-50 py-0 text-[10px] font-semibold text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                          <AlertTriangle className="w-3 h-3" />
+                          {daysLeft === 0 ? "Vence Hoje" : `Em ${daysLeft}d`}
+                        </Badge>
                       ) : (
                         <span className="text-[11px] text-gray-600 dark:text-gray-400 font-mono">
                           Em {daysLeft} dias
@@ -320,6 +323,7 @@ export function DeliverablesTable({
               })}
           </TableBody>
         </Table>
+      </div>
       </div>
       )}
     </div>

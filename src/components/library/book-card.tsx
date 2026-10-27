@@ -74,12 +74,12 @@ export function BookCard({
   return (
     <div className="relative flex flex-col rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden transition-colors hover:border-gray-300 dark:hover:border-gray-700">
       {/* Header Visual Flat */}
-      <div className="relative border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950">
+      <div className="relative isolate border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950">
         <Link href={`/library/${reading.id}`} className="relative z-10 block">
           <ReadingCover reading={reading} themeColor={themeColor} size="card" />
         </Link>
 
-        <div className="absolute top-2 right-2 z-10">
+        <div className="absolute right-2 top-2 z-20">
           <button
             type="button"
             onClick={() => (isRead ? setUnmarkConfirmOpen(true) : void handleMarkAsRead())}
@@ -181,28 +181,27 @@ export function BookCard({
       </div>
 
       {/* Footer */}
-      <div className="flex gap-1.5 p-3.5 pt-0">
-        <Button
-          onClick={() => onOpenSessionModal?.(reading)}
-          disabled={isRead}
-          size="sm"
-          className="min-w-0 flex-1 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded shadow-none"
-        >
-          <Sparkles className="w-3 h-3 mr-1" /> Sessão
-        </Button>
+      <div className="flex flex-col gap-1.5 p-3.5 pt-0 lg:flex-row">
         <Button
           type="button"
-          size="sm"
-          variant="outline"
           onClick={() => startReadingTimer(reading.id, reading.title, {
             currentPage: reading.pages_read,
             totalPages: reading.full_book_pages ?? reading.target_pages,
           })}
+          size="sm"
           aria-label={`Iniciar cronômetro para ${reading.title}`}
-          title="Iniciar cronômetro"
-          className="relative z-10 h-8 border-gray-300 px-2 text-[10px] dark:border-gray-700"
+          className="h-8 min-w-0 flex-1 whitespace-nowrap bg-gray-900 px-2 text-[10px] font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
         >
-          <Play className="h-3 w-3" /> Iniciar
+          <Play className="mr-1 h-3 w-3 shrink-0" /> Iniciar Cronômetro
+        </Button>
+        <Button
+          onClick={() => onOpenSessionModal?.(reading)}
+          disabled={isRead}
+          size="sm"
+          variant="ghost"
+          className="h-8 min-w-0 flex-1 whitespace-nowrap px-2 text-[10px] font-semibold text-gray-600 dark:text-gray-300"
+        >
+          <Sparkles className="mr-1 h-3 w-3 shrink-0" /> Registro Manual
         </Button>
       </div>
       <ConfirmDialog

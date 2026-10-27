@@ -9,6 +9,7 @@ import { ReadingSessionModal } from "@/components/reading-session-modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { computeProjection } from "@/lib/projection";
 import { daysUntil, formatDateBR, formatDateTimeBR, todayISO } from "@/lib/dates";
+import { getDeadlineTone } from "@/lib/deadline-tone";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { ReadingCover } from "@/components/library/reading-cover";
 import { startReadingTimer } from "@/lib/reading-timer-store";
@@ -19,7 +20,7 @@ import { metadataAttemptsSummary } from "@/lib/metadata-labels";
 import { isUnusualSession } from "@/lib/session-anomaly";
 import { pagesBeforeSession } from "@/lib/session-pages";
 import { getCurrentMilestone } from "@/lib/toc-parser";
-import { ArrowLeft, Calendar, Clock, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Calendar, Clock, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 
 interface Props {
   reading: Reading & { subject: Subject };
@@ -58,6 +59,9 @@ export function ReadingDetailView({
   const displayedDeadline = reading.deadline ?? suggestedDeadline;
   const isSuggestedDeadline = !reading.deadline && Boolean(suggestedDeadline);
   const days = displayedDeadline ? daysUntil(displayedDeadline) : null;
+  const deadlineTone = isSuggestedDeadline ? "neutral" : getDeadlineTone(days);
+  const linkedDays = linked ? daysUntil(linked.date) : null;
+  const linkedTone = getDeadlineTone(linkedDays);
 
   const totalPagesRead = sessions.reduce((sum, session) => sum + session.pages_read, 0);
   const totalSecondsSpent = sessions.reduce((sum, session) => sum + sessionSeconds(session), 0);
@@ -181,9 +185,11 @@ export function ReadingDetailView({
             <p className={`text-xs font-mono ${
               isSuggestedDeadline
                 ? "italic text-indigo-700 dark:text-indigo-300"
-                : days !== null && days <= 2
+                : deadlineTone === "danger"
                   ? "text-red-600 font-bold"
-                  : "text-gray-500"
+                  : deadlineTone === "warning"
+                    ? "text-amber-800 dark:text-amber-300"
+                    : "text-gray-500"
             }`}>
               <Calendar className="inline w-3.5 h-3.5 mr-1" />
               {displayedDeadline ? (
@@ -192,28 +198,36 @@ export function ReadingDetailView({
                   {formatDateBR(displayedDeadline)}
                   {days !== null && (isSuggestedDeadline
                     ? ` (estimativa: ${days}d)`
-                    : days < 0 ? " (Atrasado)" : ` (${days}d)`)}
+                    : days < 0 ? ` (Atrasado há ${Math.abs(days)}d)` : days === 0 ? " (Vence hoje)" : ` (${days}d)`)}
                 </>
               ) : "Sem prazo fixo"}
             </p>
 
             {linked && (
-              <p className="text-xs text-gray-600">
-                → {linked.title}, em {daysUntil(linked.date)}d
+              <p className={`flex items-center gap-1 text-xs ${
+                linkedTone === "danger"
+                  ? "text-red-700 dark:text-red-300"
+                  : linkedTone === "warning"
+                    ? "text-amber-800 dark:text-amber-300"
+                    : "text-gray-600 dark:text-gray-400"
+              }`}>
+                <ArrowRight className="h-3 w-3 shrink-0" />
+                Prazo vinculado à entrega: {linked.title}
+                {linkedDays === 0 ? " · vence hoje" : linkedDays !== null && linkedDays < 0 ? ` · atrasada há ${Math.abs(linkedDays)}d` : linkedDays !== null ? ` · em ${linkedDays}d` : ""}
               </p>
             )}
           </div>
 
           <div className="flex flex-wrap items-start gap-2">
-            <Button size="sm" variant="outline" onClick={() => startReadingTimer(reading.id, reading.title, {
+            <Button size="sm" onClick={() => startReadingTimer(reading.id, reading.title, {
               currentPage: projection.pagesRead,
               totalPages: reading.full_book_pages ?? reading.target_pages,
             })} aria-label="Iniciar cronômetro">
-              <Play className="w-3.5 h-3.5 mr-1" /> Iniciar
+              <Play className="w-3.5 h-3.5 mr-1" /> Iniciar Cronômetro
             </Button>
-            <Button size="sm" onClick={() => setModalOpen(true)}>
+            <Button size="sm" variant="ghost" onClick={() => setModalOpen(true)}>
               <Clock className="w-3.5 h-3.5 mr-1" />
-              Registrar sessão
+              Registro Manual
             </Button>
             <Button size="sm" variant="outline" onClick={toggleRead}>
               {isRead ? "Desmarcar" : "Marcar como lida"}

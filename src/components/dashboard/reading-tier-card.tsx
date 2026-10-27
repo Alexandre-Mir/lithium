@@ -6,6 +6,7 @@ import { ReadingWithSubject, Deliverable } from "@/types/database";
 import { markReadingAsRead } from "@/app/actions";
 import { markReadingAsUnread } from "@/app/actions";
 import { daysUntil, formatDateBR } from "@/lib/dates";
+import { getDeadlineTone } from "@/lib/deadline-tone";
 import { computeRemaining } from "@/lib/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,9 @@ export function ReadingTierCard({
   const displayedDeadline = reading.deadline ?? reading.suggested_deadline ?? null;
   const isSuggestedDeadline = !reading.deadline && Boolean(reading.suggested_deadline);
   const daysUntilDeadline = displayedDeadline ? daysUntil(displayedDeadline) : null;
+  const deadlineTone = isSuggestedDeadline ? "neutral" : getDeadlineTone(daysUntilDeadline);
+  const linkedDaysLeft = linkedDeliverable ? daysUntil(linkedDeliverable.date) : null;
+  const linkedTone = getDeadlineTone(linkedDaysLeft);
   const pagesPerDay = daysUntilDeadline !== null && progress.pagesRemaining > 0
     ? Math.ceil(progress.pagesRemaining / Math.max(1, daysUntilDeadline))
     : 0;
@@ -103,7 +107,9 @@ export function ReadingTierCard({
     <div
       className={`relative rounded-md bg-white dark:bg-gray-900 p-3.5 transition-colors ${
         tierNumber === 2
-          ? "border-2 border-red-300 dark:border-red-900"
+          ? linkedTone === "danger"
+            ? "border-2 border-red-300 dark:border-red-900"
+            : "border-2 border-amber-300 dark:border-amber-900"
           : "border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700"
       }`}
     >
@@ -134,9 +140,17 @@ export function ReadingTierCard({
             </Badge>
 
             {tierNumber === 2 && linkedDeliverable && (
-              <Badge className="bg-red-600 text-white text-[10px] font-bold py-0 rounded flex items-center gap-1">
+              <Badge className={`rounded py-0 text-[10px] font-bold flex items-center gap-1 ${
+                linkedTone === "danger"
+                  ? "bg-red-600 text-white"
+                  : "border border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+              }`}>
                 <AlertTriangle className="w-3 h-3" />
-                Entrega: {linkedDeliverable.title} (em {daysUntil(linkedDeliverable.date)}d)
+                Entrega: {linkedDeliverable.title} ({linkedDaysLeft === 0
+                  ? "vence hoje"
+                  : linkedDaysLeft !== null && linkedDaysLeft < 0
+                    ? `atrasada há ${Math.abs(linkedDaysLeft)}d`
+                    : linkedDaysLeft !== null ? `em ${linkedDaysLeft}d` : ""})
               </Badge>
             )}
 
@@ -144,16 +158,22 @@ export function ReadingTierCard({
               <span className={`text-[11px] font-mono flex items-center gap-1 ${
                 isSuggestedDeadline
                   ? "italic text-indigo-700 dark:text-indigo-300"
-                  : daysUntilDeadline <= 2
+                  : deadlineTone === "danger"
                     ? "text-red-600 font-bold"
-                    : "text-gray-500"
+                    : deadlineTone === "warning"
+                      ? "text-amber-800 dark:text-amber-300"
+                      : "text-gray-500"
               }`}>
                 <Calendar className="w-3 h-3" />
                 {isSuggestedDeadline ? "Sugestão: " : ""}
                 {formatDateBR(displayedDeadline, { day: "2-digit", month: "2-digit" })}
                 {isSuggestedDeadline
                   ? ` (estimativa: ${daysUntilDeadline}d)`
-                  : daysUntilDeadline >= 0 ? ` (${daysUntilDeadline}d)` : " (Atrasado)"}
+                  : daysUntilDeadline < 0
+                    ? ` (Atrasado há ${Math.abs(daysUntilDeadline)}d)`
+                    : daysUntilDeadline === 0
+                      ? " (Vence hoje)"
+                      : ` (${daysUntilDeadline}d)`}
               </span>
             )}
           </div>
@@ -212,7 +232,7 @@ export function ReadingTierCard({
         </div>
 
         {/* Botões de Ação */}
-        <div className="relative z-10 flex items-center gap-1.5 shrink-0 pt-2 md:pt-0 border-t border-gray-100 dark:border-gray-800 md:border-t-0">
+        <div className="relative z-10 flex flex-wrap items-center gap-1.5 shrink-0 pt-2 md:justify-end md:pt-0 border-t border-gray-100 dark:border-gray-800 md:border-t-0">
           <Button
             type="button"
             onClick={() => startReadingTimer(reading.id, reading.title, {
@@ -224,16 +244,16 @@ export function ReadingTierCard({
             title="Iniciar cronômetro"
             className="h-8 bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
           >
-            <Play className="mr-1 h-3.5 w-3.5" /> Iniciar
+            <Play className="mr-1 h-3.5 w-3.5" /> Iniciar Cronômetro
           </Button>
           <Button
             onClick={() => onOpenSession(reading)}
             size="sm"
-            variant="outline"
+            variant="ghost"
             className="text-xs font-semibold h-8 rounded border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 shadow-none"
           >
             <Sparkles className="w-3 h-3 mr-1 text-gray-500" />
-            Sessão
+            Registro Manual
           </Button>
 
           <div className="mx-1 h-6 border-l border-gray-200 dark:border-gray-800" aria-hidden="true" />

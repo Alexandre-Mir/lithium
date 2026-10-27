@@ -77,7 +77,7 @@ export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
               Atrasada ({formatDateBR(review.review_date)})
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-[10px] border-gray-300 text-gray-600 dark:text-gray-400 py-0 font-mono">
+            <Badge variant="outline" className="text-[10px] border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200 py-0 font-mono">
               Hoje
             </Badge>
           )}

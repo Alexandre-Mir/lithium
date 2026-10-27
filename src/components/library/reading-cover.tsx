@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, FileText } from "lucide-react";
 import type { ReadingType } from "@/types/database";
 import { coverUrlHiRes } from "@/lib/cover-url";
 import { getReadableTextColor } from "@/lib/colors";
@@ -41,8 +40,15 @@ export function ReadingCover({ reading, themeColor, size }: ReadingCoverProps) {
     }
   };
 
-  const Icon = reading.type === "book" ? BookOpen : FileText;
   const textColor = getReadableTextColor(themeColor);
+  const initials = reading.title
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => Array.from(word)[0])
+    .join("")
+    .toLocaleUpperCase("pt-BR") || "L";
 
   return (
     <div
@@ -62,15 +68,18 @@ export function ReadingCover({ reading, themeColor, size }: ReadingCoverProps) {
         />
       ) : (
         <div
-          className="flex h-full w-full flex-col items-center justify-center gap-1 p-3 text-center"
+          className="relative flex h-full w-full flex-col items-center justify-center gap-1 p-3 text-center"
           style={{ backgroundColor: themeColor, color: textColor }}
         >
-          <Icon className="h-7 w-7 shrink-0" />
-          <span className="line-clamp-4 text-xs font-bold">{reading.title}</span>
+          <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-black/15" />
+          <span aria-hidden="true" className="relative font-mono text-3xl font-bold tracking-tight">
+            {initials}
+          </span>
+          <span className="relative line-clamp-4 text-xs font-bold">{reading.title}</span>
           {reading.author && (
-            <span className="line-clamp-1 text-[10px]">{reading.author}</span>
+            <span className="relative line-clamp-1 text-[10px]">{reading.author}</span>
           )}
-          <span className="text-[9px] font-bold uppercase tracking-wider">
+          <span className="relative text-[9px] font-bold uppercase tracking-wider">
             {reading.type === "book" ? "Livro" : "Artigo"}
           </span>
         </div>

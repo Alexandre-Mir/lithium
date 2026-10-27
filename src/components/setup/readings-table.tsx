@@ -686,7 +686,8 @@ export function ReadingsTable({
       )}
 
       {/* Tabela de Leituras - Flat Design */}
-      <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
+      <div className="w-full overflow-x-auto">
+      <div className="min-w-[900px] rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
         <Table>
           <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
             <TableRow className="border-b border-gray-200 dark:border-gray-800">
@@ -1006,6 +1007,7 @@ export function ReadingsTable({
             )}
           </TableBody>
         </Table>
+      </div>
       </div>
       <ConfirmDialog
         open={Boolean(unmarkReading)}
