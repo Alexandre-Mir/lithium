@@ -1,11 +1,13 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.9)
+// Lithium — Database Types (mirrors Supabase schema v1.10)
 // ============================================================
 
 export type ReadingType = "book" | "article";
 export type ReviewStatus = "pending" | "done";
 export type ReadingSessionSource = "manual" | "timer" | "timer_adjusted";
 export type MilestoneSummaryStatus = "pending" | "review" | "completed";
+export type ScheduledReviewType = "D+1" | "D+7" | "D+21";
+export type ScheduledReviewStatus = "pending" | "completed" | "missed";
 
 export interface ReadingMilestone {
   title: string;
@@ -118,6 +120,17 @@ export interface MilestoneSummaryWithBook extends MilestoneSummary {
   };
 }
 
+export interface ScheduledReview {
+  id: string;
+  user_id: string;
+  milestone_summary_id: string;
+  review_date: string;
+  review_type: ScheduledReviewType;
+  status: ScheduledReviewStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---- Insert types (omit server-generated fields) ----
 
 export type SubjectInsert = Omit<Subject, "id" | "created_at" | "updated_at">;
@@ -173,6 +186,9 @@ export type MilestoneSummaryInsert = Omit<
   MilestoneSummary,
   "id" | "created_at" | "updated_at" | "status"
 > & Partial<Pick<MilestoneSummary, "status">>;
+
+export type ScheduledReviewInsert = Omit<ScheduledReview, "id" | "created_at" | "updated_at" | "status"> &
+  Partial<Pick<ScheduledReview, "status">>;
 
 // ---- Joined / view types ----
 

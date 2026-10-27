@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Brain, LayoutDashboard, Table2, Library, Clock, Menu, X, LogOut } from "lucide-react";
+import { Brain, LayoutDashboard, Table2, Library, Clock, CalendarDays, Menu, X, LogOut } from "lucide-react";
 import { signOut } from "@/app/login/actions";
 
 export function Navbar() {
@@ -36,6 +36,12 @@ export function Navbar() {
       href: "/history",
       icon: Clock,
       active: pathname.startsWith("/history"),
+    },
+    {
+      label: "Agenda",
+      href: "/agenda",
+      icon: CalendarDays,
+      active: pathname.startsWith("/agenda"),
     },
   ];
 

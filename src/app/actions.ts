@@ -15,6 +15,7 @@ import { computeSubjectPageProgress } from "@/lib/subject-progress";
 import { getTodayTotalReadingTime, pph, secondsToMinutes, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
 import { getCrossedMilestones } from "@/lib/milestone-crossing";
+import { getReviewScheduleDates, type AgendaDeliverableEvent, type AgendaReviewEvent } from "@/lib/agenda";
 import {
   nextMilestoneSummaryStatus,
   validateMilestoneSummaryContent,
@@ -41,6 +42,7 @@ import type {
   MilestoneSummary,
   MilestoneSummaryWithBook,
   ReadingMilestone,
+  ScheduledReview,
 } from "@/types/database";
 
 // ============================================================
@@ -737,15 +739,137 @@ export async function updateMilestoneSummary(id: string, content: string) {
   const nextStatus = nextMilestoneSummaryStatus(current.status as MilestoneSummary["status"]);
   if (!nextStatus) throw new Error("Este resumo já foi concluído.");
 
-  const { error } = await client
-    .from("milestone_summaries")
-    .update({ content: content.trim(), status: nextStatus })
-    .eq("id", id)
-    .eq("user_id", user.id);
-  if (error) throw new Error(error.message);
+  if (nextStatus === "completed") {
+    const completedDate = todayISO();
+    const [reviewD1, reviewD7, reviewD21] = getReviewScheduleDates(completedDate);
+    const { error } = await client.rpc("complete_milestone_summary", {
+      p_summary_id: id,
+      p_content: content.trim(),
+      p_completed_date: completedDate,
+      p_review_date_1: reviewD1.review_date,
+      p_review_date_7: reviewD7.review_date,
+      p_review_date_21: reviewD21.review_date,
+    });
+    if (error) throw new Error(error.message);
+    revalidatePath("/agenda");
+  } else {
+    const { error } = await client
+      .from("milestone_summaries")
+      .update({ content: content.trim(), status: nextStatus })
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (error) throw new Error(error.message);
+  }
 
   revalidatePath("/");
   return { status: nextStatus };
+}
+
+interface AgendaDeliverableRow {
+  id: string;
+  title: string;
+  date: string;
+  subject: { name: string } | null;
+}
+
+interface AgendaScheduledReviewRow extends ScheduledReview {
+  milestone_summary: {
+    milestone_title: string;
+    milestone_page: number;
+    content: string | null;
+    book: { title: string } | null;
+  } | null;
+}
+
+export async function getAgendaData(from: string, to: string): Promise<{
+  deliverables: AgendaDeliverableEvent[];
+  reviews: AgendaReviewEvent[];
+}> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+    throw new Error("Intervalo de datas inválido para a Agenda.");
+  }
+
+  const { client, user } = await requireSupabaseUser();
+  const pageSize = 1000;
+  const deliverableRows: AgendaDeliverableRow[] = [];
+  const reviewRows: AgendaScheduledReviewRow[] = [];
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
+      .from("deliverables")
+      .select("id, title, date, subject:subjects(name)")
+      .gte("date", from)
+      .lte("date", to)
+      .order("date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as unknown as AgendaDeliverableRow[];
+    deliverableRows.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
+      .from("scheduled_reviews")
+      .select("*, milestone_summary:milestone_summaries(milestone_title, milestone_page, content, book:readings(title))")
+      .eq("user_id", user.id)
+      .gte("review_date", from)
+      .lte("review_date", to)
+      .order("review_date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as unknown as AgendaScheduledReviewRow[];
+    reviewRows.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+
+  const deliverables: AgendaDeliverableEvent[] = deliverableRows.map((row) => ({
+    kind: "deliverable",
+    id: row.id,
+    date: row.date,
+    title: row.title,
+    subjectName: row.subject?.name ?? "Sem disciplina",
+  }));
+  const reviews: AgendaReviewEvent[] = reviewRows.flatMap((row) => {
+    const summary = row.milestone_summary;
+    if (!summary) return [];
+    return [{
+      kind: "review",
+      id: row.id,
+      date: row.review_date,
+      reviewType: row.review_type,
+      status: row.status,
+      milestoneSummaryId: row.milestone_summary_id,
+      milestoneTitle: summary.milestone_title,
+      milestonePage: summary.milestone_page,
+      summaryContent: summary.content,
+      bookTitle: summary.book?.title ?? "Leitura removida",
+    }];
+  });
+
+  return { deliverables, reviews };
+}
+
+export async function completeReview(reviewId: string) {
+  if (typeof reviewId !== "string" || reviewId.length === 0) {
+    throw new Error("Revisão agendada inválida.");
+  }
+  const { client, user } = await requireSupabaseUser();
+  const { data, error } = await client
+    .from("scheduled_reviews")
+    .update({ status: "completed" })
+    .eq("id", reviewId)
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Esta revisão não está mais pendente.");
+  revalidatePath("/agenda");
+  revalidatePath("/");
+  return { success: true };
 }
 
 export async function updateReadingSession(

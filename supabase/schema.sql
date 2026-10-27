@@ -1,6 +1,6 @@
 -- ============================================================
 -- LITHIUM — Motor Cognitivo de Estudos
--- Schema v1.9 (Totalmente idempotente e seguro contra reexecuções)
+-- Schema v1.10 (Totalmente idempotente e seguro contra reexecuções)
 -- ============================================================
 
 -- 0. Extensions
@@ -225,12 +225,37 @@ CREATE TRIGGER milestone_summaries_updated_at
   BEFORE UPDATE ON milestone_summaries
   FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
+-- ============================================================
+-- TABELA 8: scheduled_reviews (Agenda de Revisões Espaçadas)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS scheduled_reviews (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id              UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  milestone_summary_id UUID NOT NULL REFERENCES milestone_summaries(id) ON DELETE CASCADE,
+  review_date          DATE NOT NULL,
+  review_type          TEXT NOT NULL CHECK (review_type IN ('D+1', 'D+7', 'D+21')),
+  status               TEXT NOT NULL DEFAULT 'pending'
+                       CHECK (status IN ('pending', 'completed', 'missed')),
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_scheduled_reviews_user_summary_type
+  ON scheduled_reviews (user_id, milestone_summary_id, review_type);
+CREATE INDEX IF NOT EXISTS idx_scheduled_reviews_user_date
+  ON scheduled_reviews (user_id, review_date, status);
+
+DROP TRIGGER IF EXISTS scheduled_reviews_updated_at ON scheduled_reviews;
+CREATE TRIGGER scheduled_reviews_updated_at
+  BEFORE UPDATE ON scheduled_reviews
+  FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
 -- Índice único para upsert idempotente por leitura, data e tipo
 CREATE UNIQUE INDEX IF NOT EXISTS uq_reviews_reading_date_type
   ON spaced_reviews (reading_id, review_date, type);
 
 -- ============================================================
--- Row Level Security: Acesso total (app pessoal, sem auth)
+-- Row Level Security: dados globais do app e tabelas de usuário autenticadas
 -- ============================================================
 ALTER TABLE subjects         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deliverables     ENABLE ROW LEVEL SECURITY;
@@ -239,6 +264,7 @@ ALTER TABLE reading_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE spaced_reviews   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_settings     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE milestone_summaries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scheduled_reviews ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   CREATE POLICY "Allow all" ON subjects FOR ALL USING (true) WITH CHECK (true);
@@ -274,6 +300,64 @@ CREATE POLICY "Users manage own milestone summaries"
 
 REVOKE ALL ON TABLE milestone_summaries FROM PUBLIC, anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE milestone_summaries TO authenticated;
+
+DROP POLICY IF EXISTS "Users manage own scheduled reviews" ON scheduled_reviews;
+CREATE POLICY "Users manage own scheduled reviews"
+  ON scheduled_reviews
+  FOR ALL TO authenticated
+  USING ((SELECT auth.uid()) = user_id)
+  WITH CHECK ((SELECT auth.uid()) = user_id);
+
+REVOKE ALL ON TABLE scheduled_reviews FROM PUBLIC, anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE scheduled_reviews TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.complete_milestone_summary(
+  p_summary_id UUID,
+  p_content TEXT,
+  p_completed_date DATE,
+  p_review_date_1 DATE,
+  p_review_date_7 DATE,
+  p_review_date_21 DATE
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+  IF p_content IS NULL OR length(btrim(p_content)) = 0 THEN
+    RAISE EXCEPTION 'Summary content is required';
+  END IF;
+  IF p_review_date_1 <> p_completed_date + 1
+    OR p_review_date_7 <> p_completed_date + 7
+    OR p_review_date_21 <> p_completed_date + 21 THEN
+    RAISE EXCEPTION 'Invalid scheduled review dates';
+  END IF;
+
+  UPDATE public.milestone_summaries
+     SET content = btrim(p_content), status = 'completed'
+   WHERE id = p_summary_id
+     AND user_id = auth.uid()
+     AND status = 'review';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Milestone summary is unavailable or not in review';
+  END IF;
+
+  INSERT INTO public.scheduled_reviews
+    (user_id, milestone_summary_id, review_date, review_type)
+  VALUES
+    (auth.uid(), p_summary_id, p_review_date_1, 'D+1'),
+    (auth.uid(), p_summary_id, p_review_date_7, 'D+7'),
+    (auth.uid(), p_summary_id, p_review_date_21, 'D+21')
+  ON CONFLICT (user_id, milestone_summary_id, review_type) DO NOTHING;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.complete_milestone_summary(UUID, TEXT, DATE, DATE, DATE, DATE) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.complete_milestone_summary(UUID, TEXT, DATE, DATE, DATE, DATE) TO authenticated;
 
 -- ============================================================
 -- VIEW: velocidade agregada por tipo de leitura (v1.3)
