@@ -98,6 +98,13 @@ export function ReadingTimerBar() {
   }, [timer, openFinishDialog]);
 
   useEffect(() => {
+    if (pathname === "/login") {
+      if (previousTitle.current !== null) {
+        updateDocumentTitle(previousTitle.current);
+        previousTitle.current = null;
+      }
+      return;
+    }
     if (timer?.status === "running") {
       if (previousTitle.current === null) previousTitle.current = document.title;
       updateDocumentTitle(`${formatClock(remaining)} · Lithium`);
@@ -124,6 +131,8 @@ export function ReadingTimerBar() {
     setSprintCompletion(null);
     router.refresh();
   };
+
+  if (pathname === "/login") return null;
 
   return (
     <>

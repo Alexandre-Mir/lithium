@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { addToast, pauseToast, removeToast, resumeToast, useToastStore } from "@/lib/toast-store";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 
 export function Toaster() {
+  const pathname = usePathname();
   const toasts = useToastStore();
 
   useEffect(() => {
+    if (pathname === "/login") return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || toasts.length === 0) return;
       event.preventDefault();
@@ -16,7 +19,7 @@ export function Toaster() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toasts]);
+  }, [pathname, toasts]);
 
   const runAction = async (id: string, action?: () => void | Promise<void>) => {
     try {
@@ -28,6 +31,8 @@ export function Toaster() {
       removeToast(id);
     }
   };
+
+  if (pathname === "/login") return null;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[100] flex flex-col items-center gap-2 px-4">

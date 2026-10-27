@@ -9,6 +9,8 @@ export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  if (pathname === "/login") return null;
+
   const navItems = [
     {
       label: "Dashboard Cascata",
