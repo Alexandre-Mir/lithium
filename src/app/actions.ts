@@ -2,7 +2,7 @@
 
 import { supabase } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
-import { todayISO, addDaysISO, daysUntil } from "@/lib/dates";
+import { todayISO, addDaysISO, daysUntil, startOfDayUtcISO } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
 import { pickInitialSpeed, pickUserPacePagesPerDay, speedFromTotals } from "@/lib/speed";
@@ -10,7 +10,7 @@ import { projectReadingQueue } from "@/lib/projection";
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { warnIfTruncated } from "@/lib/warn-if-truncated";
 import { computeRemaining } from "@/lib/progress";
-import { pph, secondsToMinutes, sessionSeconds } from "@/lib/session-time";
+import { getTodayTotalReadingTime, pph, secondsToMinutes, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
 import type {
   SubjectInsert,
@@ -24,6 +24,7 @@ import type {
   SubjectStat,
   Subject,
   Reading,
+  ReadingSession,
   ReadingWithProgress,
   Deliverable,
   ReadingWithSubject,
@@ -192,6 +193,11 @@ interface ReadingProgressViewRow extends ReadingProgressSummary {
   reading_id: string;
 }
 
+type TodayReadingSession = Pick<
+  ReadingSession,
+  "duration_minutes" | "duration_seconds" | "started_at" | "ended_at" | "created_at"
+>;
+
 type ReadingQueueSource = Pick<Reading, "id" | "target_pages" | "created_at" | "deadline" | "is_read"> & {
   pages_read: number;
 };
@@ -300,6 +306,67 @@ export async function getSpeedStats(): Promise<ReadingSpeedStat[]> {
   }
 
   return (data ?? []) as unknown as ReadingSpeedStat[];
+}
+
+async function getTodayReadingMinutes(): Promise<number> {
+  const today = todayISO();
+  const start = startOfDayUtcISO(today);
+  const end = startOfDayUtcISO(addDaysISO(today, 1));
+  const pageSize = 1000;
+  const sessions: TodayReadingSession[] = [];
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from("reading_sessions")
+      .select("duration_minutes, duration_seconds, started_at, ended_at, created_at")
+      .or(
+        `and(started_at.gte.${start},started_at.lt.${end}),and(ended_at.gte.${start},ended_at.lt.${end}),and(started_at.is.null,ended_at.is.null,created_at.gte.${start},created_at.lt.${end})`,
+      )
+      .order("created_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      console.warn("Não foi possível consultar as sessões de hoje:", error.message);
+      return 0;
+    }
+
+    const rows = (data ?? []) as unknown as TodayReadingSession[];
+    sessions.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+
+  return getTodayTotalReadingTime(sessions);
+}
+
+export async function getDailyGoalMinutes(): Promise<number> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("daily_goal_minutes")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Não foi possível consultar a meta diária; usando 60 minutos:", error.message);
+    return 60;
+  }
+
+  return Number(data?.daily_goal_minutes) || 60;
+}
+
+export async function updateDailyGoalMinutes(minutes: number): Promise<number> {
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
+    throw new Error("A meta diária deve ser um número inteiro entre 1 e 1.440 minutos.");
+  }
+
+  const { data, error } = await supabase
+    .from("app_settings")
+    .upsert({ id: 1, daily_goal_minutes: minutes })
+    .select("daily_goal_minutes")
+    .single();
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+  return Number(data.daily_goal_minutes);
 }
 
 export async function getReadingDetail(id: string) {
@@ -753,7 +820,7 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
 export async function getDashboardData() {
   const today = todayISO();
   const sevenDaysStr = addDaysISO(today, 7);
-  const [progressByReading, lastSessionResult, speedStats] = await Promise.all([
+  const [progressByReading, lastSessionResult, speedStats, todayReadingMinutes, dailyGoalMinutes] = await Promise.all([
     getReadingProgressMap(),
     supabase
       .from("reading_sessions")
@@ -762,6 +829,8 @@ export async function getDashboardData() {
       .limit(1)
       .maybeSingle(),
     getSpeedStats(),
+    getTodayReadingMinutes(),
+    getDailyGoalMinutes(),
   ]);
   if (lastSessionResult.error) {
     console.warn("Aviso ao buscar a leitura da sessão mais recente:", lastSessionResult.error.message);
@@ -919,6 +988,8 @@ export async function getDashboardData() {
     allDeliverables: allDeliverables ?? [],
     schemaError,
     lastSessionReadingId,
+    todayReadingMinutes,
+    dailyGoalMinutes,
   };
 }
 

@@ -13,6 +13,7 @@ import { SubjectStats } from "./subject-stats";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
 import type { ReadingSessionTarget } from "@/components/reading-session-modal";
 import { QuickSessionDialog } from "@/components/dashboard/quick-session-dialog";
+import { DailyGoalCard } from "@/components/dashboard/daily-goal-card";
 import { formatTodayLongBR } from "@/lib/dates";
 import { sumPendingLoad } from "@/lib/progress";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,8 @@ interface DashboardViewProps {
   subjectStats?: SubjectStat[];
   subjectStatsTruncated?: boolean;
   lastSessionReadingId?: string | null;
+  todayReadingMinutes: number;
+  dailyGoalMinutes: number;
 }
 
 export function DashboardView({
@@ -48,6 +51,8 @@ export function DashboardView({
   subjectStats = [],
   subjectStatsTruncated = false,
   lastSessionReadingId = null,
+  todayReadingMinutes,
+  dailyGoalMinutes,
 }: DashboardViewProps) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
@@ -140,6 +145,11 @@ export function DashboardView({
           </div>
         </div>
       </div>
+
+      <DailyGoalCard
+        todayReadingMinutes={todayReadingMinutes}
+        goalMinutes={dailyGoalMinutes}
+      />
 
       {/* ============================================================ */}
       {/* MÉTRICAS POR DISCIPLINA (Calculadas em tempo real)           */}

@@ -1,6 +1,6 @@
 -- ============================================================
 -- LITHIUM — Motor Cognitivo de Estudos
--- Schema v1.6 (Totalmente idempotente e seguro contra reexecuções)
+-- Schema v1.7 (Totalmente idempotente e seguro contra reexecuções)
 -- ============================================================
 
 -- 0. Extensions
@@ -178,6 +178,25 @@ CREATE INDEX IF NOT EXISTS idx_reviews_date    ON spaced_reviews(review_date);
 CREATE INDEX IF NOT EXISTS idx_reviews_status  ON spaced_reviews(status);
 CREATE INDEX IF NOT EXISTS idx_reviews_reading ON spaced_reviews(reading_id);
 
+-- ============================================================
+-- TABELA 6: app_settings (Preferências globais do app pessoal)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS app_settings (
+  id                 SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  daily_goal_minutes INTEGER NOT NULL DEFAULT 60
+                     CHECK (daily_goal_minutes BETWEEN 1 AND 1440),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO app_settings (id, daily_goal_minutes)
+VALUES (1, 60)
+ON CONFLICT (id) DO NOTHING;
+
+DROP TRIGGER IF EXISTS app_settings_updated_at ON app_settings;
+CREATE TRIGGER app_settings_updated_at
+  BEFORE UPDATE ON app_settings
+  FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
 -- Índice único para upsert idempotente por leitura, data e tipo
 CREATE UNIQUE INDEX IF NOT EXISTS uq_reviews_reading_date_type
   ON spaced_reviews (reading_id, review_date, type);
@@ -190,6 +209,7 @@ ALTER TABLE deliverables     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE readings         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reading_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE spaced_reviews   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_settings     ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   CREATE POLICY "Allow all" ON subjects FOR ALL USING (true) WITH CHECK (true);
@@ -209,6 +229,10 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
   CREATE POLICY "Allow all" ON spaced_reviews FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "Allow all" ON app_settings FOR ALL USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- ============================================================

@@ -5,6 +5,7 @@ import {
   daysUntil,
   formatDateBR,
   formatDateTimeBR,
+  startOfDayUtcISO,
   todayISO,
 } from "@/lib/dates";
 
@@ -46,5 +47,10 @@ describe("datas no fuso de São Paulo", () => {
     expect(formatDateBR("2026-10-24")).toBe("24/10/2026");
     expect(formatDateBR("2026-10-24", { day: "2-digit", month: "2-digit" })).toBe("24/10");
     expect(formatDateTimeBR("2026-10-24T03:00:00Z")).toBe("24/10/2026, 00:00");
+  });
+
+  it("converte a meia-noite de São Paulo para o limite UTC correto", () => {
+    expect(startOfDayUtcISO("2026-10-24")).toBe("2026-10-24T03:00:00.000Z");
+    expect(startOfDayUtcISO("2026-10-25")).toBe("2026-10-25T03:00:00.000Z");
   });
 });

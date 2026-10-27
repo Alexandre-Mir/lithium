@@ -1,11 +1,47 @@
 import type { ReadingSession, ReadingSessionSource } from "@/types/database";
+import { APP_TIMEZONE, todayISO } from "@/lib/dates";
 
 type SessionDuration = Pick<ReadingSession, "duration_minutes"> &
   Partial<Pick<ReadingSession, "duration_seconds">>;
 
+type SessionWithTimestamps = SessionDuration &
+  Partial<Pick<ReadingSession, "started_at" | "ended_at" | "created_at">>;
+
+const localDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: APP_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function timestampDateInAppTimezone(timestamp: string | null | undefined): string | null {
+  if (!timestamp) return null;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : localDateFormatter.format(date);
+}
+
 export function sessionSeconds(session: SessionDuration): number {
   // Compatibilidade com sessões anteriores à coluna duration_seconds.
   return session.duration_seconds ?? session.duration_minutes * 60;
+}
+
+/** Soma em minutos as sessões cujo início ou fim caiu hoje em São Paulo. */
+export function getTodayTotalReadingTime(sessions: readonly SessionWithTimestamps[]): number {
+  const today = todayISO();
+  const totalSeconds = sessions.reduce((total, session) => {
+    const startedToday = timestampDateInAppTimezone(session.started_at) === today;
+    const endedToday = timestampDateInAppTimezone(session.ended_at) === today;
+    const legacyManualSession =
+      !session.started_at &&
+      !session.ended_at &&
+      timestampDateInAppTimezone(session.created_at) === today;
+
+    return startedToday || endedToday || legacyManualSession
+      ? total + sessionSeconds(session)
+      : total;
+  }, 0);
+
+  return totalSeconds / 60;
 }
 
 export function pph(pages: number, seconds: number): number {

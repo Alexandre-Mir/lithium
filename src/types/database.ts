@@ -1,5 +1,5 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.6)
+// Lithium — Database Types (mirrors Supabase schema v1.7)
 // ============================================================
 
 export type ReadingType = "book" | "article";
@@ -85,6 +85,12 @@ export interface SpacedReview {
   created_at: string;
 }
 
+export interface AppSettings {
+  id: number;
+  daily_goal_minutes: number;
+  updated_at: string;
+}
+
 // ---- Insert types (omit server-generated fields) ----
 
 export type SubjectInsert = Omit<Subject, "id" | "created_at" | "updated_at">;
@@ -131,6 +137,8 @@ export interface ReadingSessionInsert {
 
 export type SpacedReviewInsert = Omit<SpacedReview, "id" | "created_at">;
 export type SpacedReviewUpdate = Partial<Pick<SpacedReview, "status">>;
+export type AppSettingsInsert = Pick<AppSettings, "daily_goal_minutes"> & Partial<Pick<AppSettings, "id">>;
+export type AppSettingsUpdate = Partial<Pick<AppSettings, "daily_goal_minutes">>;
 
 // ---- Joined / view types ----
 

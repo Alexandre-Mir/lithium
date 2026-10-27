@@ -21,6 +21,8 @@ export default async function HomePage() {
   let subjectStats: SubjectStat[] = [];
   let subjectStatsTruncated = false;
   let lastSessionReadingId: string | null = null;
+  let todayReadingMinutes = 0;
+  let dailyGoalMinutes = 60;
   let connectionError: string | null = null;
 
   try {
@@ -36,6 +38,8 @@ export default async function HomePage() {
     readingDeliverableMap = data.readingDeliverableMap || {};
     allDeliverables = data.allDeliverables || [];
     lastSessionReadingId = data.lastSessionReadingId ?? null;
+    todayReadingMinutes = data.todayReadingMinutes ?? 0;
+    dailyGoalMinutes = data.dailyGoalMinutes ?? 60;
     subjectStats = statsResult.stats || [];
     subjectStatsTruncated = statsResult.truncated;
 
@@ -74,6 +78,8 @@ export default async function HomePage() {
         subjectStats={subjectStats}
         subjectStatsTruncated={subjectStatsTruncated}
         lastSessionReadingId={lastSessionReadingId}
+        todayReadingMinutes={todayReadingMinutes}
+        dailyGoalMinutes={dailyGoalMinutes}
       />
     </div>
   );
