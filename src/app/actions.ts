@@ -444,7 +444,7 @@ export async function getReadingDetail(id: string) {
 }
 
 export async function createReading(input: ReadingInsert) {
-  const validationError = validateReadingUpdate({ deadline: input.deadline });
+  const validationError = validateReadingUpdate({ deadline: input.deadline, milestones: input.milestones });
   if (validationError) throw new Error(validationError);
 
   const currentSpeed = input.current_speed_pph ?? pickInitialSpeed(await getSpeedStats(), input.type);

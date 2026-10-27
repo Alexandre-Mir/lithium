@@ -1,10 +1,16 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.7)
+// Lithium — Database Types (mirrors Supabase schema v1.8)
 // ============================================================
 
 export type ReadingType = "book" | "article";
 export type ReviewStatus = "pending" | "done";
 export type ReadingSessionSource = "manual" | "timer" | "timer_adjusted";
+
+export interface ReadingMilestone {
+  title: string;
+  page: number;
+  completed?: boolean;
+}
 
 // ---- Row types ----
 
@@ -52,6 +58,7 @@ export interface Reading {
   published_year: number | null;
   metadata_source: string | null;
   metadata_fetched_at: string | null;
+  milestones: ReadingMilestone[];
   created_at: string;
   updated_at: string;
 }
@@ -111,6 +118,7 @@ export type ReadingInsert = Omit<
   | "published_year"
   | "metadata_source"
   | "metadata_fetched_at"
+  | "milestones"
 > &
   Partial<
     Pick<
@@ -122,6 +130,7 @@ export type ReadingInsert = Omit<
       | "published_year"
       | "metadata_source"
       | "metadata_fetched_at"
+      | "milestones"
     >
   >;
 export type ReadingUpdate = Partial<ReadingInsert>;

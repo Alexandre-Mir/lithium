@@ -2,6 +2,7 @@ interface ReadingUpdateFields {
   title?: unknown;
   target_pages?: unknown;
   deadline?: unknown;
+  milestones?: unknown;
 }
 
 function isValidDateISO(value: unknown): value is string {
@@ -33,6 +34,29 @@ export function validateReadingUpdate(input: ReadingUpdateFields): string | null
 
   if (input.deadline !== undefined && input.deadline !== null && !isValidDateISO(input.deadline)) {
     return "Informe um prazo válido no formato AAAA-MM-DD.";
+  }
+
+  if (input.milestones !== undefined) {
+    if (!Array.isArray(input.milestones)) {
+      return "Os marcos da leitura são inválidos.";
+    }
+
+    for (const milestone of input.milestones as unknown[]) {
+      if (typeof milestone !== "object" || milestone === null || Array.isArray(milestone)) {
+        return "Os marcos da leitura são inválidos.";
+      }
+      const fields = milestone as Record<string, unknown>;
+      if (
+        typeof fields.title !== "string" ||
+        !fields.title.trim() ||
+        typeof fields.page !== "number" ||
+        !Number.isInteger(fields.page) ||
+        fields.page < 1 ||
+        (fields.completed !== undefined && typeof fields.completed !== "boolean")
+      ) {
+        return "Cada marco precisa ter um título e uma página válida.";
+      }
+    }
   }
 
   return null;

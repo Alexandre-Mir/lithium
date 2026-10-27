@@ -27,6 +27,7 @@ function makeReading(overrides: Partial<Reading> = {}): Reading {
     published_year: null,
     metadata_source: null,
     metadata_fetched_at: null,
+    milestones: [],
     created_at: "2026-10-01T12:00:00Z",
     updated_at: "2026-10-01T12:00:00Z",
     ...overrides,

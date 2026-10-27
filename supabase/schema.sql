@@ -1,6 +1,6 @@
 -- ============================================================
 -- LITHIUM — Motor Cognitivo de Estudos
--- Schema v1.7 (Totalmente idempotente e seguro contra reexecuções)
+-- Schema v1.8 (Totalmente idempotente e seguro contra reexecuções)
 -- ============================================================
 
 -- 0. Extensions
@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS readings (
   published_year      INTEGER,
   metadata_source     TEXT,
   metadata_fetched_at TIMESTAMPTZ,
+  milestones          JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -116,6 +117,7 @@ ALTER TABLE readings ADD COLUMN IF NOT EXISTS publisher TEXT;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS published_year INTEGER;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS metadata_source TEXT;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS metadata_fetched_at TIMESTAMPTZ;
+ALTER TABLE readings ADD COLUMN IF NOT EXISTS milestones JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE readings ALTER COLUMN deadline DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_readings_subject  ON readings(subject_id);

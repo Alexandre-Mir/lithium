@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Reading, Subject, Deliverable, ReadingType } from "@/types/database";
+import { Reading, ReadingMilestone, Subject, Deliverable, ReadingType } from "@/types/database";
 import {
   createReading,
   updateReading,
@@ -15,6 +15,7 @@ import {
 import { formatDateBR, todayISO } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { validateReadingUpdate } from "@/lib/reading-validation";
+import { parseRawTocToMilestones } from "@/lib/toc-parser";
 import { metadataAttemptsSummary } from "@/lib/metadata-labels";
 import type { MetadataAttempt } from "@/lib/book-metadata";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,54 @@ function compareReadingDeadlines(left: Reading, right: Reading): number {
   return left.created_at.localeCompare(right.created_at);
 }
 
+function MilestoneListEditor({
+  milestones,
+  onChange,
+}: {
+  milestones: ReadingMilestone[];
+  onChange: (milestones: ReadingMilestone[]) => void;
+}) {
+  if (!milestones.length) return null;
+
+  return (
+    <div className="space-y-1.5 border-l-2 border-gray-200 pl-2 dark:border-gray-700">
+      {milestones.map((milestone, index) => (
+        <div key={index} className="grid grid-cols-[minmax(0,1fr)_68px_28px] items-center gap-1">
+          <Input
+            value={milestone.title}
+            onChange={(event) => onChange(milestones.map((item, itemIndex) =>
+              itemIndex === index ? { ...item, title: event.target.value } : item
+            ))}
+            aria-label={`Título do marco ${index + 1}`}
+            className="h-7 rounded px-1.5 text-[11px]"
+          />
+          <Input
+            type="number"
+            min={1}
+            step={1}
+            value={milestone.page}
+            onChange={(event) => onChange(milestones.map((item, itemIndex) =>
+              itemIndex === index ? { ...item, page: Number(event.target.value) } : item
+            ))}
+            aria-label={`Página do marco ${index + 1}`}
+            className="h-7 rounded px-1.5 text-[11px] font-mono"
+          />
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label={`Remover marco ${index + 1}`}
+            onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))}
+            className="h-7 w-7 text-gray-500 hover:text-red-600"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ReadingsTable({
   initialReadings,
   subjects,
@@ -85,6 +134,9 @@ export function ReadingsTable({
   const [newTargetPages, setNewTargetPages] = useState<number | "">(30);
   const [newDeadline, setNewDeadline] = useState("");
   const [newHasDeadline, setNewHasDeadline] = useState(true);
+  const [newTocText, setNewTocText] = useState("");
+  const [newMilestones, setNewMilestones] = useState<ReadingMilestone[]>([]);
+  const [newTocMessage, setNewTocMessage] = useState<string | null>(null);
   const [newCover, setNewCover] = useState<string | null>(null);
   const [newPublisher, setNewPublisher] = useState<string | null>(null);
   const [newPublishedYear, setNewPublishedYear] = useState<number | null>(null);
@@ -97,10 +149,32 @@ export function ReadingsTable({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Reading>>({});
   const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null);
+  const [editTocText, setEditTocText] = useState("");
+  const [editTocMessage, setEditTocMessage] = useState<string | null>(null);
   const [unmarkReadingId, setUnmarkReadingId] = useState<string | null>(null);
   const unmarkReading = readings.find((reading) => reading.id === unmarkReadingId);
 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+
+  const generateNewMilestones = () => {
+    const generated = parseRawTocToMilestones(newTocText);
+    if (!generated.length) {
+      setNewTocMessage("Não encontrei títulos com número de página no sumário.");
+      return;
+    }
+    setNewMilestones(generated);
+    setNewTocMessage(`${generated.length} marco(s) gerado(s). Revise antes de cadastrar.`);
+  };
+
+  const generateEditMilestones = () => {
+    const generated = parseRawTocToMilestones(editTocText);
+    if (!generated.length) {
+      setEditTocMessage("Não encontrei títulos com número de página no sumário.");
+      return;
+    }
+    setEditValues((previous) => ({ ...previous, milestones: generated }));
+    setEditTocMessage(`${generated.length} marco(s) gerado(s). Revise antes de salvar.`);
+  };
 
   // Agrupamento ordenado de deliverables por matéria para a Regra Cronológica
   const deliverablesBySubject = new Map<string, Deliverable[]>();
@@ -200,6 +274,7 @@ export function ReadingsTable({
         published_year: newPublishedYear,
         metadata_source: newMetadataSource,
         metadata_fetched_at: null,
+        milestones: newMilestones,
       });
 
       if (created) {
@@ -222,6 +297,9 @@ export function ReadingsTable({
         setNewTargetPages(30);
         setNewDeadline("");
         setNewHasDeadline(true);
+        setNewTocText("");
+        setNewMilestones([]);
+        setNewTocMessage(null);
         onRefresh?.();
       }
     } catch (err) {
@@ -279,6 +357,8 @@ export function ReadingsTable({
         );
         setEditingId(null);
         setEditValues({});
+        setEditTocText("");
+        setEditTocMessage(null);
         onRefresh?.();
       }
     } catch (err) {
@@ -563,6 +643,31 @@ export function ReadingsTable({
             </Button>
           </div>
         </div>
+
+        {newType === "book" && (
+          <div className="mt-2.5 space-y-2 border-t border-gray-100 pt-2.5 dark:border-gray-800">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div>
+                <label htmlFor="new-reading-toc" className="mb-1 block text-[11px] font-semibold text-gray-600 dark:text-gray-400">
+                  Colar Sumário (Opcional)
+                </label>
+                <textarea
+                  id="new-reading-toc"
+                  value={newTocText}
+                  onChange={(event) => setNewTocText(event.target.value)}
+                  placeholder={"Introdução ........ 9\nCapítulo 1 - A origem - pág. 15"}
+                  rows={3}
+                  className="w-full resize-y rounded border border-gray-300 bg-white px-2 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-950"
+                />
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={generateNewMilestones} className="h-8 text-xs">
+                Gerar Marcos
+              </Button>
+            </div>
+            {newTocMessage && <p className="text-[10px] text-gray-500">{newTocMessage}</p>}
+            <MilestoneListEditor milestones={newMilestones} onChange={setNewMilestones} />
+          </div>
+        )}
       </div>
 
       {editErrorMessage && (
@@ -695,6 +800,29 @@ export function ReadingsTable({
                             placeholder="Autor"
                             className="h-6 text-xs rounded"
                           />
+                          {reading.type === "book" && (
+                            <div className="mt-2 space-y-1.5">
+                              <label htmlFor={`edit-toc-${reading.id}`} className="block text-[10px] font-semibold text-gray-600 dark:text-gray-400">
+                                Colar Sumário (Opcional)
+                              </label>
+                              <textarea
+                                id={`edit-toc-${reading.id}`}
+                                value={editTocText}
+                                onChange={(event) => setEditTocText(event.target.value)}
+                                rows={3}
+                                placeholder="Cole o índice para gerar os marcos"
+                                className="w-full resize-y rounded border border-gray-300 bg-white px-1.5 py-1 text-[10px] dark:border-gray-700 dark:bg-gray-950"
+                              />
+                              <Button type="button" size="sm" variant="outline" onClick={generateEditMilestones} className="h-6 px-2 text-[10px]">
+                                Gerar Marcos
+                              </Button>
+                              {editTocMessage && <p className="text-[10px] text-gray-500">{editTocMessage}</p>}
+                              <MilestoneListEditor
+                                milestones={editValues.milestones ?? reading.milestones ?? []}
+                                onChange={(milestones) => setEditValues((previous) => ({ ...previous, milestones }))}
+                              />
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div>
@@ -828,6 +956,8 @@ export function ReadingsTable({
                             onClick={() => {
                               setEditingId(null);
                               setEditValues({});
+                              setEditTocText("");
+                              setEditTocMessage(null);
                               setEditErrorMessage(null);
                             }}
                             className="h-6 w-6"
@@ -850,7 +980,10 @@ export function ReadingsTable({
                                 author: reading.author,
                                 target_pages: reading.target_pages,
                                 deadline: reading.deadline,
+                                milestones: reading.milestones ?? [],
                               });
+                              setEditTocText("");
+                              setEditTocMessage(null);
                             }}
                             className="text-xs text-gray-500 hover:text-gray-900 h-6 px-1.5"
                           >

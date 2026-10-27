@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { metadataAttemptsSummary } from "@/lib/metadata-labels";
 import { isUnusualSession } from "@/lib/session-anomaly";
+import { getCurrentMilestone } from "@/lib/toc-parser";
 import { ArrowLeft, Calendar, Clock, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 
 interface Props {
@@ -61,6 +62,24 @@ export function ReadingDetailView({
   const totalSecondsSpent = sessions.reduce((sum, session) => sum + sessionSeconds(session), 0);
   const speed = pph(totalPagesRead, totalSecondsSpent);
   const calibratedSpeed = sessions.length > 0 ? speed : reading.current_speed_pph;
+  const milestones = (reading.milestones ?? []).slice().sort((left, right) => left.page - right.page);
+  const currentMilestone = getCurrentMilestone(projection.pagesRead, milestones);
+  const currentMilestoneIndex = currentMilestone
+    ? milestones.findIndex((milestone) => milestone === currentMilestone)
+    : -1;
+  const nextMilestonePage = currentMilestoneIndex >= 0
+    ? milestones[currentMilestoneIndex + 1]?.page
+    : undefined;
+  const currentChapterEnd = currentMilestoneIndex < 0
+    ? null
+    : nextMilestonePage === undefined
+      ? reading.read_full_book
+        ? reading.full_book_pages ?? reading.target_pages
+        : reading.target_pages
+      : nextMilestonePage - 1;
+  const pagesUntilCurrentChapterEnd = currentChapterEnd === null
+    ? null
+    : Math.max(0, currentChapterEnd - projection.pagesRead);
 
   const markAsRead = async () => {
     setOptimisticIsRead(true);
@@ -276,6 +295,49 @@ export function ReadingDetailView({
           </div>
         )}
       </section>
+
+      {milestones.length > 0 && (
+        <section className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-3 text-sm font-bold">Próximos Marcos</h2>
+          {currentMilestone && pagesUntilCurrentChapterEnd !== null ? (
+            <p className="mb-3 text-xs text-gray-600 dark:text-gray-300">
+              Faltam <span className="font-mono font-semibold">{pagesUntilCurrentChapterEnd}</span> páginas para terminar o capítulo atual.
+            </p>
+          ) : (
+            <p className="mb-3 text-xs text-gray-500">
+              O primeiro marco começa na página {milestones[0].page}.
+            </p>
+          )}
+          <ol className="space-y-0 border-l border-gray-200 dark:border-gray-700">
+            {milestones.map((milestone, index) => {
+              const isCurrent = index === currentMilestoneIndex;
+              const isCompleted = milestone.completed === true || isRead || (currentMilestoneIndex >= 0 && index < currentMilestoneIndex);
+              return (
+                <li key={`${milestone.page}-${index}`} className="relative pl-4 pb-3 last:pb-0">
+                  <span
+                    className={`absolute -left-[4px] top-1 h-2 w-2 rounded-full border ${
+                      isCurrent
+                        ? "border-gray-900 bg-gray-900 dark:border-gray-100 dark:bg-gray-100"
+                        : isCompleted
+                          ? "border-gray-400 bg-gray-400"
+                          : "border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-900"
+                    }`}
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className={isCurrent ? "font-semibold text-gray-900 dark:text-gray-100" : "text-gray-600 dark:text-gray-400"}>
+                      {milestone.title}
+                    </span>
+                    <span className="inline-flex items-center gap-2 font-mono text-[10px] text-gray-500">
+                      p. {milestone.page}
+                      <span>{isCurrent ? "Atual" : isCompleted ? "Concluído" : "Próximo"}</span>
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
 
       {/* Histórico de Sessões */}
       <section className="rounded-md border border-gray-200 bg-white overflow-hidden dark:border-gray-800 dark:bg-gray-900">
