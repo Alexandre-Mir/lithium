@@ -50,7 +50,10 @@ export function QuickSessionDialog({
 
   const startTimer = () => {
     if (!activeReading) return;
-    if (startReadingTimer(activeReading.id, activeReading.title)) onOpenChange(false);
+    if (startReadingTimer(activeReading.id, activeReading.title, {
+      currentPage: activeReading.pages_read,
+      totalPages: activeReading.full_book_pages ?? activeReading.target_pages,
+    })) onOpenChange(false);
   };
 
   const registerSession = () => {

@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { metadataAttemptsSummary } from "@/lib/metadata-labels";
 import { isUnusualSession } from "@/lib/session-anomaly";
+import { pagesBeforeSession } from "@/lib/session-pages";
 import { getCurrentMilestone } from "@/lib/toc-parser";
 import { ArrowLeft, Calendar, Clock, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 
@@ -63,6 +64,7 @@ export function ReadingDetailView({
   const speed = pph(totalPagesRead, totalSecondsSpent);
   const calibratedSpeed = sessions.length > 0 ? speed : reading.current_speed_pph;
   const milestones = (reading.milestones ?? []).slice().sort((left, right) => left.page - right.page);
+  const totalBookPages = reading.full_book_pages ?? reading.target_pages;
   const currentMilestone = getCurrentMilestone(projection.pagesRead, milestones);
   const currentMilestoneIndex = currentMilestone
     ? milestones.findIndex((milestone) => milestone === currentMilestone)
@@ -203,7 +205,10 @@ export function ReadingDetailView({
           </div>
 
           <div className="flex flex-wrap items-start gap-2">
-            <Button size="sm" variant="outline" onClick={() => startReadingTimer(reading.id, reading.title)} aria-label="Iniciar cronômetro">
+            <Button size="sm" variant="outline" onClick={() => startReadingTimer(reading.id, reading.title, {
+              currentPage: projection.pagesRead,
+              totalPages: reading.full_book_pages ?? reading.target_pages,
+            })} aria-label="Iniciar cronômetro">
               <Play className="w-3.5 h-3.5 mr-1" /> Iniciar
             </Button>
             <Button size="sm" onClick={() => setModalOpen(true)}>
@@ -277,7 +282,7 @@ export function ReadingDetailView({
               {projection.overTarget > 0 && `(+${projection.overTarget} páginas além da meta)`}</>}
           </span>
         </div>
-        <div className="h-2 bg-gray-100 dark:bg-gray-800">
+        <div className="relative h-2 bg-gray-100 dark:bg-gray-800">
           <div
             className="h-full"
             style={{
@@ -285,6 +290,18 @@ export function ReadingDetailView({
               backgroundColor: subject.theme_color,
             }}
           />
+          {milestones.map((milestone, index) => {
+            const position = Math.min(100, Math.max(0, (milestone.page / totalBookPages) * 100));
+            return (
+              <span
+                key={`${milestone.page}-${index}`}
+                title={milestone.title}
+                aria-label={`${milestone.title}, página ${milestone.page}`}
+                className="absolute top-0 z-10 h-full w-0.5 -translate-x-1/2 bg-gray-900 dark:bg-gray-100"
+                style={{ left: `${position}%` }}
+              />
+            );
+          })}
         </div>
         {projection.pagesRead >= reading.target_pages && !isRead && (
           <div className="mt-3 flex items-center justify-between border border-gray-200 p-2 text-xs">
@@ -480,7 +497,12 @@ export function ReadingDetailView({
       </section>
 
       <ReadingSessionModal
-        reading={{ id: reading.id, title: reading.title }}
+        reading={{
+          id: reading.id,
+          title: reading.title,
+          currentPage: projection.pagesRead,
+          totalPages: reading.full_book_pages ?? reading.target_pages,
+        }}
         isOpen={modalOpen}
         mode="manual"
         onClose={() => setModalOpen(false)}
@@ -490,7 +512,12 @@ export function ReadingDetailView({
         }}
       />
       <ReadingSessionModal
-        reading={editingSession ? { id: reading.id, title: reading.title } : null}
+        reading={editingSession ? {
+          id: reading.id,
+          title: reading.title,
+          currentPage: pagesBeforeSession(sessions, editingSession.id),
+          totalPages: reading.full_book_pages ?? reading.target_pages,
+        } : null}
         session={editingSession ?? null}
         isOpen={Boolean(editingSession)}
         mode="edit"

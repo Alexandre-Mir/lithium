@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Brain, LayoutDashboard, Table2, Library, Clock } from "lucide-react";
+import { useState } from "react";
+import { Brain, LayoutDashboard, Table2, Library, Clock, Menu, X } from "lucide-react";
 
 export function Navbar() {
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
     {
@@ -51,7 +53,7 @@ export function Navbar() {
           </div>
         </Link>
 
-        <nav className="flex items-center gap-1">
+        <nav className="hidden items-center gap-1 md:flex">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -70,7 +72,43 @@ export function Navbar() {
             );
           })}
         </nav>
+
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 items-center justify-center rounded border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900 md:hidden"
+          aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="mobile-navigation"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+        >
+          {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        </button>
       </div>
+      {mobileMenuOpen && (
+        <nav id="mobile-navigation" className="border-t border-gray-200 bg-white px-4 py-2 dark:border-gray-800 dark:bg-gray-950 md:hidden">
+          <div className="mx-auto flex max-w-7xl flex-col gap-1 sm:px-4">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  aria-current={item.active ? "page" : undefined}
+                  className={`flex min-h-10 items-center gap-2 rounded px-3 py-2 text-sm font-medium ${
+                    item.active
+                      ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-gray-100"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </header>
   );
 }

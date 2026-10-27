@@ -153,13 +153,18 @@ export function DeliverablesTable({
               size="sm"
               className="w-full h-8 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold rounded shadow-none"
             >
-              <Plus className="w-3.5 h-3.5 mr-1" /> Add
+              <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar
             </Button>
           </div>
         </div>
       </div>
 
       {/* Deliverables Table Flat */}
+      {deliverables.length === 0 ? (
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-5 text-center text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          Nenhuma entrega cadastrada. Adicione provas ou trabalhos para liberar o rastreamento de Metas (Tier 2).
+        </div>
+      ) : (
       <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
         <Table>
           <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
@@ -172,14 +177,7 @@ export function DeliverablesTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {deliverables.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-6 text-gray-500 text-xs">
-                  Nenhuma entrega cadastrada.
-                </TableCell>
-              </TableRow>
-            ) : (
-              deliverables.map((deliv) => {
+            {deliverables.map((deliv) => {
                 const isEditing = editingId === deliv.id;
                 const sub = subjectMap.get(deliv.subject_id);
                 const daysLeft = daysUntil(deliv.date);
@@ -319,11 +317,11 @@ export function DeliverablesTable({
                     </TableCell>
                   </TableRow>
                 );
-              })
-            )}
+              })}
           </TableBody>
         </Table>
       </div>
+      )}
     </div>
   );
 }

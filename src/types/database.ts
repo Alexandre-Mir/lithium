@@ -172,6 +172,8 @@ export interface ReadingSessionWithReading extends ReadingSession {
     chapter_title: string | null;
     author: string | null;
     type: ReadingType;
+    target_pages: number;
+    full_book_pages: number | null;
     subject: {
       name: string;
       theme_color: string;
@@ -190,4 +192,5 @@ export interface SubjectStat {
   progressPercent: number;
   totalSeconds: number;
   totalPages: number;
+  totalTargetPages: number;
 }

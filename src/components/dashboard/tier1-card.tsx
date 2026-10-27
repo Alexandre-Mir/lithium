@@ -69,7 +69,7 @@ export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
       <div className="space-y-1 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge className="bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 text-[10px] font-bold uppercase rounded py-0">
-            {review.type === "active_recall" ? "Active Recall" : review.type}
+            {review.type === "active_recall" ? "Revisão Ativa" : review.type}
           </Badge>
 
           {isOverdue ? (

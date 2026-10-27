@@ -11,6 +11,7 @@ import { calculateSuggestedPages, getSuggestedReading } from "@/lib/recommendati
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { warnIfTruncated } from "@/lib/warn-if-truncated";
 import { computeRemaining } from "@/lib/progress";
+import { computeSubjectPageProgress } from "@/lib/subject-progress";
 import { getTodayTotalReadingTime, pph, secondsToMinutes, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
 import type {
@@ -601,7 +602,7 @@ function revalidateReadingSessionPaths(readingId: string) {
 export async function getAllReadingSessions() {
   const { data, error } = await supabase
     .from("reading_sessions")
-    .select("*, reading:readings(title, chapter_title, author, type, subject:subjects(name, theme_color))")
+    .select("*, reading:readings(title, chapter_title, author, type, target_pages, full_book_pages, subject:subjects(name, theme_color))")
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   const sessions = data ?? [];
@@ -794,7 +795,7 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
 
     const { data: readings, error: e2 } = await supabase
       .from("readings")
-      .select("id, subject_id, is_read");
+      .select("id, subject_id, is_read, target_pages");
     if (e2) {
       console.warn("Aviso ao carregar readings para stats:", e2.message);
       return { stats: [], truncated: false };
@@ -813,7 +814,7 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
 
     // Agregar estatísticas por disciplina
     const subjectRows = (subjects ?? []) as Subject[];
-    const readingRows = (readings ?? []) as Pick<Reading, "id" | "subject_id" | "is_read">[];
+    const readingRows = (readings ?? []) as Pick<Reading, "id" | "subject_id" | "is_read" | "target_pages">[];
     const progressByReading = new Map(
       progressRows.map((row) => [
         row.reading_id,
@@ -825,14 +826,15 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
       const subReadings = readingRows.filter((reading) => reading.subject_id === sub.id);
       const totalReadings = subReadings.length;
       const completedReadings = subReadings.filter((reading) => reading.is_read).length;
-      const progressPercent =
-        totalReadings > 0 ? Math.round((completedReadings / totalReadings) * 100) : 0;
 
       const subProgress = subReadings
         .map((reading) => progressByReading.get(reading.id))
         .filter((row): row is { total_seconds: number; pages_read: number } => Boolean(row));
       const totalSeconds = subProgress.reduce((sum, row) => sum + row.total_seconds, 0);
-      const totalPages = subProgress.reduce((sum, row) => sum + row.pages_read, 0);
+      const pageProgress = computeSubjectPageProgress(subReadings.map((reading) => ({
+        pagesRead: progressByReading.get(reading.id)?.pages_read ?? 0,
+        targetPages: reading.target_pages,
+      })));
 
       return {
         id: sub.id,
@@ -842,9 +844,10 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
         is_autonomous: sub.is_autonomous,
         totalReadings,
         completedReadings,
-        progressPercent,
+        progressPercent: pageProgress.progressPercent,
         totalSeconds,
-        totalPages,
+        totalPages: pageProgress.totalPagesRead,
+        totalTargetPages: pageProgress.totalTargetPages,
       };
     });
 

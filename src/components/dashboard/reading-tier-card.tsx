@@ -215,7 +215,10 @@ export function ReadingTierCard({
         <div className="relative z-10 flex items-center gap-1.5 shrink-0 pt-2 md:pt-0 border-t border-gray-100 dark:border-gray-800 md:border-t-0">
           <Button
             type="button"
-            onClick={() => startReadingTimer(reading.id, reading.title)}
+            onClick={() => startReadingTimer(reading.id, reading.title, {
+              currentPage: reading.pages_read,
+              totalPages: reading.full_book_pages ?? reading.target_pages,
+            })}
             size="sm"
             aria-label={`Iniciar cronômetro para ${reading.title}`}
             title="Iniciar cronômetro"

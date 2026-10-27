@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Reading, ReadingWithProgress, Subject } from "@/types/database";
+import { ReadingWithProgress, Subject } from "@/types/database";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { markReadingAsRead, markReadingAsUnread } from "@/app/actions";
@@ -24,7 +24,7 @@ import { startReadingTimer } from "@/lib/reading-timer-store";
 interface BookCardProps {
   reading: ReadingWithProgress;
   subject?: Subject;
-  onOpenSessionModal?: (reading: Reading) => void;
+  onOpenSessionModal?: (reading: ReadingWithProgress) => void;
   onRefresh?: () => void;
 }
 
@@ -194,7 +194,10 @@ export function BookCard({
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => startReadingTimer(reading.id, reading.title)}
+          onClick={() => startReadingTimer(reading.id, reading.title, {
+            currentPage: reading.pages_read,
+            totalPages: reading.full_book_pages ?? reading.target_pages,
+          })}
           aria-label={`Iniciar cronômetro para ${reading.title}`}
           title="Iniciar cronômetro"
           className="relative z-10 h-8 border-gray-300 px-2 text-[10px] dark:border-gray-700"

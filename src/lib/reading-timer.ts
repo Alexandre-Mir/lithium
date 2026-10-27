@@ -7,6 +7,13 @@ export interface TimerState {
   status: TimerStatus;
   accumulatedMs: number;
   segmentStartedAt: string | null;
+  currentPage?: number;
+  totalPages?: number | null;
+}
+
+export interface TimerReadingProgress {
+  currentPage: number;
+  totalPages: number | null;
 }
 
 function timestamp(now: Date): string {
@@ -22,6 +29,7 @@ export function startTimer(
   readingId: string,
   readingTitle: string,
   now: Date = new Date(),
+  progress?: TimerReadingProgress,
 ): TimerState {
   const startedAt = timestamp(now);
   return {
@@ -31,6 +39,7 @@ export function startTimer(
     status: "running",
     accumulatedMs: 0,
     segmentStartedAt: startedAt,
+    ...(progress ?? {}),
   };
 }
 
@@ -78,6 +87,8 @@ function isTimerState(value: unknown): value is TimerState {
   const record = value as Record<string, unknown>;
   if (typeof record.readingId !== "string" || record.readingId.length === 0) return false;
   if (typeof record.readingTitle !== "string") return false;
+  if (record.currentPage !== undefined && (!Number.isInteger(record.currentPage) || Number(record.currentPage) < 0)) return false;
+  if (record.totalPages !== undefined && record.totalPages !== null && (!Number.isInteger(record.totalPages) || Number(record.totalPages) < 1)) return false;
   if (!isIsoTimestamp(record.startedAt)) return false;
   if (record.status !== "running" && record.status !== "paused") return false;
   if (typeof record.accumulatedMs !== "number" || !Number.isInteger(record.accumulatedMs) || record.accumulatedMs < 0) return false;

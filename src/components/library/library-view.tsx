@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Reading, ReadingWithProgress, Subject } from "@/types/database";
+import { ReadingWithProgress, Subject } from "@/types/database";
 import { BookCard } from "./book-card";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
 import type { ReadingSessionTarget } from "@/components/reading-session-modal";
@@ -66,8 +66,13 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
     return matchesSearch && matchesSubject && matchesType && matchesStatus;
   });
 
-  const handleOpenSession = (reading: Reading) => {
-    setActiveReadingForSession({ id: reading.id, title: reading.title });
+  const handleOpenSession = (reading: ReadingWithProgress) => {
+    setActiveReadingForSession({
+      id: reading.id,
+      title: reading.title,
+      currentPage: reading.pages_read,
+      totalPages: reading.full_book_pages ?? reading.target_pages,
+    });
     setSessionModalOpen(true);
   };
 
@@ -89,7 +94,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
             Biblioteca de Textos
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Cards flat com capa via metadados persistidos ou tema colorido.
+            Acompanhe suas leituras, sessões e prazos em um só lugar.
           </p>
         </div>
 

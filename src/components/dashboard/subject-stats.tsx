@@ -72,7 +72,7 @@ export function SubjectStats({ stats, truncated = false }: SubjectStatsProps) {
               <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
                 <BookOpen className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 <span className="font-mono font-medium text-gray-800 dark:text-gray-200">
-                  {stat.totalPages}p lidas
+                  {stat.totalPages}/{stat.totalTargetPages}p
                 </span>
               </div>
             </div>
@@ -80,7 +80,7 @@ export function SubjectStats({ stats, truncated = false }: SubjectStatsProps) {
             {/* Barra de Progresso Linear */}
             <div className="space-y-1 pt-1">
               <div className="flex items-center justify-between text-[10px] text-gray-500">
-                <span>Progresso das Leituras</span>
+                <span>Páginas lidas / meta</span>
                 <span className="font-mono font-bold text-gray-800 dark:text-gray-200">
                   {stat.progressPercent}%
                 </span>

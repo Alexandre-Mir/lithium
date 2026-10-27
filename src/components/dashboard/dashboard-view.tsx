@@ -71,7 +71,12 @@ export function DashboardView({
   ) ?? null;
 
   const handleOpenSession = (reading: ReadingWithSubject) => {
-    setActiveReading({ id: reading.id, title: reading.title });
+    setActiveReading({
+      id: reading.id,
+      title: reading.title,
+      currentPage: reading.pages_read,
+      totalPages: reading.full_book_pages ?? reading.target_pages,
+    });
     setModalOpen(true);
   };
 
@@ -111,7 +116,7 @@ export function DashboardView({
               Efeito Cascata Diário
             </h1>
             <p className="text-xs text-gray-400 max-w-2xl leading-relaxed">
-              Alocação algorítmica de tempo: retenção em primeiro lugar (Active Recall),
+              Alocação algorítmica de tempo: retenção em primeiro lugar (Revisão Ativa),
               provas críticas a seguir (&le; 7 dias), estudos regulares e ritmo autônomo.
             </p>
           </div>
@@ -226,7 +231,7 @@ export function DashboardView({
                   Zona de Perigo — Provas e Entregas em &le; 7 dias
                 </h2>
                 <Badge variant="outline" className="text-[10px] border-red-300 text-red-700 dark:text-red-300 py-0 flex items-center gap-1">
-                  <Flame className="w-3 h-3" /> Hard Deadline
+                  <Flame className="w-3 h-3" /> Prazo Rígido
                 </Badge>
               </div>
             </div>

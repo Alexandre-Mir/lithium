@@ -7,6 +7,7 @@ import {
   resumeTimer,
   serialize,
   startTimer,
+  type TimerReadingProgress,
   type TimerState,
 } from "@/lib/reading-timer";
 
@@ -96,7 +97,11 @@ export function getReadingTimerSnapshot(): TimerState | null {
   return snapshot;
 }
 
-export function startReadingTimer(readingId: string, readingTitle: string): boolean {
+export function startReadingTimer(
+  readingId: string,
+  readingTitle: string,
+  progress?: TimerReadingProgress,
+): boolean {
   const current = getReadingTimerSnapshot();
   if (current && typeof window !== "undefined") {
     const confirmed = window.confirm(
@@ -104,7 +109,7 @@ export function startReadingTimer(readingId: string, readingTitle: string): bool
     );
     if (!confirmed) return false;
   }
-  commit(startTimer(readingId, readingTitle));
+  commit(startTimer(readingId, readingTitle, new Date(), progress));
   return true;
 }
 

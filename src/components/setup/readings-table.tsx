@@ -639,7 +639,7 @@ export function ReadingsTable({
               size="sm"
               className="w-full h-8 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold rounded shadow-none"
             >
-              <Plus className="w-3.5 h-3.5 mr-1" /> Add
+              <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar
             </Button>
           </div>
         </div>

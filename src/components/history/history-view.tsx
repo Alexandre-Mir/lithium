@@ -7,6 +7,7 @@ import { ReadingSessionWithReading } from "@/types/database";
 import { formatDateTimeBR } from "@/lib/dates";
 import { formatDuration, pph, sessionSeconds, sessionSourceLabel } from "@/lib/session-time";
 import { isUnusualSession } from "@/lib/session-anomaly";
+import { pagesBeforeSession } from "@/lib/session-pages";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -254,7 +255,12 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
       </div>
 
       <ReadingSessionModal
-        reading={editingSession ? { id: editingSession.reading_id, title: editingSession.reading?.title || "Leitura" } : null}
+        reading={editingSession ? {
+          id: editingSession.reading_id,
+          title: editingSession.reading?.title || "Leitura",
+          currentPage: pagesBeforeSession(sessionsByReading.get(editingSession.reading_id) ?? [], editingSession.id),
+          totalPages: editingSession.reading?.full_book_pages ?? editingSession.reading?.target_pages ?? null,
+        } : null}
         session={editingSession ?? null}
         isOpen={Boolean(editingSession)}
         mode="edit"

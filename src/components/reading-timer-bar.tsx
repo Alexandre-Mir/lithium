@@ -168,7 +168,12 @@ export function ReadingTimerBar() {
         </div>
       )}
       <ReadingSessionModal
-        reading={finishingTimer ? { id: finishingTimer.readingId, title: finishingTimer.readingTitle } : null}
+        reading={finishingTimer ? {
+          id: finishingTimer.readingId,
+          title: finishingTimer.readingTitle,
+          currentPage: finishingTimer.currentPage ?? 0,
+          totalPages: finishingTimer.totalPages ?? null,
+        } : null}
         isOpen={finishingTimer !== null}
         mode="timer"
         timerState={finishingTimer}
