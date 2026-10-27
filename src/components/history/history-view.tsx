@@ -83,7 +83,7 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
             Histórico de Sessões de Leitura
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Registro de todas as sessões executadas pelo Motor Cognitivo para calibrar a taxa de absorção.
+            Suas sessões ajudam a calibrar a velocidade de leitura.
           </p>
         </div>
 

@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  cancelPendingTimerStart,
   clearReadingTimer,
   completeReadingSprint,
+  confirmPendingTimerStart,
+  getPendingTimerStart,
   getReadingTimerSnapshot,
   pauseReadingTimer,
   remainingSprintSeconds,
@@ -76,5 +79,35 @@ describe("sprint countdown", () => {
     expect(timer?.status).toBe("paused");
     expect(timer && elapsedSeconds(timer)).toBe(600);
     expect(remainingSprintSeconds(600)).toBe(900);
+  });
+
+  it("asks before replacing an active timer and starts the requested one after confirmation", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-27T12:00:00.000Z"));
+    startReadingTimer("reading-1", "Livro atual");
+    vi.setSystemTime(new Date("2026-10-27T12:10:00.000Z"));
+
+    startReadingTimer("reading-2", "Novo livro", undefined, 3_600);
+
+    expect(getReadingTimerSnapshot()?.readingId).toBe("reading-1");
+    expect(getPendingTimerStart()).toMatchObject({
+      readingId: "reading-2",
+      readingTitle: "Novo livro",
+      durationSeconds: 3_600,
+    });
+
+    cancelPendingTimerStart();
+    expect(getReadingTimerSnapshot()?.readingId).toBe("reading-1");
+    expect(getPendingTimerStart()).toBeNull();
+
+    startReadingTimer("reading-2", "Novo livro", undefined, 3_600);
+
+    expect(confirmPendingTimerStart()).toBe(true);
+    expect(getReadingTimerSnapshot()).toMatchObject({
+      readingId: "reading-2",
+      readingTitle: "Novo livro",
+      durationSeconds: 3_600,
+    });
+    expect(getPendingTimerStart()).toBeNull();
   });
 });

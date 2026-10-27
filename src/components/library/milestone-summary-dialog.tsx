@@ -30,6 +30,10 @@ export function MilestoneSummaryDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const isPending = summary.status === "pending";
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && pending) return;
+    onOpenChange(nextOpen);
+  };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -49,7 +53,7 @@ export function MilestoneSummaryDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="rounded-md border border-gray-300 bg-white shadow-none dark:border-gray-700 dark:bg-gray-950 sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="text-sm font-semibold">

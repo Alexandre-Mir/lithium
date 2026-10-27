@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpenCheck, Sparkles } from "lucide-react";
+import { BookOpenCheck, Play, Sparkles, SquarePen } from "lucide-react";
 import type { ReadingWithSubject } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { ReadingCover } from "@/components/library/reading-cover";
@@ -10,14 +10,16 @@ interface RecommendationCardProps {
   reading: ReadingWithSubject | null;
   suggestedPages: number;
   goalReached: boolean;
-  onStartSession: (reading: ReadingWithSubject) => void;
+  onStartTimer: (reading: ReadingWithSubject) => void;
+  onRegisterSession: (reading: ReadingWithSubject) => void;
 }
 
 export function RecommendationCard({
   reading,
   suggestedPages,
   goalReached,
-  onStartSession,
+  onStartTimer,
+  onRegisterSession,
 }: RecommendationCardProps) {
   if (goalReached) {
     return (
@@ -89,15 +91,27 @@ export function RecommendationCard({
           <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200">
             Meta de Hoje: Ler {suggestedPages} páginas (Páginas {firstPage} a {lastPage})
           </p>
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 rounded bg-gray-900 text-xs text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
-            onClick={() => onStartSession(reading)}
-          >
-            <Sparkles className="mr-1 h-3.5 w-3.5" />
-            Abrir sessão rápida
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 rounded bg-gray-900 text-xs text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+              onClick={() => onStartTimer(reading)}
+            >
+              <Play className="mr-1 h-3.5 w-3.5" />
+              Iniciar cronômetro
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 rounded text-xs"
+              onClick={() => onRegisterSession(reading)}
+            >
+              <SquarePen className="mr-1 h-3.5 w-3.5" />
+              Registro manual
+            </Button>
+          </div>
         </div>
       </div>
     </section>

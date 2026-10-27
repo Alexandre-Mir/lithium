@@ -16,6 +16,13 @@ import {
 export const READING_TIMER_STORAGE_KEY = "lithium:reading-timer:v1";
 export const SPRINT_DURATION_SEC = DEFAULT_TIMER_DURATION_SECONDS;
 
+export type PendingTimerStart = {
+  readingId: string;
+  readingTitle: string;
+  progress?: TimerReadingProgress;
+  durationSeconds: number;
+};
+
 function safeDuration(durationSeconds: number = SPRINT_DURATION_SEC): number {
   return Number.isFinite(durationSeconds)
     ? Math.max(MIN_TIMER_DURATION_SECONDS, Math.ceil(durationSeconds))
@@ -40,6 +47,7 @@ export function sprintProgressPercent(
 
 let snapshot: TimerState | null = null;
 let hydratedFromStorage = false;
+let pendingTimerStart: PendingTimerStart | null = null;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -111,6 +119,14 @@ export function getReadingTimerSnapshot(): TimerState | null {
   return snapshot;
 }
 
+export function usePendingTimerStart(): PendingTimerStart | null {
+  return useSyncExternalStore(subscribe, () => pendingTimerStart, () => null);
+}
+
+export function getPendingTimerStart(): PendingTimerStart | null {
+  return pendingTimerStart;
+}
+
 export function startReadingTimer(
   readingId: string,
   readingTitle: string,
@@ -118,14 +134,36 @@ export function startReadingTimer(
   durationSeconds: number = SPRINT_DURATION_SEC,
 ): boolean {
   const current = getReadingTimerSnapshot();
-  if (current && typeof window !== "undefined") {
-    const confirmed = window.confirm(
-      `Finalizar ou descartar o cronômetro de «${current.readingTitle}»?`,
-    );
-    if (!confirmed) return false;
+  const next = {
+    readingId,
+    readingTitle,
+    progress,
+    durationSeconds: safeDuration(durationSeconds),
+  } satisfies PendingTimerStart;
+
+  if (current) {
+    pendingTimerStart = next;
+    notify();
+    return true;
   }
-  commit(startTimer(readingId, readingTitle, new Date(), progress, safeDuration(durationSeconds)));
+
+  pendingTimerStart = null;
+  commit(startTimer(readingId, readingTitle, new Date(), progress, next.durationSeconds));
   return true;
+}
+
+export function confirmPendingTimerStart(): boolean {
+  const next = pendingTimerStart;
+  if (!next) return false;
+  pendingTimerStart = null;
+  commit(startTimer(next.readingId, next.readingTitle, new Date(), next.progress, next.durationSeconds));
+  return true;
+}
+
+export function cancelPendingTimerStart() {
+  if (!pendingTimerStart) return;
+  pendingTimerStart = null;
+  notify();
 }
 
 export function pauseReadingTimer() {
@@ -149,6 +187,7 @@ export function resumeReadingTimer() {
 }
 
 export function clearReadingTimer() {
+  pendingTimerStart = null;
   commit(null);
 }
 

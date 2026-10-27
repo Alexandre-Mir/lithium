@@ -3,27 +3,28 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Brain, LayoutDashboard, Table2, Library, Clock, CalendarDays, Menu, X, LogOut } from "lucide-react";
+import { Brain, LayoutDashboard, Table2, Library, CalendarDays, Menu, X, LogOut } from "lucide-react";
 import { signOut } from "@/app/login/actions";
 
 export function Navbar() {
   const pathname = usePathname();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMenuState, setMobileMenuState] = useState({ pathname, open: false });
+  const mobileMenuOpen = mobileMenuState.pathname === pathname && mobileMenuState.open;
 
   if (pathname === "/login") return null;
 
   const navItems = [
     {
-      label: "Dashboard Cascata",
+      label: "Dashboard",
       href: "/",
       icon: LayoutDashboard,
       active: pathname === "/",
     },
     {
-      label: "Setup & Planilha",
-      href: "/setup",
-      icon: Table2,
-      active: pathname.startsWith("/setup"),
+      label: "Agenda",
+      href: "/agenda",
+      icon: CalendarDays,
+      active: pathname.startsWith("/agenda"),
     },
     {
       label: "Biblioteca",
@@ -32,16 +33,10 @@ export function Navbar() {
       active: pathname.startsWith("/library"),
     },
     {
-      label: "Histórico",
-      href: "/history",
-      icon: Clock,
-      active: pathname.startsWith("/history"),
-    },
-    {
-      label: "Agenda",
-      href: "/agenda",
-      icon: CalendarDays,
-      active: pathname.startsWith("/agenda"),
+      label: "Setup",
+      href: "/setup",
+      icon: Table2,
+      active: pathname.startsWith("/setup"),
     },
   ];
 
@@ -56,9 +51,6 @@ export function Navbar() {
             <span className="font-bold text-base text-gray-900 dark:text-gray-100">
               Lithium
             </span>
-            <span className="hidden sm:inline-block text-[10px] font-mono text-gray-500 uppercase">
-              Motor Cognitivo
-            </span>
           </div>
         </Link>
 
@@ -69,6 +61,7 @@ export function Navbar() {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={item.active ? "page" : undefined}
                 className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
                   item.active
                     ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold"
@@ -98,7 +91,7 @@ export function Navbar() {
           aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
           aria-expanded={mobileMenuOpen}
           aria-controls="mobile-navigation"
-          onClick={() => setMobileMenuOpen((open) => !open)}
+          onClick={() => setMobileMenuState({ pathname, open: !mobileMenuOpen })}
         >
           {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </button>
@@ -112,7 +105,7 @@ export function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={() => setMobileMenuState({ pathname, open: false })}
                   aria-current={item.active ? "page" : undefined}
                   className={`flex min-h-10 items-center gap-2 rounded px-3 py-2 text-sm font-medium ${
                     item.active

@@ -30,12 +30,14 @@ export default async function HomePage() {
   let milestoneSummaries: MilestoneSummaryWithBook[] = [];
   let connectionError: string | null = null;
 
-  try {
-    const [data, statsResult] = await Promise.all([
-      getDashboardData(),
-      getSubjectStats(),
-    ]);
+  const [dashboardResult, statsResult, summariesResult] = await Promise.allSettled([
+    getDashboardData(),
+    getSubjectStats(),
+    getMilestoneSummaries(),
+  ]);
 
+  if (dashboardResult.status === "fulfilled") {
+    const data = dashboardResult.value;
     tier1 = (data.tier1 as unknown as SpacedReviewWithReading[]) || [];
     tier2 = (data.tier2 as unknown as ReadingWithSubject[]) || [];
     tier3 = (data.tier3 as unknown as ReadingWithSubject[]) || [];
@@ -48,25 +50,31 @@ export default async function HomePage() {
     averageSpeedPph = data.averageSpeedPph ?? 20;
     recommendedReadingId = data.recommendedReadingId ?? null;
     recommendedPages = data.recommendedPages ?? 0;
-    subjectStats = statsResult.stats || [];
-    subjectStatsTruncated = statsResult.truncated;
-
-    if (data.schemaError) {
-      connectionError = data.schemaError;
-    }
-  } catch (err: unknown) {
-    console.warn("Aviso ao carregar dados do Dashboard Cascata:", err);
-    connectionError =
-      err instanceof Error ? err.message : "Falha na conexão com o banco.";
+    if (data.schemaError) connectionError = data.schemaError;
+  } else {
+    console.warn("Aviso ao carregar o Dashboard:", dashboardResult.reason);
+    connectionError = dashboardResult.reason instanceof Error
+      ? dashboardResult.reason.message
+      : "Falha na conexão com o banco.";
   }
 
-  try {
-    milestoneSummaries = await getMilestoneSummaries();
-  } catch (err: unknown) {
-    console.warn("Aviso ao carregar tarefas de Revisão Ativa:", err);
-    if (!connectionError) {
-      connectionError = err instanceof Error ? err.message : "Não foi possível carregar as tarefas de revisão.";
-    }
+  if (statsResult.status === "fulfilled") {
+    subjectStats = statsResult.value.stats || [];
+    subjectStatsTruncated = statsResult.value.truncated;
+  } else {
+    console.warn("Aviso ao carregar métricas por disciplina:", statsResult.reason);
+    connectionError ??= statsResult.reason instanceof Error
+      ? statsResult.reason.message
+      : "Não foi possível carregar as métricas por disciplina.";
+  }
+
+  if (summariesResult.status === "fulfilled") {
+    milestoneSummaries = summariesResult.value;
+  } else {
+    console.warn("Aviso ao carregar tarefas de Revisão Ativa:", summariesResult.reason);
+    connectionError ??= summariesResult.reason instanceof Error
+      ? summariesResult.reason.message
+      : "Não foi possível carregar as tarefas de revisão.";
   }
 
   return (

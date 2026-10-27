@@ -4,16 +4,20 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { addToast } from "@/lib/toast-store";
 import {
+  cancelPendingTimerStart,
   clearReadingTimer,
   completeReadingSprint,
+  confirmPendingTimerStart,
   getReadingTimerSnapshot,
   pauseReadingTimer,
   remainingSprintSeconds,
   resumeReadingTimer,
   sprintProgressPercent,
+  usePendingTimerStart,
   useReadingTimer,
 } from "@/lib/reading-timer-store";
 import { elapsedSeconds, type TimerState } from "@/lib/reading-timer";
@@ -32,9 +36,11 @@ export function ReadingTimerBar() {
   const router = useRouter();
   const pathname = usePathname();
   const timer = useReadingTimer();
+  const pendingTimerStart = usePendingTimerStart();
   const [now, setNow] = useState(0);
   const [finishingTimer, setFinishingTimer] = useState<TimerState | null>(null);
   const [finishingEndedAt, setFinishingEndedAt] = useState<string | null>(null);
+  const [discardConfirmationOpen, setDiscardConfirmationOpen] = useState(false);
   const [sprintCompletion, setSprintCompletion] = useState<{ startedAt: string; endedAt: string } | null>(null);
   const previousTitle = useRef<string | null>(null);
   const notifiedSprint = useRef<string | null>(null);
@@ -116,8 +122,7 @@ export function ReadingTimerBar() {
     }
   }, [timer?.status, timer?.startedAt, remaining, pathname]);
 
-  const handleDiscard = () => {
-    if (!timer || !window.confirm(`Descartar o cronômetro de «${timer.readingTitle}»?`)) return;
+  const handleDiscard = async () => {
     clearReadingTimer();
     setFinishingTimer(null);
     setFinishingEndedAt(null);
@@ -160,7 +165,7 @@ export function ReadingTimerBar() {
               {remaining === 0 ? <Check className="mr-1 h-3.5 w-3.5" /> : <Square className="mr-1 h-3 w-3" />}
               {remaining === 0 ? "Registrar páginas" : "Finalizar"}
             </Button>
-            <Button size="icon-sm" variant="ghost" onClick={handleDiscard} aria-label="Descartar cronômetro" title="Descartar">
+            <Button size="icon-sm" variant="ghost" onClick={() => setDiscardConfirmationOpen(true)} aria-label="Descartar cronômetro" title="Descartar">
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
             <div
@@ -197,6 +202,28 @@ export function ReadingTimerBar() {
           setFinishingTimer(null);
           setFinishingEndedAt(null);
           setSprintCompletion(null);
+        }}
+      />
+      <ConfirmDialog
+        open={discardConfirmationOpen}
+        onOpenChange={setDiscardConfirmationOpen}
+        title="Descartar cronômetro?"
+        description={`O tempo desta sessão de «${timer?.readingTitle ?? "leitura"}» será perdido.`}
+        confirmLabel="Descartar"
+        destructive
+        onConfirm={handleDiscard}
+      />
+      <ConfirmDialog
+        open={pendingTimerStart !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelPendingTimerStart();
+        }}
+        title="Substituir cronômetro?"
+        description={`O tempo de «${timer?.readingTitle ?? "leitura atual"}» será descartado ao iniciar um novo cronômetro.`}
+        confirmLabel="Descartar e iniciar"
+        destructive
+        onConfirm={async () => {
+          confirmPendingTimerStart();
         }}
       />
     </>

@@ -377,70 +377,72 @@ export function ReadingDetailView({
       {/* Histórico de Sessões */}
       <section className="rounded-md border border-gray-200 bg-white overflow-hidden dark:border-gray-800 dark:bg-gray-900">
         <h2 className="p-3 text-sm font-bold">Histórico de sessões</h2>
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50 dark:bg-gray-800/50">
-            <tr>
-              <th className="p-2 text-left">Data/hora</th>
-              <th className="p-2 text-left">Páginas</th>
-              <th className="p-2 text-left">Tempo</th>
-              <th className="p-2 text-left">Velocidade</th>
-              <th className="p-2 text-left">Origem</th>
-              <th className="p-2 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.length ? (
-              sessions.map((session) => {
-                const sessionSpeed = pph(session.pages_read, sessionSeconds(session));
-                return (
-                  <tr key={session.id} className="border-t border-gray-100 dark:border-gray-800">
-                    <td className="p-2 font-mono">{formatDateTimeBR(session.started_at ?? session.created_at)}</td>
-                    <td className="p-2">{session.pages_read}</td>
-                    <td className="p-2">{formatDuration(sessionSeconds(session))}</td>
-                    <td className="p-2 font-mono">
-                      {sessionSpeed.toFixed(1)} p/h
-                      {isUnusualSession(session, sessions) && (
-                        <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">incomum</Badge>
-                      )}
-                    </td>
-                    <td className="p-2"><Badge variant="outline">{sessionSourceLabel(session.source)}</Badge></td>
-                    <td className="p-2 text-right">
-                      <div className="inline-flex items-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Editar sessão"
-                          title="Editar sessão"
-                          onClick={() => setEditingSessionId(session.id)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Excluir sessão"
-                          title="Excluir sessão"
-                          onClick={() => setDeletingSessionId(session.id)}
-                          className="text-gray-500 hover:text-red-600"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
+        <div className="max-w-full overflow-x-auto" role="region" aria-label="Tabela do histórico de sessões" tabIndex={0}>
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
-                <td colSpan={6} className="p-6 text-center text-gray-500">
-                  Nenhuma sessão registrada.
-                </td>
+                <th className="p-2 text-left">Data/hora</th>
+                <th className="p-2 text-left">Páginas</th>
+                <th className="p-2 text-left">Tempo</th>
+                <th className="p-2 text-left">Velocidade</th>
+                <th className="p-2 text-left">Origem</th>
+                <th className="p-2 text-right">Ações</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sessions.length ? (
+                sessions.map((session) => {
+                  const sessionSpeed = pph(session.pages_read, sessionSeconds(session));
+                  return (
+                    <tr key={session.id} className="border-t border-gray-100 dark:border-gray-800">
+                      <td className="p-2 font-mono">{formatDateTimeBR(session.started_at ?? session.created_at)}</td>
+                      <td className="p-2">{session.pages_read}</td>
+                      <td className="p-2">{formatDuration(sessionSeconds(session))}</td>
+                      <td className="p-2 font-mono">
+                        {sessionSpeed.toFixed(1)} p/h
+                        {isUnusualSession(session, sessions) && (
+                          <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">incomum</Badge>
+                        )}
+                      </td>
+                      <td className="p-2"><Badge variant="outline">{sessionSourceLabel(session.source)}</Badge></td>
+                      <td className="p-2 text-right">
+                        <div className="inline-flex items-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Editar sessão"
+                            title="Editar sessão"
+                            onClick={() => setEditingSessionId(session.id)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Excluir sessão"
+                            title="Excluir sessão"
+                            onClick={() => setDeletingSessionId(session.id)}
+                            className="text-gray-500 hover:text-red-600"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={6} className="p-6 text-center text-gray-500">
+                    Nenhuma sessão registrada.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
         {chart.length >= 2 && (
           <svg viewBox="0 0 100 55" className="m-4 h-20 w-full" role="img" aria-label="Velocidade por sessão">
             <polyline

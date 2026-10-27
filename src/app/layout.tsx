@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
+import { AppFooter } from "@/components/app-footer";
 import { ReadingTimerBar } from "@/components/reading-timer-bar";
 import { Toaster } from "@/components/toaster";
 
@@ -16,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lithium — Motor Cognitivo de Estudos",
-  description: "Orquestrador pessoal de aprendizagem com repetição espaçada e efeito cascata",
+  title: "Lithium",
+  description: "Organize leituras, revisões e prazos em um só lugar.",
 };
 
 export default function RootLayout({
@@ -34,6 +35,7 @@ export default function RootLayout({
         <Navbar />
         <ReadingTimerBar />
         <main className="flex-1">{children}</main>
+        <AppFooter />
         <Toaster />
       </body>
     </html>

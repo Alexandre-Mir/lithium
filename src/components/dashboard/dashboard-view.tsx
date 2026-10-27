@@ -19,10 +19,11 @@ import { RecommendationCard } from "@/components/dashboard/recommendation-card";
 import { MilestoneSummaryTasks } from "@/components/dashboard/milestone-summary-tasks";
 import { formatTodayLongBR } from "@/lib/dates";
 import { sumPendingLoad } from "@/lib/progress";
+import { estimateTimerDurationSeconds } from "@/lib/reading-timer";
+import { startReadingTimer } from "@/lib/reading-timer-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Brain,
   Clock,
   Sparkles,
   Flame,
@@ -69,7 +70,6 @@ export function DashboardView({
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [quickSessionOpen, setQuickSessionOpen] = useState(false);
-  const [quickSessionInitialReadingId, setQuickSessionInitialReadingId] = useState<string | null>(null);
   const [activeReading, setActiveReading] = useState<ReadingSessionTarget | null>(null);
 
   const deliverableMap = new Map(allDeliverables.map((d) => [d.id, d]));
@@ -87,9 +87,16 @@ export function DashboardView({
     setModalOpen(true);
   };
 
-  const handleStartRecommendedSession = (reading: ReadingWithSubject) => {
-    setQuickSessionInitialReadingId(reading.id);
-    setQuickSessionOpen(true);
+  const handleStartRecommendedTimer = (reading: ReadingWithSubject) => {
+    startReadingTimer(
+      reading.id,
+      reading.title,
+      {
+        currentPage: reading.pages_read,
+        totalPages: reading.full_book_pages ?? reading.target_pages,
+      },
+      estimateTimerDurationSeconds(recommendedPages, Number(reading.current_speed_pph) || 0),
+    );
   };
 
   const handleRefresh = () => {
@@ -116,29 +123,18 @@ export function DashboardView({
       <div className="rounded-lg border border-gray-800 bg-gray-900 text-white p-6 shadow-none">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-800 text-gray-300 border border-gray-700">
-                <Brain className="w-3.5 h-3.5 text-indigo-400" />
-                Motor Cognitivo
-              </span>
-              <span className="text-xs text-gray-400 capitalize">
-                {todayFormatted}
-              </span>
-            </div>
-
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Efeito Cascata Diário
+              Dashboard
             </h1>
             <p className="text-xs text-gray-400 max-w-2xl leading-relaxed">
-              Alocação algorítmica de tempo: retenção em primeiro lugar (Revisão Ativa),
-              provas críticas a seguir (&le; 7 dias), estudos regulares e ritmo autônomo.
+              <span className="capitalize">{todayFormatted}</span>
+              <span> · Revisões, prazos e leituras para hoje.</span>
             </p>
           </div>
 
           <div className="flex flex-wrap sm:flex-nowrap gap-2.5 shrink-0">
             <Button
               onClick={() => {
-                setQuickSessionInitialReadingId(null);
                 setQuickSessionOpen(true);
               }}
               size="sm"
@@ -204,7 +200,8 @@ export function DashboardView({
         reading={recommendedReading}
         suggestedPages={recommendedPages}
         goalReached={todayReadingMinutes >= dailyGoalMinutes}
-        onStartSession={handleStartRecommendedSession}
+        onStartTimer={handleStartRecommendedTimer}
+        onRegisterSession={handleOpenSession}
       />
 
       <MilestoneSummaryTasks summaries={milestoneSummaries} />
@@ -392,15 +389,11 @@ export function DashboardView({
       {quickSessionOpen && (
         <QuickSessionDialog
           open={quickSessionOpen}
-          onOpenChange={(open) => {
-            setQuickSessionOpen(open);
-            if (!open) setQuickSessionInitialReadingId(null);
-          }}
+          onOpenChange={setQuickSessionOpen}
           tier2={tier2}
           tier3={tier3}
           tier4={tier4}
           lastSessionReadingId={lastSessionReadingId}
-          initialReadingId={quickSessionInitialReadingId}
           recommendedReadingId={recommendedReadingId}
           recommendedPages={recommendedPages}
           onRegisterSession={handleOpenSession}

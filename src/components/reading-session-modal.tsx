@@ -57,6 +57,7 @@ function ReadingSessionModalContent({
   onClose,
   onSuccess,
   onDiscardTimer,
+  onBusyChange,
 }: {
   reading: ReadingSessionTarget;
   mode: SessionMode;
@@ -68,6 +69,7 @@ function ReadingSessionModalContent({
   onClose: () => void;
   onSuccess?: () => void;
   onDiscardTimer?: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const measuredSeconds = mode === "timer" && timerState ? elapsedSeconds(timerState) : 0;
   const initialSeconds = mode === "edit" && session
@@ -136,6 +138,7 @@ function ReadingSessionModalContent({
 
     try {
       setLoading(true);
+      onBusyChange(true);
       if (mode === "edit" && session) {
         await updateReadingSession(session.id, {
           pages_read: pagesRead,
@@ -157,6 +160,7 @@ function ReadingSessionModalContent({
       setError(cause instanceof Error ? cause.message : "Erro ao registrar sessão de leitura.");
     } finally {
       setLoading(false);
+      onBusyChange(false);
     }
   };
 
@@ -165,7 +169,7 @@ function ReadingSessionModalContent({
       <DialogHeader>
         <div className="flex items-center gap-1.5 text-gray-500 font-mono text-[11px] uppercase tracking-wider mb-1">
           <Zap className="w-3.5 h-3.5 text-indigo-500" />
-          Calibração Cognitiva
+          Sessão de leitura
         </div>
         <DialogTitle className="text-base font-bold">
           {mode === "timer" ? "Finalizar sessão cronometrada" : mode === "edit" ? "Editar sessão" : "Registrar Sessão de Leitura"}
@@ -304,10 +308,16 @@ export function ReadingSessionModal({
   endedAt = null,
   onDiscardTimer,
 }: ReadingSessionModalProps) {
+  const [saving, setSaving] = useState(false);
   if (!reading) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !saving) onClose();
+      }}
+    >
       {isOpen && (
         <ReadingSessionModalContent
           key={`${reading.id}:${mode}:${session?.id ?? ""}:${timerState?.startedAt ?? ""}`}
@@ -321,6 +331,7 @@ export function ReadingSessionModal({
           onClose={onClose}
           onSuccess={onSuccess}
           onDiscardTimer={onDiscardTimer}
+          onBusyChange={setSaving}
         />
       )}
     </Dialog>

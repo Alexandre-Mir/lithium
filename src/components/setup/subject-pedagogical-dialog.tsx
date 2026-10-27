@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,7 @@ export function SubjectPedagogicalDialog({
   initialValues,
   onSave,
 }: SubjectPedagogicalDialogProps) {
+  const fieldId = useId();
   const nextInitialValuesKey = JSON.stringify(initialValues);
   const [initialValuesKey, setInitialValuesKey] = useState(nextInitialValuesKey);
   const [values, setValues] = useState(initialValues);
@@ -56,6 +57,7 @@ export function SubjectPedagogicalDialog({
   }
 
   const handleOpenChange = (nextOpen: boolean) => {
+    if (saving && !nextOpen) return;
     if (!nextOpen) {
       setValues(initialValues);
       setErrorMessage(null);
@@ -84,58 +86,66 @@ export function SubjectPedagogicalDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg rounded-md border border-gray-200 dark:border-gray-800">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold">Ementa e Planejamento Pedagógico</DialogTitle>
+          <DialogTitle className="text-base font-bold">Planejamento da disciplina</DialogTitle>
           <DialogDescription className="text-xs">
-            Campos complementares para a disciplina {subjectName ? `"${subjectName}"` : ""}.
+            Ementa, objetivos e avaliação{subjectName ? ` · ${subjectName}` : ""}.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 py-2 text-xs">
           <div>
-            <label className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
-              Ementa (Syllabus)
+            <label htmlFor={`${fieldId}-syllabus`} className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
+              Ementa
             </label>
             <Textarea
+              id={`${fieldId}-syllabus`}
               placeholder="Conteúdo programático da disciplina..."
               value={values.syllabus}
               onChange={(event) => updateValue("syllabus", event.target.value)}
+              disabled={saving}
               className="text-xs h-18 rounded border-gray-300 dark:border-gray-700"
             />
           </div>
 
           <div>
-            <label className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
+            <label htmlFor={`${fieldId}-objectives`} className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
               Objetivos de Aprendizagem
             </label>
             <Textarea
+              id={`${fieldId}-objectives`}
               placeholder="Competências e objetivos a serem desenvolvidos..."
               value={values.objectives}
               onChange={(event) => updateValue("objectives", event.target.value)}
+              disabled={saving}
               className="text-xs h-16 rounded border-gray-300 dark:border-gray-700"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
-              <label className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
+              <label htmlFor={`${fieldId}-methodology`} className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
                 Metodologia
               </label>
               <Input
+                id={`${fieldId}-methodology`}
                 placeholder="Ex: Aulas expositivas e seminários"
                 value={values.methodology}
                 onChange={(event) => updateValue("methodology", event.target.value)}
+                disabled={saving}
                 className="text-xs h-8 rounded border-gray-300 dark:border-gray-700"
               />
             </div>
 
             <div>
-              <label className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
+              <label htmlFor={`${fieldId}-assessment`} className="font-semibold block mb-1 text-gray-700 dark:text-gray-300">
                 Critérios de Avaliação
               </label>
               <Input
+                id={`${fieldId}-assessment`}
                 placeholder="Ex: P1 (40%) + P2 (40%) + Trab (20%)"
                 value={values.assessment}
                 onChange={(event) => updateValue("assessment", event.target.value)}
+                disabled={saving}
                 className="text-xs h-8 rounded border-gray-300 dark:border-gray-700"
               />
             </div>
@@ -156,7 +166,7 @@ export function SubjectPedagogicalDialog({
             disabled={saving}
             className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-semibold h-8 rounded"
           >
-            {saving ? "Salvando..." : "Salvar & Fechar"}
+            {saving ? "Salvando…" : "Salvar"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -19,6 +19,10 @@ export function AgendaReviewDialog({ review }: { review: AgendaReviewEvent }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && pending) return;
+    setOpen(nextOpen);
+  };
 
   const handleComplete = () => {
     setError(null);
@@ -46,7 +50,7 @@ export function AgendaReviewDialog({ review }: { review: AgendaReviewEvent }) {
       >
         Revisar Agora
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="rounded-md border border-gray-300 bg-white shadow-none dark:border-gray-700 dark:bg-gray-950 sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Revisão {review.reviewType}</DialogTitle>
