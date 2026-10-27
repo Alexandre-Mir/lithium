@@ -14,6 +14,12 @@ import { computeRemaining } from "@/lib/progress";
 import { computeSubjectPageProgress } from "@/lib/subject-progress";
 import { getTodayTotalReadingTime, pph, secondsToMinutes, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
+import { getCrossedMilestones } from "@/lib/milestone-crossing";
+import {
+  nextMilestoneSummaryStatus,
+  validateMilestoneSummaryContent,
+} from "@/lib/milestone-summary";
+import { requireSupabaseUser } from "@/lib/supabase/server";
 import type {
   SubjectInsert,
   SubjectUpdate,
@@ -32,6 +38,9 @@ import type {
   ReadingWithSubject,
   SpacedReviewWithReading,
   ReadingSpeedStat,
+  MilestoneSummary,
+  MilestoneSummaryWithBook,
+  ReadingMilestone,
 } from "@/types/database";
 
 // ============================================================
@@ -633,6 +642,31 @@ export async function createReadingSession(input: ReadingSessionInsert) {
   const validationError = validateSessionInput(input);
   if (validationError) throw new Error(validationError);
 
+  const { client: authenticatedClient, user } = await requireSupabaseUser();
+  const [readingResult, progressResult] = await Promise.all([
+    supabase
+      .from("readings")
+      .select("milestones")
+      .eq("id", input.reading_id)
+      .maybeSingle(),
+    supabase
+      .from("reading_progress")
+      .select("pages_read")
+      .eq("reading_id", input.reading_id)
+      .maybeSingle(),
+  ]);
+  if (readingResult.error) throw new Error(readingResult.error.message);
+  if (!readingResult.data) throw new Error("Leitura não encontrada.");
+  if (progressResult.error) throw new Error(progressResult.error.message);
+
+  const previousPage = Number(progressResult.data?.pages_read) || 0;
+  const nextPage = previousPage + input.pages_read;
+  const crossedMilestones = getCrossedMilestones(
+    (readingResult.data.milestones ?? []) as ReadingMilestone[],
+    previousPage,
+    nextPage,
+  );
+
   const durationSeconds = input.duration_seconds;
   const { data: session, error: sessionError } = await supabase
     .from("reading_sessions")
@@ -645,9 +679,73 @@ export async function createReadingSession(input: ReadingSessionInsert) {
     .select()
     .single();
   if (sessionError) throw new Error(sessionError.message);
+
+  if (crossedMilestones.length > 0) {
+    const summaries = crossedMilestones.map((milestone) => ({
+      user_id: user.id,
+      book_id: input.reading_id,
+      milestone_title: milestone.title,
+      milestone_page: milestone.page,
+      content: null,
+      status: "pending" as const,
+    }));
+    const { error: summaryError } = await authenticatedClient
+      .from("milestone_summaries")
+      .upsert(summaries, {
+        onConflict: "user_id,book_id,milestone_page,milestone_title",
+        ignoreDuplicates: true,
+      });
+    if (summaryError) throw new Error(summaryError.message);
+  }
+
   const newSpeedPph = await recalculateReadingSpeed(input.reading_id);
   revalidateReadingSessionPaths(input.reading_id);
   return { session, newSpeedPph };
+}
+
+export async function getMilestoneSummaries(): Promise<MilestoneSummaryWithBook[]> {
+  const { client } = await requireSupabaseUser();
+  const { data, error } = await client
+    .from("milestone_summaries")
+    .select("*, book:readings(title, chapter_title)")
+    .in("status", ["pending", "review"])
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as unknown as MilestoneSummaryWithBook[];
+}
+
+export async function updateMilestoneSummary(id: string, content: string) {
+  if (typeof id !== "string" || id.length === 0) {
+    throw new Error("Tarefa de Revisão Ativa inválida.");
+  }
+  if (typeof content !== "string") {
+    throw new Error("O conteúdo do resumo é inválido.");
+  }
+  const validationError = validateMilestoneSummaryContent(content);
+  if (validationError) throw new Error(validationError);
+
+  const { client, user } = await requireSupabaseUser();
+  const { data: current, error: findError } = await client
+    .from("milestone_summaries")
+    .select("id, user_id, status")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (findError) throw new Error(findError.message);
+  if (!current) throw new Error("Tarefa de Revisão Ativa não encontrada.");
+
+  const nextStatus = nextMilestoneSummaryStatus(current.status as MilestoneSummary["status"]);
+  if (!nextStatus) throw new Error("Este resumo já foi concluído.");
+
+  const { error } = await client
+    .from("milestone_summaries")
+    .update({ content: content.trim(), status: nextStatus })
+    .eq("id", id)
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/");
+  return { status: nextStatus };
 }
 
 export async function updateReadingSession(

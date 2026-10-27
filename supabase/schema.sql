@@ -1,6 +1,6 @@
 -- ============================================================
 -- LITHIUM — Motor Cognitivo de Estudos
--- Schema v1.8 (Totalmente idempotente e seguro contra reexecuções)
+-- Schema v1.9 (Totalmente idempotente e seguro contra reexecuções)
 -- ============================================================
 
 -- 0. Extensions
@@ -199,6 +199,32 @@ CREATE TRIGGER app_settings_updated_at
   BEFORE UPDATE ON app_settings
   FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
+-- ============================================================
+-- TABELA 7: milestone_summaries (Resumos de Revisão Ativa)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS milestone_summaries (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  book_id         UUID NOT NULL REFERENCES readings(id) ON DELETE CASCADE,
+  milestone_title TEXT NOT NULL,
+  milestone_page  INTEGER NOT NULL CHECK (milestone_page >= 1),
+  content         TEXT,
+  status          TEXT NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('pending', 'review', 'completed')),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_milestone_summaries_user_book_milestone
+  ON milestone_summaries (user_id, book_id, milestone_page, milestone_title);
+CREATE INDEX IF NOT EXISTS idx_milestone_summaries_user_status
+  ON milestone_summaries (user_id, status, created_at DESC);
+
+DROP TRIGGER IF EXISTS milestone_summaries_updated_at ON milestone_summaries;
+CREATE TRIGGER milestone_summaries_updated_at
+  BEFORE UPDATE ON milestone_summaries
+  FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
 -- Índice único para upsert idempotente por leitura, data e tipo
 CREATE UNIQUE INDEX IF NOT EXISTS uq_reviews_reading_date_type
   ON spaced_reviews (reading_id, review_date, type);
@@ -212,6 +238,7 @@ ALTER TABLE readings         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reading_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE spaced_reviews   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_settings     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE milestone_summaries ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   CREATE POLICY "Allow all" ON subjects FOR ALL USING (true) WITH CHECK (true);
@@ -236,6 +263,17 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN
   CREATE POLICY "Allow all" ON app_settings FOR ALL USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DROP POLICY IF EXISTS "Allow all" ON milestone_summaries;
+DROP POLICY IF EXISTS "Users manage own milestone summaries" ON milestone_summaries;
+CREATE POLICY "Users manage own milestone summaries"
+  ON milestone_summaries
+  FOR ALL TO authenticated
+  USING ((SELECT auth.uid()) = user_id)
+  WITH CHECK ((SELECT auth.uid()) = user_id);
+
+REVOKE ALL ON TABLE milestone_summaries FROM PUBLIC, anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE milestone_summaries TO authenticated;
 
 -- ============================================================
 -- VIEW: velocidade agregada por tipo de leitura (v1.3)

@@ -6,6 +6,7 @@ import {
   SpacedReviewWithReading,
   Deliverable,
   SubjectStat,
+  MilestoneSummaryWithBook,
 } from "@/types/database";
 import { Tier1Card } from "./tier1-card";
 import { ReadingTierCard } from "./reading-tier-card";
@@ -15,6 +16,7 @@ import type { ReadingSessionTarget } from "@/components/reading-session-modal";
 import { QuickSessionDialog } from "@/components/dashboard/quick-session-dialog";
 import { DailyGoalCard } from "@/components/dashboard/daily-goal-card";
 import { RecommendationCard } from "@/components/dashboard/recommendation-card";
+import { MilestoneSummaryTasks } from "@/components/dashboard/milestone-summary-tasks";
 import { formatTodayLongBR } from "@/lib/dates";
 import { sumPendingLoad } from "@/lib/progress";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +46,7 @@ interface DashboardViewProps {
   averageSpeedPph: number;
   recommendedReadingId: string | null;
   recommendedPages: number;
+  milestoneSummaries: MilestoneSummaryWithBook[];
 }
 
 export function DashboardView({
@@ -61,6 +64,7 @@ export function DashboardView({
   averageSpeedPph,
   recommendedReadingId,
   recommendedPages,
+  milestoneSummaries,
 }: DashboardViewProps) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
@@ -202,6 +206,8 @@ export function DashboardView({
         goalReached={todayReadingMinutes >= dailyGoalMinutes}
         onStartSession={handleStartRecommendedSession}
       />
+
+      <MilestoneSummaryTasks summaries={milestoneSummaries} />
 
       {/* ============================================================ */}
       {/* MÉTRICAS POR DISCIPLINA (Calculadas em tempo real)           */}

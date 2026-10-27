@@ -3,16 +3,30 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { loginWithPassword, type LoginState } from "@/app/login/actions";
+import { loginWithSupabase, type LoginState } from "@/app/login/actions";
 
 const initialState: LoginState = { error: null };
 
-export function PasswordLoginForm({ nextPath }: { nextPath: string }) {
-  const [state, formAction, pending] = useActionState(loginWithPassword, initialState);
+export function SupabaseLoginForm({ nextPath }: { nextPath: string }) {
+  const [state, formAction, pending] = useActionState(loginWithSupabase, initialState);
 
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="next" value={nextPath} />
+      <div className="space-y-2">
+        <label htmlFor="email" className="text-xs font-medium text-gray-700 dark:text-gray-300">
+          Email
+        </label>
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="username"
+          required
+          autoFocus
+          className="h-10"
+        />
+      </div>
       <div className="space-y-2">
         <label htmlFor="password" className="text-xs font-medium text-gray-700 dark:text-gray-300">
           Senha
@@ -23,7 +37,6 @@ export function PasswordLoginForm({ nextPath }: { nextPath: string }) {
           type="password"
           autoComplete="current-password"
           required
-          autoFocus
           className="h-10"
         />
       </div>
@@ -33,7 +46,7 @@ export function PasswordLoginForm({ nextPath }: { nextPath: string }) {
         </p>
       )}
       <Button type="submit" disabled={pending} className="w-full">
-        {pending ? "Verificando…" : "Entrar"}
+        {pending ? "Entrando…" : "Entrar"}
       </Button>
     </form>
   );

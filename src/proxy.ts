@@ -1,23 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import {
-  isPasswordSessionTokenValid,
-  PASSWORD_SESSION_COOKIE,
-  safeReturnPath,
-} from "@/lib/password-auth";
+import { NextRequest } from "next/server";
+import { updateSupabaseSession } from "@/lib/supabase/proxy";
 
-export function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname === "/login") {
-    return NextResponse.next();
-  }
-
-  const token = request.cookies.get(PASSWORD_SESSION_COOKIE)?.value;
-  if (isPasswordSessionTokenValid(token, process.env.SENHA)) {
-    return NextResponse.next();
-  }
-
-  const loginUrl = new URL("/login", request.url);
-  loginUrl.searchParams.set("next", safeReturnPath(`${request.nextUrl.pathname}${request.nextUrl.search}`));
-  return NextResponse.redirect(loginUrl);
+export async function proxy(request: NextRequest) {
+  return updateSupabaseSession(request);
 }
 
 export const config = {

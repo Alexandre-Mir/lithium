@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Brain, LayoutDashboard, Table2, Library, Clock, Menu, X } from "lucide-react";
+import { Brain, LayoutDashboard, Table2, Library, Clock, Menu, X, LogOut } from "lucide-react";
+import { signOut } from "@/app/login/actions";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -75,6 +76,16 @@ export function Navbar() {
           })}
         </nav>
 
+        <form action={signOut} className="hidden md:block">
+          <button
+            type="submit"
+            className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-gray-100"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sair
+          </button>
+        </form>
+
         <button
           type="button"
           className="inline-flex h-9 w-9 items-center justify-center rounded border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900 md:hidden"
@@ -108,6 +119,15 @@ export function Navbar() {
                 </Link>
               );
             })}
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="flex min-h-10 w-full items-center gap-2 rounded px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-gray-100"
+              >
+                <LogOut className="h-4 w-4 shrink-0" />
+                Sair
+              </button>
+            </form>
           </div>
         </nav>
       )}

@@ -1,11 +1,12 @@
 import { connection } from "next/server";
-import { getDashboardData, getSubjectStats } from "@/app/actions";
+import { getDashboardData, getMilestoneSummaries, getSubjectStats } from "@/app/actions";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import {
   ReadingWithSubject,
   SpacedReviewWithReading,
   Deliverable,
   SubjectStat,
+  MilestoneSummaryWithBook,
 } from "@/types/database";
 
 export const instant = false;
@@ -26,6 +27,7 @@ export default async function HomePage() {
   let averageSpeedPph = 20;
   let recommendedReadingId: string | null = null;
   let recommendedPages = 0;
+  let milestoneSummaries: MilestoneSummaryWithBook[] = [];
   let connectionError: string | null = null;
 
   try {
@@ -56,6 +58,15 @@ export default async function HomePage() {
     console.warn("Aviso ao carregar dados do Dashboard Cascata:", err);
     connectionError =
       err instanceof Error ? err.message : "Falha na conexão com o banco.";
+  }
+
+  try {
+    milestoneSummaries = await getMilestoneSummaries();
+  } catch (err: unknown) {
+    console.warn("Aviso ao carregar tarefas de Revisão Ativa:", err);
+    if (!connectionError) {
+      connectionError = err instanceof Error ? err.message : "Não foi possível carregar as tarefas de revisão.";
+    }
   }
 
   return (
@@ -89,6 +100,7 @@ export default async function HomePage() {
         averageSpeedPph={averageSpeedPph}
         recommendedReadingId={recommendedReadingId}
         recommendedPages={recommendedPages}
+        milestoneSummaries={milestoneSummaries}
       />
     </div>
   );

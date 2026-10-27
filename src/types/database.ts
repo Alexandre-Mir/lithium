@@ -1,10 +1,11 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.8)
+// Lithium — Database Types (mirrors Supabase schema v1.9)
 // ============================================================
 
 export type ReadingType = "book" | "article";
 export type ReviewStatus = "pending" | "done";
 export type ReadingSessionSource = "manual" | "timer" | "timer_adjusted";
+export type MilestoneSummaryStatus = "pending" | "review" | "completed";
 
 export interface ReadingMilestone {
   title: string;
@@ -98,6 +99,25 @@ export interface AppSettings {
   updated_at: string;
 }
 
+export interface MilestoneSummary {
+  id: string;
+  user_id: string;
+  book_id: string;
+  milestone_title: string;
+  milestone_page: number;
+  content: string | null;
+  status: MilestoneSummaryStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MilestoneSummaryWithBook extends MilestoneSummary {
+  book: {
+    title: string;
+    chapter_title: string | null;
+  };
+}
+
 // ---- Insert types (omit server-generated fields) ----
 
 export type SubjectInsert = Omit<Subject, "id" | "created_at" | "updated_at">;
@@ -148,6 +168,11 @@ export type SpacedReviewInsert = Omit<SpacedReview, "id" | "created_at">;
 export type SpacedReviewUpdate = Partial<Pick<SpacedReview, "status">>;
 export type AppSettingsInsert = Pick<AppSettings, "daily_goal_minutes"> & Partial<Pick<AppSettings, "id">>;
 export type AppSettingsUpdate = Partial<Pick<AppSettings, "daily_goal_minutes">>;
+
+export type MilestoneSummaryInsert = Omit<
+  MilestoneSummary,
+  "id" | "created_at" | "updated_at" | "status"
+> & Partial<Pick<MilestoneSummary, "status">>;
 
 // ---- Joined / view types ----
 
