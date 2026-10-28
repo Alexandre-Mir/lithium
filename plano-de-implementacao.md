@@ -37,16 +37,6 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 ## 2. Pontos de Melhora no UX/UI (Flat Design & Usabilidade)
 
 ### Pendentes
-- [ ] **`UX-02` — Eliminação Total de Alertas e Diálogos Nativos (`alert()` e `confirm()`)**
-  - **Contexto:** Ainda restam 12 chamadas diretas aos métodos bloqueantes do navegador (`alert()` / `confirm()`) nos arquivos de setup e dashboard:
-    - `src/components/setup/readings-table.tsx` (linhas 307, 325, 373, 381)
-    - `src/components/setup/subjects-table.tsx` (linhas 194, 202)
-    - `src/components/setup/deliverables-table.tsx` (linhas 69, 89, 96, 104)
-    - `src/components/dashboard/tier1-card.tsx` (linha 44)
-    - `src/components/dashboard/reading-tier-card.tsx` (linha 77)
-  - **Ação:** Substituir todos os `confirm(...)` por instâncias de `@/components/confirm-dialog.tsx` e todos os `alert(...)` por mensagens via `addToast` ou alertas inline de formulário.
-  - **Arquivos-chave:** tabelas do setup e cards do dashboard.
-
 - [ ] **`UX-03` — Alinhamento Ergonômico dos Botões de Dias da Semana (`/setup`)**
   - **Contexto:** Na inserção de disciplinas, os botões dos dias quebram em duas linhas desalinhadas ("Seg, Ter, Qua, Qui, Sex" e "Sáb" isolado abaixo).
   - **Ação:** Reorganizar para grade 6 colunas (`grid grid-cols-6 gap-1.5`) ou 3x2 consistente em qualquer resolução.
@@ -63,6 +53,8 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
   - **Arquivos-chave:** `src/components/navbar.tsx` ou `src/components/app-footer.tsx`.
 
 ### Concluídos
+- [x] **`UX-02` — Eliminação Total de Alertas e Diálogos Nativos (`alert()` e `confirm()`)**
+  - *Resolução:* Exclusões migradas para `ConfirmDialog`; erros de formulário/ações passam a `addToast` ou banner inline. Regressão em `no-native-dialogs.test.ts`.
 - [x] **`UX-01` — Seletor de Leitura na "Sessão Rápida" (Dashboard)**
   - *Resolução:* Criado o componente `QuickSessionDialog` com agrupamento por tiers, ordenação por urgência, histórico da última sessão e recomendação diária.
 - [x] **`UX-04` — Reposicionamento de Badges Flutuantes sobre as Capas (`/library`)**
@@ -160,3 +152,4 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 | 2026-10-27 | `BUG-04` | Cards compactos no histórico mobile; tabela preservada em telas maiores | `src/components/history/history-view.tsx`, `history-view.test.ts` |
 | 2026-10-27 | `BUG-05` | Agenda e Tier 1 unificados para revisões de leituras e de marcos | `src/app/actions.ts`, `agenda.ts`, componentes de Agenda e Dashboard |
 | 2026-10-28 | `BUG-06` | Toast com Desfazer ao concluir leitura na Biblioteca | `book-card.tsx`, `reading-completion-toast.ts` |
+| 2026-10-28 | `UX-02` | Remoção de `alert()`/`confirm()` nativos no setup e dashboard | tabelas setup, cards dashboard, `no-native-dialogs.test.ts` |

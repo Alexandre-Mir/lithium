@@ -74,7 +74,7 @@ export function ReadingTierCard({
     } catch (err) {
       console.error(err);
       setOptimisticIsRead(null);
-      alert("Erro ao concluir leitura.");
+      addToast({ message: "Erro ao concluir leitura." });
     } finally {
       setLoading(false);
     }

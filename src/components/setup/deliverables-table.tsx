@@ -8,6 +8,7 @@ import { getDeadlineTone } from "@/lib/deadline-tone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -16,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Check, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Check, AlertTriangle, AlertCircle } from "lucide-react";
 
 interface DeliverablesTableProps {
   initialDeliverables: Deliverable[];
@@ -37,6 +38,7 @@ export function DeliverablesTable({
     setDeliverables(initialDeliverables);
   }
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Inserção rápida
   const [newSubjectId, setNewSubjectId] = useState(subjects[0]?.id || "");
@@ -46,11 +48,14 @@ export function DeliverablesTable({
   // Edição inline
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Deliverable>>({});
+  const [deleteDeliverableId, setDeleteDeliverableId] = useState<string | null>(null);
 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+  const deleteDeliverableTarget = deliverables.find((item) => item.id === deleteDeliverableId);
 
   const handleCreate = async () => {
     if (!newTitle.trim() || !newDate || !newSubjectId) return;
+    setErrorMessage(null);
     try {
       setLoading(true);
       const created = await createDeliverable({
@@ -66,13 +71,14 @@ export function DeliverablesTable({
       }
     } catch (err) {
       console.error(err);
-      alert("Erro ao cadastrar entrega/prova.");
+      setErrorMessage(err instanceof Error ? err.message : "Erro ao cadastrar entrega/prova.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleUpdate = async (id: string) => {
+    setErrorMessage(null);
     try {
       setLoading(true);
       const updated = await updateDeliverable(id, editValues);
@@ -86,22 +92,22 @@ export function DeliverablesTable({
       }
     } catch (err) {
       console.error(err);
-      alert("Erro ao atualizar entrega.");
+      setErrorMessage(err instanceof Error ? err.message : "Erro ao atualizar entrega.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Deseja realmente excluir esta entrega?")) return;
+  const confirmDeleteDeliverable = async () => {
+    if (!deleteDeliverableTarget) return;
     try {
       setLoading(true);
-      await deleteDeliverable(id);
-      setDeliverables((prev) => prev.filter((d) => d.id !== id));
+      await deleteDeliverable(deleteDeliverableTarget.id);
+      setDeliverables((prev) => prev.filter((d) => d.id !== deleteDeliverableTarget.id));
       onRefresh?.();
     } catch (err) {
       console.error(err);
-      alert("Erro ao excluir entrega.");
+      throw err instanceof Error ? err : new Error("Erro ao excluir entrega.");
     } finally {
       setLoading(false);
     }
@@ -109,6 +115,23 @@ export function DeliverablesTable({
 
   return (
     <div className="space-y-4">
+      {errorMessage && (
+        <div className="flex items-center justify-between rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+            <span className="font-medium">{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-xs font-bold text-red-700 dark:text-red-300"
+            aria-label="Fechar mensagem de erro"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Quick Add Row Flat */}
       <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
         <h3 className="text-xs font-bold tracking-wider text-gray-500 dark:text-gray-400 uppercase mb-3">
@@ -310,7 +333,7 @@ export function DeliverablesTable({
                           <Button
                             size="icon-sm"
                             variant="ghost"
-                            onClick={() => handleDelete(deliv.id)}
+                            onClick={() => setDeleteDeliverableId(deliv.id)}
                             className="text-red-500 hover:text-red-700 h-6 w-6"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -326,6 +349,18 @@ export function DeliverablesTable({
       </div>
       </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteDeliverableTarget)}
+        onOpenChange={(open) => { if (!open) setDeleteDeliverableId(null); }}
+        title="Excluir entrega?"
+        description={deleteDeliverableTarget
+          ? `Deseja realmente excluir «${deleteDeliverableTarget.title}»?`
+          : ""}
+        confirmLabel="Excluir"
+        destructive
+        onConfirm={confirmDeleteDeliverable}
+      />
     </div>
   );
 }

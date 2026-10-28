@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { addToast } from "@/lib/toast-store";
 import {
   Plus,
   Trash2,
@@ -152,7 +153,9 @@ export function ReadingsTable({
   const [editTocText, setEditTocText] = useState("");
   const [editTocMessage, setEditTocMessage] = useState<string | null>(null);
   const [unmarkReadingId, setUnmarkReadingId] = useState<string | null>(null);
+  const [deleteReadingId, setDeleteReadingId] = useState<string | null>(null);
   const unmarkReading = readings.find((reading) => reading.id === unmarkReadingId);
+  const deleteReadingTarget = readings.find((reading) => reading.id === deleteReadingId);
 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
 
@@ -304,7 +307,7 @@ export function ReadingsTable({
       }
     } catch (err) {
       console.error(err);
-      alert("Erro ao cadastrar leitura.");
+      addToast({ message: "Erro ao cadastrar leitura." });
     } finally {
       setLoading(false);
     }
@@ -322,7 +325,7 @@ export function ReadingsTable({
     } catch (err) {
       console.error(err);
       setReadings((prev) => prev.map((r) => (r.id === reading.id ? { ...r, is_read: false } : r)));
-      alert("Erro ao alterar status da leitura.");
+      addToast({ message: "Erro ao alterar status da leitura." });
     }
   };
 
@@ -369,16 +372,16 @@ export function ReadingsTable({
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Deseja realmente excluir esta leitura?")) return;
+  const confirmDeleteReading = async () => {
+    if (!deleteReadingTarget) return;
     try {
       setLoading(true);
-      await deleteReading(id);
-      setReadings((prev) => prev.filter((r) => r.id !== id));
+      await deleteReading(deleteReadingTarget.id);
+      setReadings((prev) => prev.filter((r) => r.id !== deleteReadingTarget.id));
       onRefresh?.();
     } catch (err) {
       console.error(err);
-      alert("Erro ao excluir leitura.");
+      throw err instanceof Error ? err : new Error("Erro ao excluir leitura.");
     } finally {
       setLoading(false);
     }
@@ -993,7 +996,7 @@ export function ReadingsTable({
                           <Button
                             size="icon-sm"
                             variant="ghost"
-                            onClick={() => handleDelete(reading.id)}
+                            onClick={() => setDeleteReadingId(reading.id)}
                             className="text-red-500 hover:text-red-700 h-6 w-6"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1018,6 +1021,17 @@ export function ReadingsTable({
           : ""}
         confirmLabel="Desmarcar"
         onConfirm={confirmUnmarkReading}
+      />
+      <ConfirmDialog
+        open={Boolean(deleteReadingTarget)}
+        onOpenChange={(open) => { if (!open) setDeleteReadingId(null); }}
+        title="Excluir leitura?"
+        description={deleteReadingTarget
+          ? `Deseja realmente excluir «${deleteReadingTarget.title}»?`
+          : ""}
+        confirmLabel="Excluir"
+        destructive
+        onConfirm={confirmDeleteReading}
       />
     </div>
   );

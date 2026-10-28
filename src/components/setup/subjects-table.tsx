@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +76,8 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
   // Modal de visualização de detalhes pedagógicos
   const [viewingSubject, setViewingSubject] = useState<Subject | null>(null);
   const [editingPedagogicalSubject, setEditingPedagogicalSubject] = useState<Subject | null>(null);
+  const [deleteSubjectId, setDeleteSubjectId] = useState<string | null>(null);
+  const deleteSubjectTarget = subjects.find((subject) => subject.id === deleteSubjectId);
 
   const toggleDay = (day: string, currentDays: string[], onChange: (days: string[]) => void) => {
     if (currentDays.includes(day)) {
@@ -190,16 +193,16 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Deseja realmente excluir esta disciplina e todos os seus vínculos?")) return;
+  const confirmDeleteSubject = async () => {
+    if (!deleteSubjectTarget) return;
     try {
       setLoading(true);
-      await deleteSubject(id);
-      setSubjects((prev) => prev.filter((s) => s.id !== id));
+      await deleteSubject(deleteSubjectTarget.id);
+      setSubjects((prev) => prev.filter((s) => s.id !== deleteSubjectTarget.id));
       onRefresh?.();
     } catch (err) {
       console.error(err);
-      alert("Erro ao excluir disciplina.");
+      throw err instanceof Error ? err : new Error("Erro ao excluir disciplina.");
     } finally {
       setLoading(false);
     }
@@ -516,7 +519,7 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
                           <Button
                             size="icon-sm"
                             variant="ghost"
-                            onClick={() => handleDelete(sub.id)}
+                            onClick={() => setDeleteSubjectId(sub.id)}
                             className="text-red-500 hover:text-red-700 h-6 w-6"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -641,6 +644,18 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
           setViewingSubject(updated);
           onRefresh?.();
         }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteSubjectTarget)}
+        onOpenChange={(open) => { if (!open) setDeleteSubjectId(null); }}
+        title="Excluir disciplina?"
+        description={deleteSubjectTarget
+          ? `Deseja realmente excluir «${deleteSubjectTarget.name}» e todos os seus vínculos?`
+          : ""}
+        confirmLabel="Excluir"
+        destructive
+        onConfirm={confirmDeleteSubject}
       />
     </div>
   );

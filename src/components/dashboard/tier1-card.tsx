@@ -41,7 +41,7 @@ export function Tier1Card({ review, onRefresh }: Tier1CardProps) {
     } catch (err) {
       console.error(err);
       setOptimisticCompleted(null);
-      alert("Erro ao marcar revisão como concluída.");
+      addToast({ message: "Erro ao marcar revisão como concluída." });
     } finally {
       setLoading(false);
     }
