@@ -2,6 +2,12 @@ import { daysBetweenISO, timestampToDateISO, todayISO } from "@/lib/dates";
 import { projectReadingQueue } from "@/lib/projection";
 import { DEFAULT_PAGES_PER_DAY } from "@/lib/speed";
 import { estimateTimerDurationSeconds } from "@/lib/reading-timer";
+import {
+  capSuggestedPagesToBudget,
+  computeCognitiveBudget,
+  reservedMinutesExcludingReading,
+  type CognitiveTier2Reading,
+} from "@/lib/cognitive-budget";
 
 export interface RecommendationReading {
   id: string;
@@ -123,4 +129,40 @@ export function calculateSuggestedTimerDurationSeconds(
 ): number {
   const suggestedPages = calculateSuggestedPages(reading, userPace, today);
   return estimateTimerDurationSeconds(suggestedPages, reading.current_speed_pph ?? 0);
+}
+
+/**
+ * Meta de páginas da recomendação limitada ao orçamento cognitivo diário
+ * (após reservar revisões Tier 1 e demais cotas Tier 2).
+ */
+export function calculateBudgetAwareSuggestedPages(options: {
+  reading: RecommendationReading & { current_speed_pph?: number };
+  userPace: number;
+  budgetMinutes: number;
+  reviewCount: number;
+  tier2Readings: readonly CognitiveTier2Reading[];
+  today?: string;
+}): { pages: number; uncappedPages: number; budget: ReturnType<typeof computeCognitiveBudget> } {
+  const today = options.today ?? todayISO();
+  const budget = computeCognitiveBudget({
+    budgetMinutes: options.budgetMinutes,
+    reviewCount: options.reviewCount,
+    tier2Readings: options.tier2Readings,
+    userPace: options.userPace,
+    today,
+  });
+  const uncappedPages = calculateSuggestedPages(options.reading, options.userPace, today);
+  const pages = capSuggestedPagesToBudget({
+    suggestedPages: uncappedPages,
+    speedPph: options.reading.current_speed_pph ?? 0,
+    budgetMinutes: options.budgetMinutes,
+    reservedMinutes: reservedMinutesExcludingReading(
+      budget,
+      options.tier2Readings,
+      options.userPace,
+      options.reading.id,
+      today,
+    ),
+  });
+  return { pages, uncappedPages, budget };
 }

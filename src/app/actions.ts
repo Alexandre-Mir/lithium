@@ -7,7 +7,11 @@ import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
 import { globalAverageSpeedPph, pickInitialSpeed, pickUserPacePagesPerDay, speedFromTotals } from "@/lib/speed";
 import { projectReadingQueue } from "@/lib/projection";
-import { calculateSuggestedPages, getSuggestedReading } from "@/lib/recommendation";
+import {
+  calculateBudgetAwareSuggestedPages,
+  getSuggestedReading,
+} from "@/lib/recommendation";
+import { computeCognitiveBudget } from "@/lib/cognitive-budget";
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { warnIfTruncated } from "@/lib/warn-if-truncated";
 import { computeRemaining } from "@/lib/progress";
@@ -1306,6 +1310,7 @@ export async function getDashboardData() {
   }
 
   const userPacePagesPerDay = pickUserPacePagesPerDay(speedStats);
+  const reviewCount = (tier1 ?? []).length + milestoneReviews.length;
   const recommendedReading = getSuggestedReading(
     [...tier2, ...tier3, ...tier4],
     userPacePagesPerDay,
@@ -1315,9 +1320,28 @@ export async function getDashboardData() {
       dailyGoalReached: todayReadingMinutes >= dailyGoalMinutes,
     },
   );
-  const recommendedPages = recommendedReading
-    ? calculateSuggestedPages(recommendedReading, userPacePagesPerDay, today)
-    : 0;
+  const budgetAware = recommendedReading
+    ? calculateBudgetAwareSuggestedPages({
+      reading: recommendedReading,
+      userPace: userPacePagesPerDay,
+      budgetMinutes: dailyGoalMinutes,
+      reviewCount,
+      tier2Readings: tier2,
+      today,
+    })
+    : {
+      pages: 0,
+      uncappedPages: 0,
+      budget: computeCognitiveBudget({
+        budgetMinutes: dailyGoalMinutes,
+        reviewCount,
+        tier2Readings: tier2,
+        userPace: userPacePagesPerDay,
+        today,
+      }),
+    };
+  const recommendedPages = budgetAware.pages;
+  const cognitiveBudget = budgetAware.budget;
 
   return {
     tier1: tier1 ?? [],
@@ -1335,6 +1359,15 @@ export async function getDashboardData() {
     averageSpeedPph: globalAverageSpeedPph(speedStats),
     recommendedReadingId: recommendedReading?.id ?? null,
     recommendedPages,
+    cognitiveBudget: {
+      budgetMinutes: cognitiveBudget.budgetMinutes,
+      demandedMinutes: cognitiveBudget.demandedMinutes,
+      tier1Minutes: cognitiveBudget.tier1Minutes,
+      tier2Minutes: cognitiveBudget.tier2Minutes,
+      isOverloaded: cognitiveBudget.isOverloaded,
+      overloadMinutes: cognitiveBudget.overloadMinutes,
+      pagesCapped: Boolean(recommendedReading) && recommendedPages < budgetAware.uncappedPages,
+    },
   };
 }
 

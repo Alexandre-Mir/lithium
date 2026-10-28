@@ -84,7 +84,7 @@ export function DailyGoalCard({ todayReadingMinutes, goalMinutes, averageSpeedPp
           <div className="flex items-center gap-2">
             <Target className={`h-4 w-4 ${goalReached ? "text-emerald-600 dark:text-emerald-400" : "text-indigo-600 dark:text-indigo-400"}`} />
             <h2 className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-gray-200">
-              Meta diária de leitura
+              Meta / orçamento cognitivo diário
             </h2>
             {goalReached && (
               <span className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">

@@ -17,6 +17,10 @@ import type { ReadingSessionTarget } from "@/components/reading-session-modal";
 import { QuickSessionDialog } from "@/components/dashboard/quick-session-dialog";
 import { DailyGoalCard } from "@/components/dashboard/daily-goal-card";
 import { RecommendationCard } from "@/components/dashboard/recommendation-card";
+import {
+  CognitiveOverloadAlert,
+  type CognitiveBudgetSummary,
+} from "@/components/dashboard/cognitive-overload-alert";
 import { MilestoneSummaryTasks } from "@/components/dashboard/milestone-summary-tasks";
 import { formatTodayLongBR } from "@/lib/dates";
 import { sumPendingLoad } from "@/lib/progress";
@@ -50,6 +54,7 @@ interface DashboardViewProps {
   averageSpeedPph: number;
   recommendedReadingId: string | null;
   recommendedPages: number;
+  cognitiveBudget: CognitiveBudgetSummary;
   milestoneSummaries: MilestoneSummaryWithBook[];
 }
 
@@ -69,6 +74,7 @@ export function DashboardView({
   averageSpeedPph,
   recommendedReadingId,
   recommendedPages,
+  cognitiveBudget,
   milestoneSummaries,
 }: DashboardViewProps) {
   const router = useRouter();
@@ -204,6 +210,11 @@ export function DashboardView({
           <p className="text-[10px] text-gray-500">Tempo estimado de todas as leituras pendentes</p>
         </section>
       </div>
+
+      <CognitiveOverloadAlert
+        budget={cognitiveBudget}
+        recommendedPages={recommendedPages}
+      />
 
       <RecommendationCard
         reading={recommendedReading}

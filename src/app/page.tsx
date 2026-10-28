@@ -29,6 +29,15 @@ export default async function HomePage() {
   let averageSpeedPph = 20;
   let recommendedReadingId: string | null = null;
   let recommendedPages = 0;
+  let cognitiveBudget = {
+    budgetMinutes: 60,
+    demandedMinutes: 0,
+    tier1Minutes: 0,
+    tier2Minutes: 0,
+    isOverloaded: false,
+    overloadMinutes: 0,
+    pagesCapped: false,
+  };
   let milestoneSummaries: MilestoneSummaryWithBook[] = [];
   let connectionError: string | null = null;
 
@@ -53,6 +62,7 @@ export default async function HomePage() {
     averageSpeedPph = data.averageSpeedPph ?? 20;
     recommendedReadingId = data.recommendedReadingId ?? null;
     recommendedPages = data.recommendedPages ?? 0;
+    cognitiveBudget = data.cognitiveBudget ?? cognitiveBudget;
     if (data.schemaError) connectionError = data.schemaError;
   } else {
     console.warn("Aviso ao carregar o Dashboard:", dashboardResult.reason);
@@ -112,6 +122,7 @@ export default async function HomePage() {
         averageSpeedPph={averageSpeedPph}
         recommendedReadingId={recommendedReadingId}
         recommendedPages={recommendedPages}
+        cognitiveBudget={cognitiveBudget}
         milestoneSummaries={milestoneSummaries}
       />
     </div>

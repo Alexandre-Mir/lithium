@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateBudgetAwareSuggestedPages,
   calculateSuggestedPages,
   calculateSuggestedTimerDurationSeconds,
   getSuggestedReading,
@@ -122,5 +123,36 @@ describe("motor de recomendação", () => {
       deadline: "2026-10-28",
       current_speed_pph: 50,
     }), 15, "2026-10-24")).toBe(1_800);
+  });
+
+  it("limita a meta recomendada ao orçamento cognitivo após reservar T1 e demais T2", () => {
+    const recommended = makeReading({
+      id: "recommended",
+      target_pages: 100,
+      pages_read: 0,
+      deadline: null,
+      current_speed_pph: 30,
+    });
+    const otherTier2 = {
+      id: "other-t2",
+      target_pages: 60,
+      pages_read: 0,
+      deadline: "2026-10-25",
+      current_speed_pph: 30,
+    };
+
+    const result = calculateBudgetAwareSuggestedPages({
+      reading: recommended,
+      userPace: 15,
+      budgetMinutes: 90,
+      reviewCount: 2, // 30 min
+      tier2Readings: [otherTier2, recommended],
+      today: "2026-10-24",
+    });
+
+    // other T2: 60p / 1 dia a 30 p/h = 120 min → reserved 30+120 = 150 > 90 → 0 páginas
+    expect(result.budget.isOverloaded).toBe(true);
+    expect(result.uncappedPages).toBe(15);
+    expect(result.pages).toBe(0);
   });
 });

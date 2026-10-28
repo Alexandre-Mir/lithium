@@ -69,11 +69,6 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 ## 3. Evolução do Motor Cognitivo & Ciência da Aprendizagem
 
 ### Pendentes
-- [ ] **`COG-01` — Orçamento Diário de Carga Cognitiva (Daily Cognitive Budget)**
-  - **Conceito:** Baseado na Teoria da Carga Cognitiva (Sweller). O usuário define sua capacidade diária de foco sustentável (ex: 90 ou 120 minutos).
-  - **Funcionalidade:** O motor soma as horas estimadas de Tier 1 (revisões ativas) + Tier 2 (entregas em zona de perigo). Se o tempo exigido ultrapassar o orçamento diário, exibe um alerta visual de *Sobrecarga Cognitiva* e sugere a meta de páginas recomendada para não exceder o limite cognitivo do dia.
-  - **Arquivos-chave:** `src/lib/recommendation.ts`, `src/lib/projection.ts`, `src/components/dashboard/dashboard-view.tsx`.
-
 - [ ] **`COG-03` — Níveis de Retenção nas Revisões Espaçadas (Fácil / Médio / Difícil)**
   - **Conceito:** Algoritmos de repetição espaçada (como SuperMemo / Anki) ajustam o intervalo baseado no esforço de recuperação.
   - **Funcionalidade:** Ao marcar uma revisão na Agenda (`/agenda`) ou no Tier 1, o usuário escolhe:
@@ -94,6 +89,8 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
   - **Arquivos-chave:** `src/types/database.ts`, `src/lib/speed.ts`, `src/lib/projection.ts`.
 
 ### Concluídos
+- [x] **`COG-01` — Orçamento Diário de Carga Cognitiva (Daily Cognitive Budget)**
+  - *Resolução:* Meta diária (`daily_goal_minutes`) passa a atuar como orçamento cognitivo. `computeCognitiveBudget` soma Tier 1 (15 min/revisão) + cotas Tier 2; o Dashboard exibe alerta de *Sobrecarga cognitiva* e `calculateBudgetAwareSuggestedPages` limita a meta recomendada.
 - [x] **`COG-02` — Active Recall por Marco de Leitura (`milestone_summaries`)**
   - *Resolução:* Implementada a tabela `milestone_summaries` (v1.9) e `scheduled_reviews` (v1.10), disparando criação atômica de revisões D+1, D+7 e D+21 ao preencher o resumo de marco, com integração no Dashboard e na Agenda.
 - [x] **`COG-RECOM` — Recomendação Diária Inteligente de Leitura**
@@ -153,3 +150,4 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 | 2026-10-27 | `BUG-05` | Agenda e Tier 1 unificados para revisões de leituras e de marcos | `src/app/actions.ts`, `agenda.ts`, componentes de Agenda e Dashboard |
 | 2026-10-28 | `BUG-06` | Toast com Desfazer ao concluir leitura na Biblioteca | `book-card.tsx`, `reading-completion-toast.ts` |
 | 2026-10-28 | `UX-02` | Remoção de `alert()`/`confirm()` nativos no setup e dashboard | tabelas setup, cards dashboard, `no-native-dialogs.test.ts` |
+| 2026-10-28 | `COG-01` | Orçamento cognitivo diário com alerta de sobrecarga e meta de páginas limitada | `cognitive-budget.ts`, `recommendation.ts`, dashboard |
