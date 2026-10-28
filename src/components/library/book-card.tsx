@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { markReadingAsRead, markReadingAsUnread } from "@/app/actions";
 import { formatDateBR } from "@/lib/dates";
 import { computeRemaining } from "@/lib/progress";
+import { readingCompletedUndoToast } from "@/lib/reading-completion-toast";
+import { addToast } from "@/lib/toast-store";
 import { ReadingCover } from "@/components/library/reading-cover";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
@@ -44,6 +46,13 @@ export function BookCard({
     try {
       await markReadingAsRead(reading.id);
       onRefresh?.();
+      addToast(
+        readingCompletedUndoToast(reading.title, async () => {
+          await markReadingAsUnread(reading.id);
+          setIsReadOverride(null);
+          onRefresh?.();
+        })
+      );
     } catch (err) {
       console.error(err);
       setIsReadOverride(null);

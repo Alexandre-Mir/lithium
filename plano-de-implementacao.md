@@ -13,17 +13,14 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 ## 1. Bugs e Inconsistências Identificados
 
 ### Pendentes
-- [ ] **`BUG-06` — Falta de Toast com "Desfazer" ao Concluir Leitura na Biblioteca (`book-card.tsx`)**
-  - **Contexto:** Enquanto o card da cascata (`reading-tier-card.tsx`) emite notificação com botão "Desfazer" via `addToast`, o `BookCard` na Biblioteca marca como lida sem toast, dificultando a reversão de toques acidentais sem precisar clicar de novo e confirmar no diálogo.
-  - **Ação:** Adicionar `addToast` com `actionLabel: "Desfazer"` em `handleMarkAsRead` no `book-card.tsx`.
-  - **Arquivos-chave:** `src/components/library/book-card.tsx`.
-
 - [ ] **`BUG-07` — Limite de 1.000 Registros sem Paginação no Histórico (`/history`)**
   - **Contexto:** `getAllReadingSessions()` no backend aplica `warnIfTruncated` quando o total de sessões atinge 1.000 linhas, exibindo um aviso estático na tela. Estudantes com uso diário intenso ao longo dos meses não conseguem carregar sessões antigas além desse limite.
   - **Ação:** Adicionar suporte a paginação paginada (cursor ou página com botão "Carregar mais sessões") na Server Action e na view.
   - **Arquivos-chave:** `src/app/actions.ts`, `src/components/history/history-view.tsx`.
 
 ### Concluídos
+- [x] **`BUG-06` — Falta de Toast com "Desfazer" ao Concluir Leitura na Biblioteca (`book-card.tsx`)**
+  - *Resolução:* `handleMarkAsRead` em `book-card.tsx` passa a emitir `addToast` com `actionLabel: "Desfazer"` via helper `readingCompletedUndoToast`, espelhando o card da cascata.
 - [x] **`BUG-01` — Conclusão de Leitura Destrutiva sem Toast de "Desfazer" no Dashboard**
   - *Resolução:* Implementado `addToast` com temporizador e ação `[Desfazer]` acionando `markReadingAsUnread(id)` em `reading-tier-card.tsx` e `tier1-card.tsx`.
 - [x] **`BUG-02` — Projeção Incorreta em Leituras Concluídas (`/library/[id]`)**
@@ -162,3 +159,4 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 | 2026-10-27 | `DOC-01` | Criação e auditoria profunda do backlog vivo `plano-de-implementacao.md` | `plano-de-implementacao.md`, `AGENTS.md` |
 | 2026-10-27 | `BUG-04` | Cards compactos no histórico mobile; tabela preservada em telas maiores | `src/components/history/history-view.tsx`, `history-view.test.ts` |
 | 2026-10-27 | `BUG-05` | Agenda e Tier 1 unificados para revisões de leituras e de marcos | `src/app/actions.ts`, `agenda.ts`, componentes de Agenda e Dashboard |
+| 2026-10-28 | `BUG-06` | Toast com Desfazer ao concluir leitura na Biblioteca | `book-card.tsx`, `reading-completion-toast.ts` |
