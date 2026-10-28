@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { getDashboardData, getMilestoneSummaries, getSubjectStats } from "@/app/actions";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import type { AgendaMilestoneReviewEvent } from "@/lib/agenda";
+import { emptyConsistencyHeatmap, type ConsistencyHeatmapModel } from "@/lib/consistency-heatmap";
 import {
   ReadingWithSubject,
   SpacedReviewWithReading,
@@ -39,6 +40,7 @@ export default async function HomePage() {
     pagesCapped: false,
   };
   let milestoneSummaries: MilestoneSummaryWithBook[] = [];
+  let consistencyHeatmap: ConsistencyHeatmapModel = emptyConsistencyHeatmap();
   let connectionError: string | null = null;
 
   const [dashboardResult, statsResult, summariesResult] = await Promise.allSettled([
@@ -63,6 +65,7 @@ export default async function HomePage() {
     recommendedReadingId = data.recommendedReadingId ?? null;
     recommendedPages = data.recommendedPages ?? 0;
     cognitiveBudget = data.cognitiveBudget ?? cognitiveBudget;
+    consistencyHeatmap = data.consistencyHeatmap ?? consistencyHeatmap;
     if (data.schemaError) connectionError = data.schemaError;
   } else {
     console.warn("Aviso ao carregar o Dashboard:", dashboardResult.reason);
@@ -123,6 +126,7 @@ export default async function HomePage() {
         recommendedReadingId={recommendedReadingId}
         recommendedPages={recommendedPages}
         cognitiveBudget={cognitiveBudget}
+        consistencyHeatmap={consistencyHeatmap}
         milestoneSummaries={milestoneSummaries}
       />
     </div>

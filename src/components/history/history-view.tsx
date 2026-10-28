@@ -8,11 +8,13 @@ import { formatDateTimeBR } from "@/lib/dates";
 import { formatDuration, pph, sessionSeconds, sessionSourceLabel } from "@/lib/session-time";
 import { isUnusualSession } from "@/lib/session-anomaly";
 import { pagesBeforeSession } from "@/lib/session-pages";
+import { buildConsistencyHeatmap } from "@/lib/consistency-heatmap";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConsistencyHeatmap } from "@/components/consistency-heatmap";
 import {
   Table,
   TableBody,
@@ -65,6 +67,7 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
     0
   );
   const avgSpeed = pph(totalPages, totalSeconds).toFixed(1);
+  const consistencyHeatmap = buildConsistencyHeatmap(initialSessions);
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-6">
@@ -111,6 +114,8 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
           </div>
         </div>
       </div>
+
+      <ConsistencyHeatmap model={consistencyHeatmap} />
 
       {truncated && (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">

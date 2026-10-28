@@ -111,16 +111,13 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
   - **Funcionalidade:** Área de texto no Setup onde o estudante cola uma lista de DOIs, ISBNs ou código BibTeX; o backend enfileira as consultas na Crossref/Google Books e pré-cadastra os textos na disciplina selecionada.
   - **Arquivos-chave:** `src/lib/book-metadata.ts`, `src/components/setup/readings-table.tsx`.
 
-- [ ] **`FEAT-03` — Heatmap Minimalista de Consistência (Últimos 28 Dias)**
-  - **Conceito:** Visualização gráfica sóbria e plana (estilo GitHub commits, monocromático em Flat Design) no topo do `/history` ou Dashboard, mostrando dias com sessões realizadas.
-  - **Benefício:** Reforço do hábito e visualização imediata da regularidade dos blocos de estudo.
-  - **Arquivos-chave:** `src/components/history/history-view.tsx`.
-
 - [ ] **`FEAT-04` — Modo Foco em Tela Cheia (Distraction-Free Focus)**
   - **Conceito:** Ao iniciar o cronômetro para uma leitura, opção de expandir para uma interface limpa com fundo escuro, mostrando apenas o título do texto, a meta de páginas da sessão, o relógio em fonte `Geist Mono` grande e os controles essenciais.
   - **Arquivos-chave:** `src/components/reading-timer-bar.tsx`, `src/components/reading-session-modal.tsx`.
 
 ### Concluídos
+- [x] **`FEAT-03` — Heatmap Minimalista de Consistência (Últimos 28 Dias)**
+  - *Resolução:* Grade monocromática Flat (estilo commits) via `consistency-heatmap.ts` + `ConsistencyHeatmap`, no topo do Dashboard e do Histórico; intensidade por minutos de sessão (níveis 0–4).
 - [x] **`FEAT-AGENDA` — Calendário Mensal e Linha do Tempo (`/agenda`)**
   - *Resolução:* Implementado módulo com `react-day-picker` estilizado em Flat Design, agrupamento diário de eventos e revisão inline de marcos agendados.
 - [x] **`FEAT-TIMER` — Cronômetro Global Flutuante com Sprints Baseados na Cota**
@@ -151,3 +148,4 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 | 2026-10-28 | `BUG-06` | Toast com Desfazer ao concluir leitura na Biblioteca | `book-card.tsx`, `reading-completion-toast.ts` |
 | 2026-10-28 | `UX-02` | Remoção de `alert()`/`confirm()` nativos no setup e dashboard | tabelas setup, cards dashboard, `no-native-dialogs.test.ts` |
 | 2026-10-28 | `COG-01` | Orçamento cognitivo diário com alerta de sobrecarga e meta de páginas limitada | `cognitive-budget.ts`, `recommendation.ts`, dashboard |
+| 2026-10-28 | `FEAT-03` | Heatmap de consistência dos últimos 28 dias (Dashboard + Histórico) | `consistency-heatmap.ts`, `consistency-heatmap.tsx` |

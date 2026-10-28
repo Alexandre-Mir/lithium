@@ -41,6 +41,7 @@ describe("HistoryView responsivo", () => {
       createElement(HistoryView, { initialSessions: [session] })
     );
 
+    expect(html).toContain("Consistência — últimos 28 dias");
     expect(html).toContain("sm:hidden");
     expect(html).toContain("hidden sm:block");
     expect(html.split("A leitura de teste").length - 1).toBe(2);

@@ -21,10 +21,12 @@ import {
   CognitiveOverloadAlert,
   type CognitiveBudgetSummary,
 } from "@/components/dashboard/cognitive-overload-alert";
+import { ConsistencyHeatmap } from "@/components/consistency-heatmap";
 import { MilestoneSummaryTasks } from "@/components/dashboard/milestone-summary-tasks";
 import { formatTodayLongBR } from "@/lib/dates";
 import { sumPendingLoad } from "@/lib/progress";
 import type { AgendaMilestoneReviewEvent } from "@/lib/agenda";
+import type { ConsistencyHeatmapModel } from "@/lib/consistency-heatmap";
 import { estimateTimerDurationSeconds } from "@/lib/reading-timer";
 import { startReadingTimer } from "@/lib/reading-timer-store";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +57,7 @@ interface DashboardViewProps {
   recommendedReadingId: string | null;
   recommendedPages: number;
   cognitiveBudget: CognitiveBudgetSummary;
+  consistencyHeatmap: ConsistencyHeatmapModel;
   milestoneSummaries: MilestoneSummaryWithBook[];
 }
 
@@ -75,6 +78,7 @@ export function DashboardView({
   recommendedReadingId,
   recommendedPages,
   cognitiveBudget,
+  consistencyHeatmap,
   milestoneSummaries,
 }: DashboardViewProps) {
   const router = useRouter();
@@ -192,6 +196,8 @@ export function DashboardView({
           </div>
         </div>
       </div>
+
+      <ConsistencyHeatmap model={consistencyHeatmap} />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
         <DailyGoalCard

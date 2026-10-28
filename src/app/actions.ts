@@ -12,6 +12,11 @@ import {
   getSuggestedReading,
 } from "@/lib/recommendation";
 import { computeCognitiveBudget } from "@/lib/cognitive-budget";
+import {
+  buildConsistencyHeatmap,
+  CONSISTENCY_HEATMAP_DAYS,
+  type HeatmapSessionInput,
+} from "@/lib/consistency-heatmap";
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { warnIfTruncated } from "@/lib/warn-if-truncated";
 import { computeRemaining } from "@/lib/progress";
@@ -417,6 +422,38 @@ async function getTodayReadingSummary(): Promise<{
     minutes: getTodayTotalReadingTime(sessions),
     pagesByReading,
   };
+}
+
+async function getConsistencyHeatmapSessions(
+  today: string = todayISO(),
+): Promise<HeatmapSessionInput[]> {
+  const windowStart = addDaysISO(today, -(CONSISTENCY_HEATMAP_DAYS - 1));
+  const start = startOfDayUtcISO(windowStart);
+  const end = startOfDayUtcISO(addDaysISO(today, 1));
+  const pageSize = 1000;
+  const sessions: HeatmapSessionInput[] = [];
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from("reading_sessions")
+      .select("duration_minutes, duration_seconds, started_at, ended_at, created_at")
+      .or(
+        `and(started_at.gte.${start},started_at.lt.${end}),and(ended_at.gte.${start},ended_at.lt.${end}),and(started_at.is.null,ended_at.is.null,created_at.gte.${start},created_at.lt.${end})`,
+      )
+      .order("created_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      console.warn("Não foi possível consultar sessões do heatmap:", error.message);
+      return [];
+    }
+
+    const rows = (data ?? []) as unknown as HeatmapSessionInput[];
+    sessions.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+
+  return sessions;
 }
 
 export async function getDailyGoalMinutes(): Promise<number> {
@@ -1110,7 +1147,14 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
 export async function getDashboardData() {
   const today = todayISO();
   const sevenDaysStr = addDaysISO(today, 7);
-  const [progressByReading, lastSessionResult, speedStats, todaySummary, dailyGoalMinutes] = await Promise.all([
+  const [
+    progressByReading,
+    lastSessionResult,
+    speedStats,
+    todaySummary,
+    dailyGoalMinutes,
+    heatmapSessions,
+  ] = await Promise.all([
     getReadingProgressMap(),
     supabase
       .from("reading_sessions")
@@ -1121,8 +1165,10 @@ export async function getDashboardData() {
     getSpeedStats(),
     getTodayReadingSummary(),
     getDailyGoalMinutes(),
+    getConsistencyHeatmapSessions(today),
   ]);
   const todayReadingMinutes = todaySummary.minutes;
+  const consistencyHeatmap = buildConsistencyHeatmap(heatmapSessions, today);
   if (lastSessionResult.error) {
     console.warn("Aviso ao buscar a leitura da sessão mais recente:", lastSessionResult.error.message);
   }
@@ -1368,6 +1414,7 @@ export async function getDashboardData() {
       overloadMinutes: cognitiveBudget.overloadMinutes,
       pagesCapped: Boolean(recommendedReading) && recommendedPages < budgetAware.uncappedPages,
     },
+    consistencyHeatmap,
   };
 }
 
