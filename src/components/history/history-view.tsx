@@ -131,127 +131,237 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
 
       {/* Tabela de Sessões */}
       <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
-        <Table>
-          <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
-            <TableRow className="border-b border-gray-200 dark:border-gray-800">
-              <TableHead className="w-[140px] p-2 text-xs">Data e Hora</TableHead>
-              <TableHead className="min-w-[220px] p-2 text-xs">Leitura / Capítulo</TableHead>
-              <TableHead className="w-[140px] p-2 text-xs">Disciplina</TableHead>
-              <TableHead className="w-[100px] p-2 text-xs font-mono">Páginas Lidas</TableHead>
-              <TableHead className="w-[100px] p-2 text-xs font-mono">Tempo Gasto</TableHead>
-              <TableHead className="w-[110px] p-2 text-xs font-mono">Velocidade Calculada</TableHead>
-              <TableHead className="w-[100px] p-2 text-xs">Origem</TableHead>
-              <TableHead className="w-[76px] p-2 text-xs text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredSessions.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-xs text-gray-500">
-                  Nenhuma sessão de leitura registrada ainda. Inicie uma sessão no Dashboard ou na Biblioteca!
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredSessions.map((session) => {
-                const reading = session.reading;
-                const subject = reading?.subject;
-                const numericSpeed = pph(session.pages_read, sessionSeconds(session));
-                const speed = numericSpeed.toFixed(1);
-                const sameReadingSessions = sessionsByReading.get(session.reading_id) ?? [];
+        <div className="block space-y-2 p-2 sm:hidden">
+          {filteredSessions.length === 0 ? (
+            <div className="py-8 text-center text-xs text-gray-500">
+              Nenhuma sessão de leitura registrada ainda. Inicie uma sessão no Dashboard ou na Biblioteca!
+            </div>
+          ) : (
+            filteredSessions.map((session) => {
+              const reading = session.reading;
+              const subject = reading?.subject;
+              const speed = pph(session.pages_read, sessionSeconds(session)).toFixed(1);
+              const sameReadingSessions = sessionsByReading.get(session.reading_id) ?? [];
+              const dateStr = formatDateTimeBR(session.started_at ?? session.created_at);
 
-                const dateStr = formatDateTimeBR(session.started_at ?? session.created_at);
-
-                return (
-                  <TableRow
-                    key={session.id}
-                    className="border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-                  >
-                    <TableCell className="p-2 font-mono text-xs text-gray-600 dark:text-gray-400">
+              return (
+                <article
+                  key={session.id}
+                  className="space-y-3 rounded-md border border-gray-200 p-3 dark:border-gray-800"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <time className="font-mono text-[11px] text-gray-500 dark:text-gray-400">
                       {dateStr}
-                    </TableCell>
+                    </time>
+                    <Badge variant="outline" className="shrink-0 text-[10px]">
+                      {sessionSourceLabel(session.source)}
+                    </Badge>
+                  </div>
 
-                    <TableCell className="p-2">
-                      <div className="font-semibold text-xs text-gray-900 dark:text-gray-100">
-                        <Link href={`/library/${session.reading_id}`} className="hover:underline">{reading?.title || "Leitura"}</Link>
+                  <div className="min-w-0">
+                    <div className="break-words text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      <Link href={`/library/${session.reading_id}`} className="hover:underline">
+                        {reading?.title || "Leitura"}
+                      </Link>
+                    </div>
+                    {reading?.chapter_title && (
+                      <div className="mt-0.5 break-words text-[11px] text-gray-500">
+                        ↳ {reading.chapter_title}
                       </div>
-                      {reading?.chapter_title && (
-                        <div className="text-[11px] text-gray-500">
-                          ↳ {reading.chapter_title}
-                        </div>
-                      )}
-                      {reading?.author && (
-                        <div className="text-[10px] text-gray-400 italic">
-                          por {reading.author}
-                        </div>
-                      )}
-                    </TableCell>
+                    )}
+                    {reading?.author && (
+                      <div className="text-[10px] italic text-gray-400">por {reading.author}</div>
+                    )}
+                  </div>
 
-                    <TableCell className="p-2">
-                      {subject ? (
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ backgroundColor: subject.theme_color || "#4f46e5" }}
-                          />
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate max-w-[120px]">
-                            {subject.name}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
-                    </TableCell>
+                  {subject ? (
+                    <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-gray-600 dark:text-gray-400">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: subject.theme_color || "#4f46e5" }}
+                      />
+                      <span className="truncate">{subject.name}</span>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-gray-400">Sem disciplina</span>
+                  )}
 
-                    <TableCell className="p-2 font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">
-                      {session.pages_read} páginas
-                    </TableCell>
-
-                    <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
-                      {formatDuration(sessionSeconds(session))}
-                    </TableCell>
-
-                    <TableCell className="p-2 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
-                      <span>{speed} p/h</span>
-                      {isUnusualSession(session, sameReadingSessions) && (
-                        <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">incomum</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="p-2 text-[11px] text-gray-600 dark:text-gray-400">
-                      <Badge variant="outline" className="text-[10px]">
-                        {sessionSourceLabel(session.source)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="p-2 text-right">
-                      <div className="inline-flex items-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Editar sessão"
-                          title="Editar sessão"
-                          onClick={() => setEditingSessionId(session.id)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Excluir sessão"
-                          title="Excluir sessão"
-                          onClick={() => setDeletingSessionId(session.id)}
-                          className="text-gray-500 hover:text-red-600"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                  <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+                    <div>
+                      <div className="text-[9px] font-semibold uppercase text-gray-500">Páginas</div>
+                      <div className="font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">
+                        {session.pages_read} p
                       </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-semibold uppercase text-gray-500">Tempo</div>
+                      <div className="font-mono text-xs text-gray-700 dark:text-gray-300">
+                        {formatDuration(sessionSeconds(session))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-semibold uppercase text-gray-500">Velocidade</div>
+                      <div className="flex flex-wrap items-center gap-1 font-mono text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                        <span>{speed} p/h</span>
+                        {isUnusualSession(session, sameReadingSessions) && (
+                          <Badge variant="outline" className="px-1 py-0 text-[9px]">incomum</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end border-t border-gray-100 pt-1 dark:border-gray-800">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Editar sessão"
+                      title="Editar sessão"
+                      onClick={() => setEditingSessionId(session.id)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Excluir sessão"
+                      title="Excluir sessão"
+                      onClick={() => setDeletingSessionId(session.id)}
+                      className="text-gray-500 hover:text-red-600"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden sm:block">
+          <Table>
+            <TableHeader className="bg-gray-50 dark:bg-gray-800/50">
+              <TableRow className="border-b border-gray-200 dark:border-gray-800">
+                <TableHead className="w-[140px] p-2 text-xs">Data e Hora</TableHead>
+                <TableHead className="min-w-[220px] p-2 text-xs">Leitura / Capítulo</TableHead>
+                <TableHead className="w-[140px] p-2 text-xs">Disciplina</TableHead>
+                <TableHead className="w-[100px] p-2 text-xs font-mono">Páginas Lidas</TableHead>
+                <TableHead className="w-[100px] p-2 text-xs font-mono">Tempo Gasto</TableHead>
+                <TableHead className="w-[110px] p-2 text-xs font-mono">Velocidade Calculada</TableHead>
+                <TableHead className="w-[100px] p-2 text-xs">Origem</TableHead>
+                <TableHead className="w-[76px] p-2 text-xs text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredSessions.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-xs text-gray-500">
+                    Nenhuma sessão de leitura registrada ainda. Inicie uma sessão no Dashboard ou na Biblioteca!
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredSessions.map((session) => {
+                  const reading = session.reading;
+                  const subject = reading?.subject;
+                  const numericSpeed = pph(session.pages_read, sessionSeconds(session));
+                  const speed = numericSpeed.toFixed(1);
+                  const sameReadingSessions = sessionsByReading.get(session.reading_id) ?? [];
+
+                  const dateStr = formatDateTimeBR(session.started_at ?? session.created_at);
+
+                  return (
+                    <TableRow
+                      key={session.id}
+                      className="border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                    >
+                      <TableCell className="p-2 font-mono text-xs text-gray-600 dark:text-gray-400">
+                        {dateStr}
+                      </TableCell>
+
+                      <TableCell className="p-2">
+                        <div className="font-semibold text-xs text-gray-900 dark:text-gray-100">
+                          <Link href={`/library/${session.reading_id}`} className="hover:underline">{reading?.title || "Leitura"}</Link>
+                        </div>
+                        {reading?.chapter_title && (
+                          <div className="text-[11px] text-gray-500">
+                            ↳ {reading.chapter_title}
+                          </div>
+                        )}
+                        {reading?.author && (
+                          <div className="text-[10px] text-gray-400 italic">
+                            por {reading.author}
+                          </div>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="p-2">
+                        {subject ? (
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: subject.theme_color || "#4f46e5" }}
+                            />
+                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate max-w-[120px]">
+                              {subject.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="p-2 font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">
+                        {session.pages_read} páginas
+                      </TableCell>
+
+                      <TableCell className="p-2 font-mono text-xs text-gray-700 dark:text-gray-300">
+                        {formatDuration(sessionSeconds(session))}
+                      </TableCell>
+
+                      <TableCell className="p-2 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
+                        <span>{speed} p/h</span>
+                        {isUnusualSession(session, sameReadingSessions) && (
+                          <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">incomum</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="p-2 text-[11px] text-gray-600 dark:text-gray-400">
+                        <Badge variant="outline" className="text-[10px]">
+                          {sessionSourceLabel(session.source)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="p-2 text-right">
+                        <div className="inline-flex items-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Editar sessão"
+                            title="Editar sessão"
+                            onClick={() => setEditingSessionId(session.id)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Excluir sessão"
+                            title="Excluir sessão"
+                            onClick={() => setDeletingSessionId(session.id)}
+                            className="text-gray-500 hover:text-red-600"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <ReadingSessionModal
