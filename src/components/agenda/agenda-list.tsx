@@ -1,6 +1,7 @@
 "use client";
 
 import { Brain, FileText } from "lucide-react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { AgendaReviewDialog } from "@/components/agenda/agenda-review-dialog";
 import {
@@ -71,6 +72,9 @@ function AgendaEventCard({ event }: { event: AgendaEvent }) {
     : event.status === "missed"
       ? "border-red-300 text-red-800 dark:border-red-900 dark:text-red-300"
       : "border-indigo-300 text-indigo-800 dark:border-indigo-900 dark:text-indigo-300";
+  const reviewLabel = event.source === "milestone"
+    ? `Revisão Ativa ${event.reviewType}`
+    : event.reviewType === "active_recall" ? "Revisão Ativa" : `Revisão ${event.reviewType}`;
 
   return (
     <article className="flex items-start gap-3 border border-indigo-200 bg-indigo-50/70 px-3 py-3 dark:border-indigo-950 dark:bg-indigo-950/30">
@@ -81,16 +85,29 @@ function AgendaEventCard({ event }: { event: AgendaEvent }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="outline" className="h-5 border-indigo-300 px-1.5 text-[10px] text-indigo-800 dark:border-indigo-900 dark:text-indigo-300">
-              Revisão {event.reviewType}
+              {reviewLabel}
             </Badge>
             <Badge variant="outline" className={`h-5 px-1.5 text-[10px] ${statusClass}`}>
               {statusLabel}
             </Badge>
           </div>
-          <p className="mt-1 truncate text-xs font-semibold text-gray-900 dark:text-gray-100">{event.milestoneTitle}</p>
-          <p className="truncate text-[11px] text-gray-600 dark:text-gray-400">
-            {event.bookTitle} · página {event.milestonePage}
-          </p>
+          {event.source === "milestone" ? (
+            <>
+              <p className="mt-1 truncate text-xs font-semibold text-gray-900 dark:text-gray-100">{event.milestoneTitle}</p>
+              <p className="truncate text-[11px] text-gray-600 dark:text-gray-400">
+                {event.bookTitle} · página {event.milestonePage}
+              </p>
+            </>
+          ) : (
+            <>
+              <Link href={`/library/${event.readingId}`} className="mt-1 block truncate text-xs font-semibold text-gray-900 hover:underline dark:text-gray-100">
+                {event.bookTitle}
+              </Link>
+              <p className="truncate text-[11px] text-gray-600 dark:text-gray-400">
+                {[event.chapterTitle, event.subjectName].filter(Boolean).join(" · ") || "Revisão da leitura"}
+              </p>
+            </>
+          )}
         </div>
         {event.status === "pending" && <AgendaReviewDialog review={event} />}
       </div>

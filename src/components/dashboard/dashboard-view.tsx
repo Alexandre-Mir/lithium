@@ -9,6 +9,7 @@ import {
   MilestoneSummaryWithBook,
 } from "@/types/database";
 import { Tier1Card } from "./tier1-card";
+import { Tier1MilestoneCard } from "./tier1-milestone-card";
 import { ReadingTierCard } from "./reading-tier-card";
 import { SubjectStats } from "./subject-stats";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
@@ -19,6 +20,7 @@ import { RecommendationCard } from "@/components/dashboard/recommendation-card";
 import { MilestoneSummaryTasks } from "@/components/dashboard/milestone-summary-tasks";
 import { formatTodayLongBR } from "@/lib/dates";
 import { sumPendingLoad } from "@/lib/progress";
+import type { AgendaMilestoneReviewEvent } from "@/lib/agenda";
 import { estimateTimerDurationSeconds } from "@/lib/reading-timer";
 import { startReadingTimer } from "@/lib/reading-timer-store";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +36,7 @@ import Link from "next/link";
 
 interface DashboardViewProps {
   tier1: SpacedReviewWithReading[];
+  milestoneReviews: AgendaMilestoneReviewEvent[];
   tier2: ReadingWithSubject[];
   tier3: ReadingWithSubject[];
   tier4: ReadingWithSubject[];
@@ -52,6 +55,7 @@ interface DashboardViewProps {
 
 export function DashboardView({
   tier1,
+  milestoneReviews,
   tier2,
   tier3,
   tier4,
@@ -103,7 +107,12 @@ export function DashboardView({
     router.refresh();
   };
 
-  const totalTasks = tier1.length + tier2.length + tier3.length + tier4.length;
+  const totalReviewTasks = tier1.length + milestoneReviews.length;
+  const totalTasks = totalReviewTasks + tier2.length + tier3.length + tier4.length;
+  const tier1Tasks = [
+    ...tier1.map((review) => ({ kind: "reading" as const, date: review.review_date, review })),
+    ...milestoneReviews.map((review) => ({ kind: "milestone" as const, date: review.date, review })),
+  ].sort((left, right) => left.date.localeCompare(right.date));
   const totalUrgentPages = sumPendingLoad(tier2).pagesRemaining;
   const totalReadingHours = sumPendingLoad([...tier2, ...tier3, ...tier4]).hoursRemaining;
   const recommendedSpeed = recommendedReading
@@ -158,7 +167,7 @@ export function DashboardView({
           <div className="bg-gray-950/60 rounded p-2.5 border border-gray-800">
             <span className="text-[10px] font-semibold text-gray-400 uppercase block">Repetições Hoje</span>
             <span className="text-xl font-bold font-mono text-indigo-400">
-              {tier1.length}
+              {totalReviewTasks}
             </span>
           </div>
 
@@ -214,7 +223,7 @@ export function DashboardView({
       {/* ============================================================ */}
       {/* TIER 1: SPACED REVIEWS (Repetição Espaçada — D+1, D+7, D+21)  */}
       {/* ============================================================ */}
-      {tier1.length > 0 && <section className="space-y-3">
+      {tier1Tasks.length > 0 && <section className="space-y-3">
         <div className="flex items-center justify-between pb-1">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 flex items-center justify-center font-bold text-xs">
@@ -232,13 +241,17 @@ export function DashboardView({
             </div>
           </div>
           <span className="text-xs font-mono font-bold text-gray-700 dark:text-gray-300">
-            {tier1.length} pendente(s)
+            {totalReviewTasks} pendente(s)
           </span>
         </div>
 
         <div className="space-y-2">
-          {tier1.map((rev) => (
-            <Tier1Card key={rev.id} review={rev} onRefresh={handleRefresh} />
+          {tier1Tasks.map((task) => (
+            task.kind === "reading" ? (
+              <Tier1Card key={`reading:${task.review.id}`} review={task.review} onRefresh={handleRefresh} />
+            ) : (
+              <Tier1MilestoneCard key={`milestone:${task.review.id}`} review={task.review} />
+            )
           ))}
         </div>
       </section>}

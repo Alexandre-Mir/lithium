@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { getDashboardData, getMilestoneSummaries, getSubjectStats } from "@/app/actions";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
+import type { AgendaMilestoneReviewEvent } from "@/lib/agenda";
 import {
   ReadingWithSubject,
   SpacedReviewWithReading,
@@ -14,6 +15,7 @@ export const instant = false;
 export default async function HomePage() {
   await connection();
   let tier1: SpacedReviewWithReading[] = [];
+  let milestoneReviews: AgendaMilestoneReviewEvent[] = [];
   let tier2: ReadingWithSubject[] = [];
   let tier3: ReadingWithSubject[] = [];
   let tier4: ReadingWithSubject[] = [];
@@ -39,6 +41,7 @@ export default async function HomePage() {
   if (dashboardResult.status === "fulfilled") {
     const data = dashboardResult.value;
     tier1 = (data.tier1 as unknown as SpacedReviewWithReading[]) || [];
+    milestoneReviews = data.milestoneReviews || [];
     tier2 = (data.tier2 as unknown as ReadingWithSubject[]) || [];
     tier3 = (data.tier3 as unknown as ReadingWithSubject[]) || [];
     tier4 = (data.tier4 as unknown as ReadingWithSubject[]) || [];
@@ -95,6 +98,7 @@ export default async function HomePage() {
       )}
       <DashboardView
         tier1={tier1}
+        milestoneReviews={milestoneReviews}
         tier2={tier2}
         tier3={tier3}
         tier4={tier4}

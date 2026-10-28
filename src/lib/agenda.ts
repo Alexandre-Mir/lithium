@@ -1,5 +1,5 @@
 import { addDaysISO, daysBetweenISO } from "@/lib/dates";
-import type { ScheduledReviewStatus, ScheduledReviewType } from "@/types/database";
+import type { ReviewStatus, ScheduledReviewStatus, ScheduledReviewType } from "@/types/database";
 
 export interface AgendaDeliverableEvent {
   kind: "deliverable";
@@ -9,20 +9,109 @@ export interface AgendaDeliverableEvent {
   subjectName: string;
 }
 
-export interface AgendaReviewEvent {
+interface AgendaReviewEventBase {
   kind: "review";
   id: string;
   date: string;
-  reviewType: ScheduledReviewType;
+  reviewType: string;
   status: ScheduledReviewStatus;
+}
+
+export interface AgendaMilestoneReviewEvent extends AgendaReviewEventBase {
+  source: "milestone";
   milestoneSummaryId: string;
   milestoneTitle: string;
   milestonePage: number;
   summaryContent: string | null;
   bookTitle: string;
+  readingId: string | null;
+  chapterTitle: string | null;
 }
 
+export interface AgendaSpacedReviewEvent extends AgendaReviewEventBase {
+  source: "reading";
+  readingId: string;
+  bookTitle: string;
+  chapterTitle: string | null;
+  subjectName: string;
+}
+
+export type AgendaReviewEvent = AgendaMilestoneReviewEvent | AgendaSpacedReviewEvent;
 export type AgendaEvent = AgendaDeliverableEvent | AgendaReviewEvent;
+
+export interface ScheduledReviewAgendaRow {
+  id: string;
+  milestone_summary_id: string;
+  review_date: string;
+  review_type: ScheduledReviewType;
+  status: ScheduledReviewStatus;
+  milestone_summary: {
+    milestone_title: string;
+    milestone_page: number;
+    content: string | null;
+    book: { id: string; title: string; chapter_title: string | null } | null;
+  } | null;
+}
+
+export interface SpacedReviewAgendaRow {
+  id: string;
+  reading_id: string;
+  review_date: string;
+  type: string;
+  status: ReviewStatus;
+  reading: {
+    title: string;
+    chapter_title: string | null;
+    subject: { name: string } | null;
+  } | null;
+}
+
+export function mapScheduledReviewToAgendaEvent(
+  row: ScheduledReviewAgendaRow,
+): AgendaMilestoneReviewEvent | null {
+  const summary = row.milestone_summary;
+  if (!summary) return null;
+  return {
+    kind: "review",
+    source: "milestone",
+    id: row.id,
+    date: row.review_date,
+    reviewType: row.review_type,
+    status: row.status,
+    milestoneSummaryId: row.milestone_summary_id,
+    milestoneTitle: summary.milestone_title,
+    milestonePage: summary.milestone_page,
+    summaryContent: summary.content,
+    bookTitle: summary.book?.title ?? "Leitura removida",
+    readingId: summary.book?.id ?? null,
+    chapterTitle: summary.book?.chapter_title ?? null,
+  };
+}
+
+export function mapSpacedReviewToAgendaEvent(
+  row: SpacedReviewAgendaRow,
+): AgendaSpacedReviewEvent | null {
+  if (!row.reading) return null;
+  return {
+    kind: "review",
+    source: "reading",
+    id: row.id,
+    date: row.review_date,
+    reviewType: row.type,
+    status: row.status === "done" ? "completed" : "pending",
+    readingId: row.reading_id,
+    bookTitle: row.reading.title,
+    chapterTitle: row.reading.chapter_title,
+    subjectName: row.reading.subject?.name ?? "Sem disciplina",
+  };
+}
+
+export function getDueAgendaReviews<T extends AgendaReviewEvent>(
+  reviews: readonly T[],
+  today: string,
+): T[] {
+  return reviews.filter((review) => review.status === "pending" && review.date <= today);
+}
 
 export interface AgendaDayGroup {
   date: string;
@@ -60,8 +149,12 @@ export function sortAgendaEvents(events: readonly AgendaEvent[]): AgendaEvent[] 
     const byDate = left.date.localeCompare(right.date);
     if (byDate !== 0) return byDate;
     if (left.kind !== right.kind) return left.kind === "deliverable" ? -1 : 1;
-    const leftTitle = left.kind === "deliverable" ? left.title : left.milestoneTitle;
-    const rightTitle = right.kind === "deliverable" ? right.title : right.milestoneTitle;
+    const leftTitle = left.kind === "deliverable"
+      ? left.title
+      : left.source === "milestone" ? left.milestoneTitle : left.bookTitle;
+    const rightTitle = right.kind === "deliverable"
+      ? right.title
+      : right.source === "milestone" ? right.milestoneTitle : right.bookTitle;
     return leftTitle.localeCompare(rightTitle, "pt-BR");
   });
 }

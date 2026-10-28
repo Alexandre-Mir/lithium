@@ -13,16 +13,6 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 ## 1. Bugs e Inconsistências Identificados
 
 ### Pendentes
-- [ ] **`BUG-05` — Desconexão entre as Duas Trilhas de Revisão Espaçada (Dashboard vs. Agenda)**
-  - **Contexto:** Existem atualmente dois fluxos de repetição espaçada operando em silos:
-    1. `spaced_reviews`: disparadas ao concluir uma leitura inteira (`readings.is_read = true`). Aparecem no **Tier 1 do Dashboard**, mas **não aparecem na Agenda (`/agenda`)**.
-    2. `scheduled_reviews`: disparadas ao concluir um resumo de Active Recall de marco (`milestone_summaries`). Aparecem na **Agenda (`/agenda`)**, mas **não aparecem no Tier 1 do Dashboard**.
-  - **Impacto no Estudante:** O estudante pode ter revisões pendentes para hoje em um fluxo e não vê-las na outra tela.
-  - **Ação:** Unificar conceitualmente as revisões:
-    - Fazer a Agenda buscar tanto `scheduled_reviews` (marcos) quanto `spaced_reviews` (leituras).
-    - Fazer o Tier 1 do Dashboard alertar sobre qualquer revisão pendente de hoje (marcos pendentes ou leituras pendentes).
-  - **Arquivos-chave:** `src/app/actions.ts` (`getAgendaData` e `getDashboardData`), `src/components/agenda/agenda-view.tsx`, `src/components/dashboard/dashboard-view.tsx`.
-
 - [ ] **`BUG-06` — Falta de Toast com "Desfazer" ao Concluir Leitura na Biblioteca (`book-card.tsx`)**
   - **Contexto:** Enquanto o card da cascata (`reading-tier-card.tsx`) emite notificação com botão "Desfazer" via `addToast`, o `BookCard` na Biblioteca marca como lida sem toast, dificultando a reversão de toques acidentais sem precisar clicar de novo e confirmar no diálogo.
   - **Ação:** Adicionar `addToast` com `actionLabel: "Desfazer"` em `handleMarkAsRead` no `book-card.tsx`.
@@ -42,6 +32,8 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
   - *Resolução:* Criada Server Action `deleteReadingSession` e `updateReadingSession` com recálculo atômico da velocidade média em `src/app/actions.ts`, acionadas por diálogos de confirmação (`ConfirmDialog`) em `history-view.tsx` e `reading-detail-view.tsx`.
 - [x] **`BUG-04` — Tabela Extensa de 8 Colunas no Mobile (`/history`)**
   - *Resolução:* Adicionada uma lista de cards compactos para viewports abaixo de `sm`, mantendo a tabela completa a partir de `sm`, com os mesmos dados e ações de edição e exclusão em `src/components/history/history-view.tsx`.
+- [x] **`BUG-05` — Desconexão entre as Duas Trilhas de Revisão Espaçada (Dashboard vs. Agenda)**
+  - *Resolução:* Agenda agora agrega `scheduled_reviews` e `spaced_reviews`; o Tier 1 do Dashboard reúne revisões de leitura e revisões de marcos pendentes até hoje, com ação de conclusão apropriada para cada fluxo.
 
 ---
 
@@ -169,3 +161,4 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 | 2026-10-27 | `SESSION-01` | CRUD completo de sessões no histórico e detalhe com recálculo em cascata | `src/app/actions.ts`, `history-view.tsx` |
 | 2026-10-27 | `DOC-01` | Criação e auditoria profunda do backlog vivo `plano-de-implementacao.md` | `plano-de-implementacao.md`, `AGENTS.md` |
 | 2026-10-27 | `BUG-04` | Cards compactos no histórico mobile; tabela preservada em telas maiores | `src/components/history/history-view.tsx`, `history-view.test.ts` |
+| 2026-10-27 | `BUG-05` | Agenda e Tier 1 unificados para revisões de leituras e de marcos | `src/app/actions.ts`, `agenda.ts`, componentes de Agenda e Dashboard |

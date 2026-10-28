@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { completeReview } from "@/app/actions";
+import { completeReview, markReviewAsDone } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,7 +28,11 @@ export function AgendaReviewDialog({ review }: { review: AgendaReviewEvent }) {
     setError(null);
     startTransition(async () => {
       try {
-        await completeReview(review.id);
+        if (review.source === "milestone") {
+          await completeReview(review.id);
+        } else {
+          await markReviewAsDone(review.id);
+        }
         setOpen(false);
         router.refresh();
       } catch (cause) {
@@ -53,14 +57,24 @@ export function AgendaReviewDialog({ review }: { review: AgendaReviewEvent }) {
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="rounded-md border border-gray-300 bg-white shadow-none dark:border-gray-700 dark:bg-gray-950 sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle className="text-sm font-semibold">Revisão {review.reviewType}</DialogTitle>
+            <DialogTitle className="text-sm font-semibold">
+              {review.source === "milestone" ? `Revisão Ativa ${review.reviewType}` : review.reviewType === "active_recall" ? "Revisão Ativa" : `Revisão ${review.reviewType}`}
+            </DialogTitle>
             <DialogDescription className="text-xs">
-              {review.bookTitle} · {review.milestoneTitle} · página {review.milestonePage}
+              {review.source === "milestone"
+                ? `${review.bookTitle} · ${review.milestoneTitle} · página ${review.milestonePage}`
+                : `${review.bookTitle}${review.chapterTitle ? ` · ${review.chapterTitle}` : ""}`}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-80 overflow-y-auto whitespace-pre-wrap border border-gray-200 bg-gray-50 p-3 text-xs leading-relaxed text-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-            {review.summaryContent?.trim() || "Este resumo não tem conteúdo salvo."}
-          </div>
+          {review.source === "milestone" ? (
+            <div className="max-h-80 overflow-y-auto whitespace-pre-wrap border border-gray-200 bg-gray-50 p-3 text-xs leading-relaxed text-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+              {review.summaryContent?.trim() || "Este resumo não tem conteúdo salvo."}
+            </div>
+          ) : (
+            <p className="border border-gray-200 bg-gray-50 p-3 text-xs leading-relaxed text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+              Tente recuperar mentalmente os pontos principais desta leitura antes de consultá-la.
+            </p>
+          )}
           {error && (
             <p role="alert" className="border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
               {error}
@@ -71,7 +85,7 @@ export function AgendaReviewDialog({ review }: { review: AgendaReviewEvent }) {
               Fechar
             </Button>
             <Button disabled={pending} onClick={handleComplete}>
-              {pending ? "Salvando…" : "Marcar Revisão como Concluída"}
+              {pending ? "Salvando…" : review.source === "milestone" ? "Marcar Revisão como Concluída" : "Concluir revisão"}
             </Button>
           </DialogFooter>
         </DialogContent>

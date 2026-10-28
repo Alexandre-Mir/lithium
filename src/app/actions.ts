@@ -15,7 +15,17 @@ import { computeSubjectPageProgress } from "@/lib/subject-progress";
 import { getTodayTotalReadingTime, pph, secondsToMinutes, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
 import { getCrossedMilestones } from "@/lib/milestone-crossing";
-import { getReviewScheduleDates, type AgendaDeliverableEvent, type AgendaReviewEvent } from "@/lib/agenda";
+import {
+  getDueAgendaReviews,
+  getReviewScheduleDates,
+  mapScheduledReviewToAgendaEvent,
+  mapSpacedReviewToAgendaEvent,
+  type AgendaDeliverableEvent,
+  type AgendaMilestoneReviewEvent,
+  type AgendaReviewEvent,
+  type ScheduledReviewAgendaRow,
+  type SpacedReviewAgendaRow,
+} from "@/lib/agenda";
 import {
   nextMilestoneSummaryStatus,
   validateMilestoneSummaryContent,
@@ -42,7 +52,6 @@ import type {
   MilestoneSummary,
   MilestoneSummaryWithBook,
   ReadingMilestone,
-  ScheduledReview,
 } from "@/types/database";
 
 // ============================================================
@@ -772,15 +781,6 @@ interface AgendaDeliverableRow {
   subject: { name: string } | null;
 }
 
-interface AgendaScheduledReviewRow extends ScheduledReview {
-  milestone_summary: {
-    milestone_title: string;
-    milestone_page: number;
-    content: string | null;
-    book: { title: string } | null;
-  } | null;
-}
-
 export async function getAgendaData(from: string, to: string): Promise<{
   deliverables: AgendaDeliverableEvent[];
   reviews: AgendaReviewEvent[];
@@ -792,7 +792,8 @@ export async function getAgendaData(from: string, to: string): Promise<{
   const { client, user } = await requireSupabaseUser();
   const pageSize = 1000;
   const deliverableRows: AgendaDeliverableRow[] = [];
-  const reviewRows: AgendaScheduledReviewRow[] = [];
+  const scheduledReviewRows: ScheduledReviewAgendaRow[] = [];
+  const spacedReviewRows: SpacedReviewAgendaRow[] = [];
 
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await client
@@ -812,7 +813,7 @@ export async function getAgendaData(from: string, to: string): Promise<{
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await client
       .from("scheduled_reviews")
-      .select("*, milestone_summary:milestone_summaries(milestone_title, milestone_page, content, book:readings(title))")
+      .select("id, milestone_summary_id, review_date, review_type, status, milestone_summary:milestone_summaries(milestone_title, milestone_page, content, book:readings(id, title, chapter_title))")
       .eq("user_id", user.id)
       .gte("review_date", from)
       .lte("review_date", to)
@@ -820,8 +821,23 @@ export async function getAgendaData(from: string, to: string): Promise<{
       .order("id", { ascending: true })
       .range(offset, offset + pageSize - 1);
     if (error) throw new Error(error.message);
-    const rows = (data ?? []) as unknown as AgendaScheduledReviewRow[];
-    reviewRows.push(...rows);
+    const rows = (data ?? []) as unknown as ScheduledReviewAgendaRow[];
+    scheduledReviewRows.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
+      .from("spaced_reviews")
+      .select("id, reading_id, review_date, type, status, reading:readings(title, chapter_title, subject:subjects(name))")
+      .gte("review_date", from)
+      .lte("review_date", to)
+      .order("review_date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as unknown as SpacedReviewAgendaRow[];
+    spacedReviewRows.push(...rows);
     if (rows.length < pageSize) break;
   }
 
@@ -832,22 +848,10 @@ export async function getAgendaData(from: string, to: string): Promise<{
     title: row.title,
     subjectName: row.subject?.name ?? "Sem disciplina",
   }));
-  const reviews: AgendaReviewEvent[] = reviewRows.flatMap((row) => {
-    const summary = row.milestone_summary;
-    if (!summary) return [];
-    return [{
-      kind: "review",
-      id: row.id,
-      date: row.review_date,
-      reviewType: row.review_type,
-      status: row.status,
-      milestoneSummaryId: row.milestone_summary_id,
-      milestoneTitle: summary.milestone_title,
-      milestonePage: summary.milestone_page,
-      summaryContent: summary.content,
-      bookTitle: summary.book?.title ?? "Leitura removida",
-    }];
-  });
+  const reviews: AgendaReviewEvent[] = [
+    ...scheduledReviewRows.map(mapScheduledReviewToAgendaEvent),
+    ...spacedReviewRows.map(mapSpacedReviewToAgendaEvent),
+  ].filter((review): review is AgendaReviewEvent => review !== null);
 
   return { deliverables, reviews };
 }
@@ -1007,6 +1011,7 @@ export async function updateSpacedReview(id: string, input: SpacedReviewUpdate) 
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
+  revalidatePath("/agenda");
   return data;
 }
 
@@ -1120,6 +1125,7 @@ export async function getDashboardData() {
   const lastSessionReadingId = lastSessionResult.data?.reading_id ?? null;
 
   let tier1: SpacedReviewWithReading[] = [];
+  let milestoneReviews: AgendaMilestoneReviewEvent[] = [];
   let schemaError: string | null = null;
 
   try {
@@ -1145,6 +1151,37 @@ export async function getDashboardData() {
     const message = err instanceof Error ? err.message : undefined;
     console.warn("Exceção na busca de spaced_reviews:", message);
     schemaError = message ?? null;
+  }
+
+  try {
+    const { client, user } = await requireSupabaseUser();
+    const pageSize = 1000;
+    const rows: ScheduledReviewAgendaRow[] = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await client
+        .from("scheduled_reviews")
+        .select("id, milestone_summary_id, review_date, review_type, status, milestone_summary:milestone_summaries(milestone_title, milestone_page, content, book:readings(id, title, chapter_title))")
+        .eq("user_id", user.id)
+        .eq("status", "pending")
+        .lte("review_date", today)
+        .order("review_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error(error.message);
+      const pageRows = (data ?? []) as unknown as ScheduledReviewAgendaRow[];
+      rows.push(...pageRows);
+      if (pageRows.length < pageSize) break;
+    }
+    milestoneReviews = getDueAgendaReviews(
+      rows
+        .map(mapScheduledReviewToAgendaEvent)
+        .filter((review): review is NonNullable<typeof review> => review !== null),
+      today,
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : undefined;
+    console.warn("Aviso na busca de revisões de marcos:", message);
+    schemaError ??= message ?? null;
   }
 
   let allPendingReadings: Array<ReadingWithSubject & { suggested_deadline: string | null }> = [];
@@ -1284,6 +1321,7 @@ export async function getDashboardData() {
 
   return {
     tier1: tier1 ?? [],
+    milestoneReviews,
     tier2,
     tier3,
     tier4,

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   formatAgendaDayHeading,
+  getDueAgendaReviews,
   getAgendaMonthRange,
   getReviewScheduleDates,
   groupAgendaEventsByDate,
+  mapScheduledReviewToAgendaEvent,
+  mapSpacedReviewToAgendaEvent,
   sortAgendaEvents,
   type AgendaEvent,
 } from "@/lib/agenda";
@@ -36,6 +39,7 @@ describe("agenda event ordering", () => {
   const events: AgendaEvent[] = [
     {
       kind: "review",
+      source: "milestone",
       id: "review-1",
       date: "2026-10-28",
       reviewType: "D+1",
@@ -45,6 +49,8 @@ describe("agenda event ordering", () => {
       milestonePage: 20,
       summaryContent: "Resumo",
       bookTitle: "Livro",
+      readingId: "book-1",
+      chapterTitle: "Capítulo 1",
     },
     {
       kind: "deliverable",
@@ -75,6 +81,51 @@ describe("agenda event ordering", () => {
     expect(groups.map((group) => [group.date, group.label, group.items.length])).toEqual([
       ["2026-10-27", "Hoje", 1],
       ["2026-10-28", "Amanhã", 2],
+    ]);
+  });
+});
+
+describe("unified spaced reviews", () => {
+  it("maps milestone and reading reviews to shared agenda events", () => {
+    const milestone = mapScheduledReviewToAgendaEvent({
+      id: "scheduled-1",
+      milestone_summary_id: "summary-1",
+      review_date: "2026-10-26",
+      review_type: "D+1",
+      status: "pending",
+      milestone_summary: {
+        milestone_title: "Capítulo 1",
+        milestone_page: 20,
+        content: "Resumo do capítulo",
+        book: { id: "book-1", title: "Livro", chapter_title: "Capítulo 1" },
+      },
+    });
+    const reading = mapSpacedReviewToAgendaEvent({
+      id: "spaced-1",
+      reading_id: "book-2",
+      review_date: "2026-10-27",
+      type: "active_recall",
+      status: "pending",
+      reading: {
+        title: "Artigo",
+        chapter_title: null,
+        subject: { name: "Psicologia" },
+      },
+    });
+
+    expect(milestone).toMatchObject({ kind: "review", source: "milestone", date: "2026-10-26" });
+    expect(reading).toMatchObject({ kind: "review", source: "reading", date: "2026-10-27" });
+
+    const due = getDueAgendaReviews([
+      milestone!,
+      reading!,
+      { ...reading!, id: "future", date: "2026-10-28" },
+      { ...reading!, id: "done", status: "completed" },
+    ], "2026-10-27");
+
+    expect(due.map((event) => `${event.source}:${event.id}`)).toEqual([
+      "milestone:scheduled-1",
+      "reading:spaced-1",
     ]);
   });
 });
