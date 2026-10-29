@@ -698,7 +698,7 @@ export async function createReadingSession(input: ReadingSessionInsert) {
   const [readingResult, progressResult] = await Promise.all([
     supabase
       .from("readings")
-      .select("milestones")
+      .select("milestones, target_pages")
       .eq("id", input.reading_id)
       .maybeSingle(),
     supabase
@@ -717,6 +717,7 @@ export async function createReadingSession(input: ReadingSessionInsert) {
     (readingResult.data.milestones ?? []) as ReadingMilestone[],
     previousPage,
     nextPage,
+    readingResult.data.target_pages,
   );
 
   const durationSeconds = input.duration_seconds;
