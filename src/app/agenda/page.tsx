@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { unstable_rethrow } from "next/navigation";
 import { getAgendaData, getDeliverables, getSubjects } from "@/app/actions";
 import { AgendaView } from "@/components/agenda/agenda-view";
 import { getAgendaMonthRange, sortAgendaEvents, type AgendaEvent } from "@/lib/agenda";
@@ -26,6 +27,7 @@ export default async function AgendaPage() {
     deliverables = allDeliverables ?? [];
     subjects = allSubjects ?? [];
   } catch (cause: unknown) {
+    unstable_rethrow(cause);
     console.warn("Aviso ao carregar a Agenda:", cause);
     connectionError = cause instanceof Error ? cause.message : "Falha na conexão com o banco.";
   }

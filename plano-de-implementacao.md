@@ -15,6 +15,16 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 
 Registre aqui ideias acionáveis identificadas durante o trabalho que ainda precisem de contexto, validação ou refinamento. Quando estiverem maduras, mova-as para a seção apropriada (BUG, UX/UI, COG ou FEAT), sem perder o histórico da decisão.
 
+### Exploração de produto — 2026-10-29
+
+> **Decisão:** Nenhuma das propostas abaixo foi aprovada. Permanecem apenas como ideias prematuras; não implementar nem promover para o backlog categorizado sem aprovação expressa.
+
+- **Bilhete de retomada da leitura:** Ao encerrar uma sessão, permitir salvar uma frase opcional sobre onde parou, uma dúvida ou o próximo passo. Mostrar o bilhete ao iniciar a leitura novamente, sem transformá-lo em marco nem em revisão obrigatória. **Validar:** isso ajuda a retomar o raciocínio ou vira mais um campo para preencher?
+- **Alerta de colisão de prazos:** Detectar quando várias entregas se aproximam enquanto leituras vinculadas ainda exigem uma carga diária alta. Em vez de só destacar cada prazo isolado, indicar que a semana pode estar inviável e mostrar quais premissas formaram o alerta. **Validar:** qual janela de dias e qual sinal de capacidade seriam úteis sem alarmes falsos?
+- **Pausa com contexto no cronômetro:** Diferenciar uma interrupção temporária de uma sessão finalizada, preservando o ponto de retomada e permitindo uma anotação curta como “atendimento” ou “intervalo”. **Validar:** estudantes precisam consultar esse contexto depois ou basta preservar a duração real da sessão?
+- **Glossário pessoal por leitura:** Deixar o estudante registrar termos e explicações próprias associados a uma página ou marco, com acesso rápido ao voltar à leitura. Seria uma camada leve de conhecimento pessoal, sem importação automática nem classificação de dificuldade. **Validar:** os termos seriam reutilizados em revisões ou apenas úteis como consulta?
+- **Janela de estudo protegida:** Permitir indicar períodos indisponíveis ou dias excepcionalmente ocupados e comparar essa disponibilidade com a carga prevista, sem criar um calendário obrigatório de sessões. **Validar:** uma visão semanal simples resolve o problema ou isso duplicaria a Agenda e o resumo semanal planejado?
+
 ## 1. Bugs e Inconsistências Identificados
 
 ### Pendentes
@@ -46,22 +56,22 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
 ## 2. Pontos de Melhora no UX/UI (Flat Design & Usabilidade)
 
 ### Pendentes
-- [ ] **`UX-03` — Alinhamento Ergonômico dos Botões de Dias da Semana (`/setup`)**
+- [x] **`UX-03` — Alinhamento Ergonômico dos Botões de Dias da Semana (`/setup`)**
   - **Contexto:** Na inserção de disciplinas, os botões dos dias quebram em duas linhas desalinhadas ("Seg, Ter, Qua, Qui, Sex" e "Sáb" isolado abaixo).
   - **Ação:** Reorganizar para grade de 6 colunas (`grid grid-cols-6 gap-1.5`) consistente em qualquer resolução.
   - **Arquivos-chave:** `src/components/setup/subjects-table.tsx`.
 
-- [ ] **`UX-07` — Alerta Sonoro / Feedback Sensorial no Término do Cronômetro**
+- [x] **`UX-07` — Alerta Sonoro / Feedback Sensorial no Término do Cronômetro**
   - **Contexto:** Ao esgotar o tempo do sprint de leitura (`remainingSprintSeconds === 0`), a barra emite apenas um toast e atualiza o título do documento. Se o estudante estiver focado no livro físico, não percebe o término.
   - **Ação:** Tocar um sinal sonoro sutil sintetizado via Web Audio API (senoide pura de curta duração, sem dependências de áudio externas ou arquivos pesados) quando o sprint zerar.
   - **Arquivos-chave:** `src/components/reading-timer-bar.tsx`.
 
-- [ ] **`UX-09` — Notificação Graciosa de Sessão Expirada no Fluxo de Ações**
+- [x] **`UX-09` — Notificação Graciosa de Sessão Expirada no Fluxo de Ações**
   - **Contexto:** Quando o token de autenticação do Supabase expira durante o uso contínuo, algumas Server Actions que exigem usuário autenticado lançam exceção genérica ("Authentication required") em vez de emitir aviso explicativo ao usuário.
   - **Ação:** Capturar erro de autenticação e emitir toast com aviso claro ("Sua sessão expirou. Redirecionando para login...") preservando a rota de retorno segura.
   - **Arquivos-chave:** `src/app/actions.ts`, `src/lib/auth-redirect.ts`.
 
-- [ ] **`UX-10` — Remoção do Scroll Interno no Painel de Heatmap de Consistência**
+- [x] **`UX-10` — Remoção do Scroll Interno no Painel de Heatmap de Consistência**
   - **Contexto:** O card `ConsistencyHeatmap` em `src/components/consistency-heatmap.tsx` possui a classe `overflow-x-auto` no container do grid das semanas (`<div className="flex gap-2 overflow-x-auto">`). Como a janela fixa é de 28 dias (~4 a 5 colunas de 7 dias com largura total inferior a 100px), essa barra de rolagem horizontal interna é supérflua e surge involuntariamente em alguns navegadores e tamanhos de viewport, quebrando o visual limpo do Flat Design estrito.
   - **Ação:** Remover a classe de rolagem horizontal desnecessária (`overflow-x-auto`), e vertical, e assegurar que a grade, rótulos e legenda se ajustem fluidamente dentro do card sem barras de rolagem internas no Dashboard e na tela de Histórico.
   - **Arquivos-chave:** `src/components/consistency-heatmap.tsx`, `src/components/dashboard/dashboard-view.tsx`, `src/components/history/history-view.tsx`.
@@ -82,21 +92,33 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - **Arquivos-chave:** `src/components/library/readings-table.tsx`, `src/components/library/library-view.tsx`, `src/components/agenda/deliverables-table.tsx`, `src/components/agenda/agenda-view.tsx`, `src/components/setup/setup-view.tsx`, `src/app/setup/page.tsx`, `src/app/library/page.tsx`, `src/app/agenda/page.tsx`, `src/components/navbar.tsx`, `src/app/actions.ts`.
   - **Dependências:** Formulário de leituras integrado à Biblioteca em `UX-14`; destino do estado vazio do card de recomendação alinhado em `UX-11`. Todas as etapas restantes foram concluídas.
 
-- [ ] **`UX-13` — Formatação Automática de Títulos e Autores em Title Case**
+- [x] **`UX-13` — Formatação Automática de Títulos e Autores em Title Case**
   - **Contexto:** Não existe nenhuma transformação de casing no fluxo de criação de leituras. O campo `title` e `author` são armazenados exatamente como digitados pelo usuário ou retornados pela API (ISBN via Google Books / DOI via CrossRef). Isso produz inconsistências visuais frequentes: Google Books pode retornar títulos em CAIXA ALTA; CrossRef retorna autores em "SOBRENOME, Nome"; e o próprio usuário pode digitar em minúsculas corridas. Na Biblioteca e no Dashboard, leituras com casing inconsistente quebram a harmonia visual do Flat Design.
   - **Ação:**
     1. Criar função utilitária `toTitleCaseBR(text: string): string` em `src/lib/text.ts` que aplique Title Case com tratamento para preposições, artigos e conjunções em pt-BR (de, da, do, das, dos, e, ou, para, em, com, a, o, as, os, à, às, ao, aos, na, no, nas, nos, num, numa, uns, umas, por, pelo, pela — mantidos em minúscula exceto quando iniciais).
-    2. Aplicar a transformação no `handleCreate` do formulário de leituras (atualmente em `readings-table.tsx` L260–265; futuro `reading-form.tsx` pós-`UX-12`) como sugestão visual com preview — não impositiva, permitindo override manual.
-    3. Aplicar igualmente nos callbacks de auto-fill por ISBN/DOI (`handleIsbnBlur`, `handleDoiBlur`) para normalizar dados de APIs externas.
-    4. Cobrir com testes unitários em `src/lib/text.test.ts`: palavras simples, preposições internas, siglas (ISBN, DOI), nomes próprios compostos, strings já corretas.
+    2. **Concluído:** Exibir preview acionável de Title Case nos campos de título e autor; o usuário mantém controle e pode cadastrar sua grafia original.
+    3. **Concluído:** Normalizar com `toTitleCaseBR` os dados importados nos callbacks de auto-fill por ISBN/DOI (`handleIsbnBlur`, `handleDoiBlur`).
+    4. **Concluído:** Cobrir palavras simples, partículas internas, siglas (ISBN/DOI), nomes compostos e textos já formatados em `src/lib/text.test.ts`.
   - **Arquivos-chave:** `src/lib/text.ts` (novo), `src/lib/text.test.ts` (novo), `src/components/library/reading-form.tsx`.
 
-- [ ] **`UX-15` — Refinamento da Interface do Card de Leitura na Biblioteca**
+- [x] **`UX-15` — Refinamento da Interface do Card de Leitura na Biblioteca**
   - **Contexto:** O `BookCard` reúne capa, tipo, disciplina, título, autor, métricas de progresso, prazo e ações. A ideia original pede um ajuste visual, mas ainda não identifica um atrito específico.
   - **Ação:** Revisar hierarquia visual, legibilidade e comportamento responsivo do card; definir os ajustes a partir dos problemas encontrados, preservando o Flat Design e sem alterar regras funcionais da leitura.
   - **Arquivos-chave:** `src/components/library/book-card.tsx`, `src/components/library/library-view.tsx`, `src/components/library/reading-cover.tsx`.
 
 ### Concluídos
+- [x] **`UX-03` — Alinhamento Ergonômico dos Botões de Dias da Semana (`/setup`)**
+  - *Resolução:* Seletores de dias de cadastro e edição agora usam grade de seis colunas, botões com altura uniforme e estado acessível `aria-pressed`.
+- [x] **`UX-07` — Alerta Sonoro / Feedback Sensorial no Término do Cronômetro**
+  - *Resolução:* Cronômetro toca um tom senoidal curto e suave uma única vez ao fim de cada sprint; o contexto de áudio é desbloqueado após interação e o toast existente continua como alternativa visual.
+- [x] **`UX-09` — Notificação Graciosa de Sessão Expirada no Fluxo de Ações**
+  - *Resolução:* Falhas de autenticação redirecionam ao login com rota de retorno local sanitizada; cookies de sessão inválidos são reconhecidos pelo proxy e um toast explica a expiração. Redirecionamentos do Next são preservados nos carregamentos envolvidos.
+- [x] **`UX-10` — Remoção do Scroll Interno no Painel de Heatmap de Consistência**
+  - *Resolução:* Grade do heatmap passou a se ajustar em layout de duas colunas sem overflow/rolagem interna; legenda quebra em linhas quando necessário no Dashboard e no Histórico.
+- [x] **`UX-13` — Formatação Automática de Títulos e Autores em Title Case**
+  - *Resolução:* `toTitleCaseBR` trata partículas em pt-BR e preserva ISBN/DOI; campos mostram preview aplicável sem impor mudanças manuais, e metadados importados são normalizados. Testes unitários adicionados.
+- [x] **`UX-15` — Refinamento da Interface do Card de Leitura na Biblioteca**
+  - *Resolução:* Card ganhou hierarquia tipográfica mais legível, progresso visual acessível, métricas organizadas e botões de ação uniformes; fallback da capa permanece em cor sólida Flat.
 - [x] **`UX-01` — Seletor de Leitura na "Sessão Rápida" (Dashboard)**
   - *Resolução:* Criado o componente `QuickSessionDialog` com agrupamento por tiers, ordenação por urgência, histórico da última sessão e recomendação diária.
 - [x] **`UX-02` — Eliminação Total de Alertas e Diálogos Nativos (`alert()` e `confirm()`)**
@@ -223,3 +245,4 @@ As propostas abaixo foram analisadas e **rejeitadas da forma em que foram formul
 | 2026-10-29 | `BUG-08` | Registro de sessões por quantidade ou página impressa, com conversão de marcos absolutos para o trecho | `migration-v1.11.sql`, `reading-session-modal.tsx`, `session-pages.ts`, `toc-parser.ts`, `actions.ts` |
 | 2026-10-29 | `UX-11` | Card exibe prazo e páginas restantes, permite alternar para segunda opção elegível e direciona estado vazio à Biblioteca | `recommendation-card.tsx`, `recommendation.ts`, `actions.ts`, `dashboard-view.tsx` |
 | 2026-10-29 | `UX-12` | Leituras gerenciadas na Biblioteca, entregas na Agenda e `/setup` dedicado às disciplinas | `library/`, `agenda/`, `setup/`, `navbar.tsx`, `actions.ts` |
+| 2026-10-29 | `UX-03/07/09/10/13/15` | Conclusão dos itens pendentes de UX/UI: grade semanal, som do cronômetro, aviso de sessão expirada, heatmap responsivo, sugestões Title Case e refinamento de cards | `subjects-table.tsx`, `reading-timer-bar.tsx`, `auth-redirect.ts`, `consistency-heatmap.tsx`, `text.ts`, `reading-form.tsx`, `book-card.tsx` |

@@ -71,7 +71,6 @@ export function ReadingCover({ reading, themeColor, size }: ReadingCoverProps) {
           className="relative flex h-full w-full flex-col items-center justify-center gap-1 p-3 text-center"
           style={{ backgroundColor: themeColor, color: textColor }}
         >
-          <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-black/15" />
           <span aria-hidden="true" className="relative font-mono text-3xl font-bold tracking-tight">
             {initials}
           </span>

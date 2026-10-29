@@ -17,7 +17,6 @@ import {
   Zap,
   CheckCircle2,
   Calendar,
-  Layers,
   Sparkles,
   Play,
 } from "lucide-react";
@@ -78,11 +77,15 @@ export function BookCard({
     isRead,
   });
   const estimatedHours = remaining.hoursRemaining.toFixed(1).replace(".", ",");
+  const progressPercent = isRead
+    ? 100
+    : Math.min(100, Math.max(0, (reading.pages_read / Math.max(1, reading.target_pages)) * 100));
 
   const themeColor = subject?.theme_color || "#4f46e5";
 
   return (
-    <div className="relative flex flex-col rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden transition-colors hover:border-gray-300 dark:hover:border-gray-700">
+    <div className="relative h-full">
+      <article className="flex h-full flex-col overflow-hidden rounded-md border border-gray-200 bg-white transition-colors hover:border-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-600">
       {/* Header Visual Flat */}
       <div className="relative isolate border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950">
         <Link href={`/library/${reading.id}`} className="relative z-10 block">
@@ -107,7 +110,7 @@ export function BookCard({
       </div>
 
       {/* Conteúdo */}
-      <div className="flex-1 p-3.5 space-y-2.5">
+      <div className="flex-1 space-y-3 p-3.5">
         <div className="flex flex-wrap gap-1">
           <Badge
             variant="outline"
@@ -125,15 +128,15 @@ export function BookCard({
             </span>
           )}
         </div>
-        <div>
-            <Link href={`/library/${reading.id}`} className="relative z-10 block">
+        <div className="min-w-0">
+          <Link href={`/library/${reading.id}`} className="relative z-10 block">
             <h3
-            className={`font-bold text-xs line-clamp-2 ${
+              className={`line-clamp-3 text-sm font-bold leading-snug ${
               isRead ? "line-through text-gray-400" : "text-gray-900 dark:text-gray-100"
             }`}
-            title={reading.title}
-          >
-            {reading.title}
+              title={reading.title}
+            >
+              {reading.title}
             </h3></Link>
           {reading.chapter_title && (
             <p className="text-[11px] text-gray-600 dark:text-gray-400 font-medium mt-0.5 line-clamp-1">
@@ -141,33 +144,47 @@ export function BookCard({
             </p>
           )}
           {reading.author && (
-            <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1 italic">
+            <p className="mt-1 line-clamp-2 text-xs text-gray-600 dark:text-gray-400">
               por {reading.author}
             </p>
           )}
         </div>
 
-        {/* Métricas Flat */}
-        <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-600 dark:text-gray-400 font-mono">
-          <div className="flex items-center gap-1">
-            <Layers className="w-3 h-3 text-gray-400" />
-            <span>{reading.pages_read}/{reading.target_pages}p</span>
+        <div className="space-y-1.5 border-t border-gray-100 pt-2 text-[11px] dark:border-gray-800">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-semibold text-gray-700 dark:text-gray-300">Progresso</span>
+            <span className="font-mono tabular-nums text-gray-600 dark:text-gray-400">
+              {isRead ? "Concluída" : `${reading.pages_read}/${reading.target_pages} págs`}
+            </span>
           </div>
-
-          <div className="flex items-center gap-1">
-            <Zap className="w-3 h-3 text-gray-400" />
-            <span>{Number(reading.current_speed_pph).toFixed(1)} p/h</span>
+          <div
+            role="progressbar"
+            aria-label={`Progresso de ${reading.title}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progressPercent)}
+            className="h-2 overflow-hidden border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+          >
+            <div
+              className="h-full bg-gray-800 dark:bg-gray-200"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
+        </div>
 
-          <div className="flex items-center gap-1">
-            <Clock className="w-3 h-3 text-gray-400" />
-            <span>{isRead ? "Concluída" : `~${estimatedHours}h restantes`}</span>
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] text-gray-600 dark:text-gray-400">
+          <div className="flex min-w-0 items-center gap-1">
+            <Zap className="h-3 w-3 shrink-0 text-gray-400" />
+            <span className="truncate">{Number(reading.current_speed_pph).toFixed(1)} p/h</span>
           </div>
-
-          <div className="flex items-center gap-1">
-            <Calendar className="w-3 h-3 text-gray-400" />
+          <div className="flex min-w-0 items-center gap-1">
+            <Clock className="h-3 w-3 shrink-0 text-gray-400" />
+            <span className="truncate">{isRead ? "Concluída" : `~${estimatedHours}h restantes`}</span>
+          </div>
+          <div className="col-span-2 flex min-w-0 items-center gap-1">
+            <Calendar className="h-3 w-3 shrink-0 text-gray-400" />
             {reading.deadline ? (
-              <span>{formatDateBR(reading.deadline, { day: "2-digit", month: "2-digit" })}</span>
+              <span className="truncate">Prazo: {formatDateBR(reading.deadline, { day: "2-digit", month: "2-digit" })}</span>
             ) : reading.suggested_deadline ? (
               <span className="truncate italic text-indigo-700 dark:text-indigo-300" title="Prazo sugerido">
                 Sug.: {formatDateBR(reading.suggested_deadline, { day: "2-digit", month: "2-digit" })}
@@ -179,19 +196,19 @@ export function BookCard({
         </div>
 
         {reading.isbn && (
-          <div className="text-[10px] text-gray-400 font-mono truncate">
+          <div className="truncate font-mono text-[10px] text-gray-500 dark:text-gray-400">
             ISBN: {reading.isbn}
           </div>
         )}
         {reading.doi && (
-          <div className="text-[10px] text-indigo-500 font-mono truncate">
+          <div className="truncate font-mono text-[10px] text-indigo-700 dark:text-indigo-300">
             DOI: {reading.doi}
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div className="flex flex-col gap-1.5 p-3.5 pt-0 lg:flex-row">
+      <div className="grid grid-cols-1 gap-1.5 p-3.5 pt-0">
         <Button
           type="button"
           onClick={() => startReadingTimer(reading.id, reading.title, {
@@ -201,7 +218,7 @@ export function BookCard({
           }, calculateSuggestedTimerDurationSeconds(reading, speed))}
           size="sm"
           aria-label={`Iniciar cronômetro para ${reading.title}`}
-          className="h-8 min-w-0 flex-1 whitespace-nowrap bg-gray-900 px-2 text-[10px] font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+          className="h-9 min-w-0 w-full whitespace-nowrap bg-gray-900 px-2 text-[11px] font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
         >
           <Play className="mr-1 h-3 w-3 shrink-0" /> Iniciar Cronômetro
         </Button>
@@ -210,11 +227,12 @@ export function BookCard({
           disabled={isRead}
           size="sm"
           variant="ghost"
-          className="h-8 min-w-0 flex-1 whitespace-nowrap px-2 text-[10px] font-semibold text-gray-600 dark:text-gray-300"
+          className="h-9 min-w-0 w-full whitespace-nowrap px-2 text-[11px] font-semibold text-gray-700 dark:text-gray-200"
         >
           <Sparkles className="mr-1 h-3 w-3 shrink-0" /> Registro Manual
         </Button>
       </div>
+      </article>
       <ConfirmDialog
         open={unmarkConfirmOpen}
         onOpenChange={setUnmarkConfirmOpen}

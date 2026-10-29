@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { unstable_rethrow } from "next/navigation";
 import { getDashboardData, getMilestoneSummaries, getSubjectStats } from "@/app/actions";
 import { todayISO } from "@/lib/dates";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
@@ -52,6 +53,9 @@ export default async function HomePage() {
     getSubjectStats(),
     getMilestoneSummaries(),
   ]);
+  for (const result of [dashboardResult, statsResult, summariesResult]) {
+    if (result.status === "rejected") unstable_rethrow(result.reason);
+  }
 
   if (dashboardResult.status === "fulfilled") {
     const data = dashboardResult.value;

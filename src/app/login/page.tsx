@@ -7,7 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const instant = false;
 
 type LoginPageProps = {
-  searchParams: Promise<{ next?: string | string[] }>;
+  searchParams: Promise<{ next?: string | string[]; reason?: string | string[] }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -30,7 +30,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <p className="mt-1 mb-5 text-xs text-gray-600 dark:text-gray-400">
           Use as credenciais da sua conta Supabase.
         </p>
-        <SupabaseLoginForm nextPath={nextPath} />
+        <SupabaseLoginForm
+          nextPath={nextPath}
+          sessionExpired={params.reason === "session-expired"}
+        />
       </section>
     </div>
   );

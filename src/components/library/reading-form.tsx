@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { metadataAttemptsSummary } from "@/lib/metadata-labels";
 import { getReadingCreateErrors } from "@/lib/reading-validation";
+import { toTitleCaseBR } from "@/lib/text";
 import { parseRawTocToMilestones } from "@/lib/toc-parser";
 import type { Reading, ReadingMilestone, ReadingType, Subject } from "@/types/database";
 
@@ -158,6 +159,30 @@ function FieldError({ children }: { children?: string }) {
   return <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">{children}</p>;
 }
 
+function TitleCaseSuggestion({
+  value,
+  onApply,
+}: {
+  value: string;
+  onApply: (suggestion: string) => void;
+}) {
+  const suggestion = toTitleCaseBR(value);
+  if (!value.trim() || suggestion === value) return null;
+
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-1 text-[11px] text-gray-600 dark:text-gray-400">
+      <span>Sugestão: <strong className="font-semibold">{suggestion}</strong></span>
+      <button
+        type="button"
+        onClick={() => onApply(suggestion)}
+        className="font-semibold text-indigo-700 underline underline-offset-2 dark:text-indigo-300"
+      >
+        Aplicar
+      </button>
+    </p>
+  );
+}
+
 export function ReadingForm({
   subjects,
   onCreated,
@@ -207,8 +232,8 @@ export function ReadingForm({
         patch({
           lookedUpIsbn: cleanIsbn,
           metadataNotice: null,
-          title: state.title || result.data.title,
-          author: state.author || result.data.authors,
+          title: state.title || toTitleCaseBR(result.data.title),
+          author: state.author || toTitleCaseBR(result.data.authors),
           fullBookPages: state.fullBookPages || result.data.pageCount || "",
           coverUrl: result.data.coverUrl,
           publisher: state.publisher || result.data.publisher || "",
@@ -257,8 +282,8 @@ export function ReadingForm({
         patch({
           lookedUpDoi: cleanDoi,
           metadataNotice: null,
-          title: state.title || result.data.title,
-          author: state.author || result.data.authors,
+          title: state.title || toTitleCaseBR(result.data.title),
+          author: state.author || toTitleCaseBR(result.data.authors),
           publisher: state.publisher || result.data.publisher || "",
           publishedYear: state.publishedYear || (result.data.publishedYear ? String(result.data.publishedYear) : ""),
           metadataSource: result.data.source,
@@ -564,6 +589,10 @@ export function ReadingForm({
               aria-invalid={Boolean(showDetailsErrors && createErrors.title)}
               className="h-10 rounded text-sm"
             />
+            <TitleCaseSuggestion
+              value={state.title}
+              onApply={(title) => patch({ title })}
+            />
             {showDetailsErrors && <FieldError>{createErrors.title}</FieldError>}
           </div>
 
@@ -592,6 +621,10 @@ export function ReadingForm({
               onChange={(event) => patch({ author: event.target.value })}
               placeholder="Nome do autor"
               className="h-10 rounded text-sm"
+            />
+            <TitleCaseSuggestion
+              value={state.author}
+              onApply={(author) => patch({ author })}
             />
           </div>
 

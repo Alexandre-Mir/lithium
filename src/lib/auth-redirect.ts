@@ -10,3 +10,16 @@ export function safeReturnPath(value: string | string[] | FormDataEntryValue | n
 
   return value;
 }
+
+export function safeReturnPathFromReferer(referer: string | null): string {
+  if (!referer) return "/";
+
+  try {
+    const url = new URL(referer);
+    if (url.pathname === "/login") return "/";
+    const path = safeReturnPath(`${url.pathname}${url.search}`);
+    return path;
+  } catch {
+    return "/";
+  }
+}

@@ -1,14 +1,28 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
+import { addToast } from "@/lib/toast-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { loginWithSupabase, type LoginState } from "@/app/login/actions";
 
 const initialState: LoginState = { error: null };
 
-export function SupabaseLoginForm({ nextPath }: { nextPath: string }) {
+export function SupabaseLoginForm({
+  nextPath,
+  sessionExpired = false,
+}: {
+  nextPath: string;
+  sessionExpired?: boolean;
+}) {
   const [state, formAction, pending] = useActionState(loginWithSupabase, initialState);
+  const notifiedSessionExpiration = useRef(false);
+
+  useEffect(() => {
+    if (!sessionExpired || notifiedSessionExpiration.current) return;
+    notifiedSessionExpiration.current = true;
+    addToast({ message: "Sua sessão expirou. Entre novamente para continuar." });
+  }, [sessionExpired]);
 
   return (
     <form action={formAction} className="space-y-4">

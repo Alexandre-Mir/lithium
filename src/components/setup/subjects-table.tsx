@@ -280,15 +280,16 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
             </label>
           </div>
 
-          <div className="md:col-span-3 flex flex-wrap gap-1 items-center">
+          <div role="group" aria-label="Dias da semana" className="grid grid-cols-6 items-center gap-1.5 md:col-span-3">
             {WEEK_DAYS.map((day) => {
               const active = newClassDays.includes(day);
               return (
                 <button
                   type="button"
                   key={day}
+                  aria-pressed={active}
                   onClick={() => toggleDay(day, newClassDays, setNewClassDays)}
-                  className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                  className={`min-h-8 rounded border px-1 text-[10px] transition-colors ${
                     active
                       ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 border-transparent font-medium"
                       : "bg-white dark:bg-gray-950 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800 hover:bg-gray-100"
@@ -414,7 +415,7 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
 
                     <TableCell className="p-2">
                       {isEditing ? (
-                        <div className="flex flex-wrap gap-1">
+                        <div role="group" aria-label={`Dias de aula de ${sub.name}`} className="grid grid-cols-6 gap-1">
                           {WEEK_DAYS.map((day) => {
                             const cur = editValues.class_days ?? sub.class_days;
                             const active = cur.includes(day);
@@ -422,15 +423,16 @@ export function SubjectsTable({ initialSubjects, onRefresh }: SubjectsTableProps
                               <button
                                 type="button"
                                 key={day}
+                                aria-pressed={active}
                                 onClick={() =>
                                   toggleDay(day, cur, (days) =>
                                     setEditValues((prev) => ({ ...prev, class_days: days }))
                                   )
                                 }
-                                className={`text-[10px] px-1 py-0.2 rounded border ${
+                                className={`min-h-7 rounded border px-1 text-[10px] ${
                                   active
                                     ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 border-transparent"
-                                    : "bg-white text-gray-600 border-gray-200"
+                                      : "bg-white text-gray-600 border-gray-200 dark:bg-gray-950 dark:text-gray-400 dark:border-gray-800"
                                 }`}
                               >
                                 {day}

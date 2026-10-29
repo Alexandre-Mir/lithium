@@ -2,6 +2,7 @@
 
 import { supabase } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { todayISO, addDaysISO, daysUntil, startOfDayUtcISO } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
@@ -1256,6 +1257,7 @@ export async function getDashboardData() {
       today,
     );
   } catch (err: unknown) {
+    unstable_rethrow(err);
     const message = err instanceof Error ? err.message : undefined;
     console.warn("Aviso na busca de revisões de marcos:", message);
     schemaError ??= message ?? null;

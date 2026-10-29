@@ -44,12 +44,62 @@ export function ReadingTimerBar() {
   const [sprintCompletion, setSprintCompletion] = useState<{ startedAt: string; endedAt: string } | null>(null);
   const previousTitle = useRef<string | null>(null);
   const notifiedSprint = useRef<string | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const elapsed = timer ? elapsedSeconds(timer, new Date(now)) : 0;
   const remaining = remainingSprintSeconds(elapsed, timer?.durationSeconds);
   const progress = sprintProgressPercent(elapsed, timer?.durationSeconds);
   const sprintEndedAt = timer && sprintCompletion?.startedAt === timer.startedAt
     ? sprintCompletion?.endedAt ?? null
     : null;
+
+  const unlockTimerAudio = useCallback(() => {
+    if (typeof window === "undefined" || !window.AudioContext) return;
+    try {
+      audioContextRef.current ??= new window.AudioContext();
+      if (audioContextRef.current.state === "suspended") {
+        void audioContextRef.current.resume().catch((error: unknown) => {
+          console.warn("Não foi possível habilitar o áudio do cronômetro:", error);
+        });
+      }
+    } catch (error) {
+      console.warn("Não foi possível preparar o áudio do cronômetro:", error);
+    }
+  }, []);
+
+  const playCompletionTone = useCallback(async () => {
+    const context = audioContextRef.current;
+    if (!context || context.state === "closed") return;
+
+    try {
+      if (context.state === "suspended") await context.resume();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const startAt = context.currentTime;
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(660, startAt);
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.28);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + 0.3);
+    } catch (error) {
+      console.warn("Não foi possível tocar o aviso sonoro do cronômetro:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("pointerdown", unlockTimerAudio);
+    window.addEventListener("keydown", unlockTimerAudio);
+    return () => {
+      window.removeEventListener("pointerdown", unlockTimerAudio);
+      window.removeEventListener("keydown", unlockTimerAudio);
+      const context = audioContextRef.current;
+      audioContextRef.current = null;
+      if (context && context.state !== "closed") void context.close();
+    };
+  }, [unlockTimerAudio]);
 
   const openFinishDialog = useCallback((completedAt?: string) => {
     let endedAt = completedAt ?? sprintEndedAt;
@@ -87,6 +137,7 @@ export function ReadingTimerBar() {
       const completedAt = new Date(tickNow).toISOString();
       notifiedSprint.current = timerKey;
       completeReadingSprint();
+      void playCompletionTone();
       setSprintCompletion({ startedAt: timerKey, endedAt: completedAt });
       addToast({
         message: "Tempo estimado concluído! 🎉 Registre as páginas para salvar a sessão.",
@@ -101,7 +152,7 @@ export function ReadingTimerBar() {
       window.cancelAnimationFrame(frame);
       window.clearInterval(interval);
     };
-  }, [timer, openFinishDialog]);
+  }, [timer, openFinishDialog, playCompletionTone]);
 
   useEffect(() => {
     if (pathname === "/login") {

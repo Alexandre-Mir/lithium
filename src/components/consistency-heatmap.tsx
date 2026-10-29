@@ -41,7 +41,7 @@ export function ConsistencyHeatmap({ model }: ConsistencyHeatmapProps) {
             {activeLabel}
           </p>
         </div>
-        <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">
+        <div className="flex flex-wrap items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">
           <span>Menos</span>
           {([0, 1, 2, 3, 4] as const).map((level) => (
             <span
@@ -54,7 +54,7 @@ export function ConsistencyHeatmap({ model }: ConsistencyHeatmapProps) {
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2">
         <div className="flex flex-col gap-1 text-[9px] font-medium text-gray-400" aria-hidden>
           {WEEKDAY_LABELS.map((label, index) => (
             <span key={`${label}-${index}`} className="flex h-2.5 w-2 items-center leading-none">

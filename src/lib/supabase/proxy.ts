@@ -42,6 +42,12 @@ export async function updateSupabaseSession(request: NextRequest): Promise<NextR
       "next",
       safeReturnPath(`${request.nextUrl.pathname}${request.nextUrl.search}`),
     );
+    const hasSupabaseSessionCookie = request.cookies.getAll().some(({ name }) =>
+      /^sb-.+-auth-token(?:\.\d+)?$/.test(name),
+    );
+    if (hasSupabaseSessionCookie) {
+      loginUrl.searchParams.set("reason", "session-expired");
+    }
     return copyResponseState(supabaseResponse, NextResponse.redirect(loginUrl));
   }
 

@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { safeReturnPathFromReferer } from "@/lib/auth-redirect";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 
 export async function createSupabaseServerClient() {
@@ -28,7 +30,10 @@ export async function requireSupabaseUser() {
   const { data: { user }, error } = await client.auth.getUser();
 
   if (error || !user) {
-    throw new Error("É necessário entrar com uma conta Supabase para continuar.");
+    const requestHeaders = await headers();
+    const next = safeReturnPathFromReferer(requestHeaders.get("referer"));
+    const query = new URLSearchParams({ reason: "session-expired", next });
+    redirect(`/login?${query.toString()}`);
   }
 
   return { client, user };
