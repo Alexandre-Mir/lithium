@@ -43,7 +43,7 @@ function safeUserPace(userPace: number): number {
   return Number.isFinite(userPace) && userPace > 0 ? userPace : DEFAULT_PAGES_PER_DAY;
 }
 
-/** Escolhe a próxima leitura pendente por urgência de prazo, fila e inatividade. */
+/** Escolhe a próxima leitura pendente por prazo, fila e inatividade. */
 export function getSuggestedReading<T extends RecommendationReading>(
   readings: readonly T[],
   userPace: number,
@@ -78,9 +78,9 @@ export function getSuggestedReading<T extends RecommendationReading>(
     let urgencyScore: number;
     if (reading.deadline) {
       const daysRemaining = daysBetweenISO(today, reading.deadline);
-      urgencyScore = daysRemaining <= 0
+      urgencyScore = daysRemaining < 0
         ? OVERDUE_URGENCY_SCORE
-        : DEADLINE_PRIORITY_SCORE + remainingPages(reading) / daysRemaining;
+        : DEADLINE_PRIORITY_SCORE + (daysRemaining === 0 ? 1 : 0);
     } else {
       const rank = queueRank.get(reading.id) ?? queue.length;
       const activityTimestamp = reading.last_session_at ?? reading.created_at;
@@ -92,7 +92,24 @@ export function getSuggestedReading<T extends RecommendationReading>(
       urgencyScore = QUEUE_PRIORITY_WEIGHT / (rank + 1) + inactivityBonus;
     }
 
-    if (urgencyScore > highestScore) {
+    let winsTie = false;
+    if (urgencyScore === highestScore && suggested) {
+      if (reading.deadline && suggested.deadline) {
+        const deadlineOrder = reading.deadline.localeCompare(suggested.deadline);
+        const readingDailyWorkload = remainingPages(reading) /
+          Math.max(1, daysBetweenISO(today, reading.deadline));
+        const suggestedDailyWorkload = remainingPages(suggested) /
+          Math.max(1, daysBetweenISO(today, suggested.deadline));
+        winsTie = deadlineOrder < 0 ||
+          (deadlineOrder === 0 && readingDailyWorkload > suggestedDailyWorkload) ||
+          (deadlineOrder === 0 && readingDailyWorkload === suggestedDailyWorkload &&
+            reading.id.localeCompare(suggested.id) < 0);
+      } else {
+        winsTie = reading.id.localeCompare(suggested.id) < 0;
+      }
+    }
+
+    if (urgencyScore > highestScore || winsTie) {
       suggested = reading;
       highestScore = urgencyScore;
     }

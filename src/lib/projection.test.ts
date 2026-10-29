@@ -19,6 +19,7 @@ function makeReading(overrides: Partial<Reading> = {}): Reading {
     doi: null,
     full_book_pages: null,
     target_pages: 100,
+    segment_start_page: null,
     read_full_book: false,
     deadline: "2026-10-29",
     is_read: false,

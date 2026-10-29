@@ -24,6 +24,7 @@ import { computeSubjectPageProgress } from "@/lib/subject-progress";
 import { getTodayTotalReadingTime, pph, secondsToMinutes, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
 import { getCrossedMilestones } from "@/lib/milestone-crossing";
+import { milestonesForSegment } from "@/lib/toc-parser";
 import {
   getDueAgendaReviews,
   getReviewScheduleDates,
@@ -525,13 +526,18 @@ export async function createReading(input: ReadingInsert) {
     subject_id: input.subject_id,
     target_pages: input.target_pages,
     full_book_pages: input.full_book_pages,
+    segment_start_page: input.segment_start_page,
     deadline: input.deadline,
     hasDeadline: input.deadline !== null && input.deadline !== undefined,
   });
   const createError = Object.values(createErrors)[0];
   if (createError) throw new Error(createError);
 
-  const validationError = validateReadingUpdate({ deadline: input.deadline, milestones: input.milestones });
+  const validationError = validateReadingUpdate({
+    deadline: input.deadline,
+    milestones: input.milestones,
+    segment_start_page: input.segment_start_page,
+  });
   if (validationError) throw new Error(validationError);
 
   const currentSpeed = input.current_speed_pph ?? pickInitialSpeed(await getSpeedStats(), input.type);
@@ -688,7 +694,7 @@ function revalidateReadingSessionPaths(readingId: string) {
 export async function getAllReadingSessions() {
   const { data, error } = await supabase
     .from("reading_sessions")
-    .select("*, reading:readings(title, chapter_title, author, type, target_pages, full_book_pages, subject:subjects(name, theme_color))")
+    .select("*, reading:readings(title, chapter_title, author, type, target_pages, full_book_pages, segment_start_page, subject:subjects(name, theme_color))")
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   const sessions = data ?? [];
@@ -709,7 +715,7 @@ export async function createReadingSession(input: ReadingSessionInsert) {
   const [readingResult, progressResult] = await Promise.all([
     supabase
       .from("readings")
-      .select("milestones, target_pages")
+      .select("milestones, target_pages, segment_start_page")
       .eq("id", input.reading_id)
       .maybeSingle(),
     supabase
@@ -724,8 +730,13 @@ export async function createReadingSession(input: ReadingSessionInsert) {
 
   const previousPage = Number(progressResult.data?.pages_read) || 0;
   const nextPage = previousPage + input.pages_read;
-  const crossedMilestones = getCrossedMilestones(
+  const segmentMilestones = milestonesForSegment(
     (readingResult.data.milestones ?? []) as ReadingMilestone[],
+    readingResult.data.segment_start_page,
+    readingResult.data.target_pages,
+  );
+  const crossedMilestones = getCrossedMilestones(
+    segmentMilestones,
     previousPage,
     nextPage,
     readingResult.data.target_pages,
@@ -749,7 +760,7 @@ export async function createReadingSession(input: ReadingSessionInsert) {
       user_id: user.id,
       book_id: input.reading_id,
       milestone_title: milestone.title,
-      milestone_page: milestone.page,
+      milestone_page: milestone.originalPage ?? milestone.page,
       content: null,
       status: "pending" as const,
     }));

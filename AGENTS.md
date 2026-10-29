@@ -16,7 +16,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 1. npm run check passa. Se falhar, corrija antes de responder; nunca declare concluído com teste vermelho.
 2. Lógica nova em src/lib vem com teste (*.test.ts ao lado). Bug corrigido vem com um teste que falharia antes da correção.
 3. No resumo final: mudanças por arquivo e o que NÃO foi verificado (visual no navegador, banco real).
-4. Backlog: se a tarefa concluir ou endereçar itens de plano-de-implementacao.md, marque [x] e atualize o histórico; novos bugs e ideias devem ser registrados lá.
+4. Backlog: se a tarefa concluir ou endereçar itens de plano-de-implementacao.md, marque [x] e atualize o histórico; novos bugs e ideias devem ser registrados lá. Toda ideia acionável de produto, UX, técnica ou funcionalidade que surgir durante o trabalho deve ser anotada primeiro em `plano-de-implementacao.md`, na seção **Ideias prematuras**, mesmo que ainda não esteja suficientemente definida para virar um item categorizado.
 ### Convenções que o código não deixa óbvias
 - Backlog vivo: plano-de-implementacao.md na raiz é o roadmap oficial do projeto (bugs, UX/UI, Motor Cognitivo e novas features). Consulte antes de iniciar demandas e mantenha-o sincronizado.
 - UI em pt-BR; Flat Design estrito (sem sombra, sem gradiente).

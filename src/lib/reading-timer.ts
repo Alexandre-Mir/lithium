@@ -13,11 +13,13 @@ export interface TimerState {
   durationSeconds: number;
   currentPage?: number;
   totalPages?: number | null;
+  segmentStartPage?: number | null;
 }
 
 export interface TimerReadingProgress {
   currentPage: number;
   totalPages: number | null;
+  segmentStartPage?: number | null;
 }
 
 /** Estima a duração para uma cota; quando o ritmo não é válido, usa 25 min. */
@@ -108,6 +110,8 @@ function isTimerState(value: unknown): value is TimerState {
   if (typeof record.readingTitle !== "string") return false;
   if (record.currentPage !== undefined && (!Number.isInteger(record.currentPage) || Number(record.currentPage) < 0)) return false;
   if (record.totalPages !== undefined && record.totalPages !== null && (!Number.isInteger(record.totalPages) || Number(record.totalPages) < 1)) return false;
+  if (record.segmentStartPage !== undefined && record.segmentStartPage !== null &&
+    (!Number.isInteger(record.segmentStartPage) || Number(record.segmentStartPage) < 1)) return false;
   if (!isIsoTimestamp(record.startedAt)) return false;
   if (record.status !== "running" && record.status !== "paused") return false;
   if (typeof record.accumulatedMs !== "number" || !Number.isInteger(record.accumulatedMs) || record.accumulatedMs < 0) return false;

@@ -12,6 +12,12 @@ describe("validateReadingUpdate", () => {
     expect(validateReadingUpdate({ deadline: null })).toBeNull();
   });
 
+  it("valida página inicial do trecho em atualizações", () => {
+    expect(validateReadingUpdate({ segment_start_page: 150 })).toBeNull();
+    expect(validateReadingUpdate({ segment_start_page: 0 })).toContain("página inicial");
+    expect(validateReadingUpdate({ segment_start_page: null })).toBeNull();
+  });
+
   it("rejeita título vazio", () => {
     expect(validateReadingUpdate({ title: "   " })).toBe("O título da leitura é obrigatório.");
   });
@@ -74,5 +80,13 @@ describe("getReadingCreateErrors", () => {
         hasDeadline: false,
       }),
     ).toEqual({ full_book_pages: "O total do livro deve ser um número inteiro de pelo menos 1 página." });
+  });
+
+  it("valida a página inicial impressa do trecho quando informada", () => {
+    const base = { title: "Livro", subject_id: "subject-id", target_pages: 30, hasDeadline: false };
+    expect(getReadingCreateErrors({ ...base, segment_start_page: 150 })).toEqual({});
+    expect(getReadingCreateErrors({ ...base, segment_start_page: 0 })).toEqual({
+      segment_start_page: "A página inicial do trecho deve ser um número inteiro positivo.",
+    });
   });
 });

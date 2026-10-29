@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { pagesBeforeSession, pagesReadFromEndPage, type SessionPageRecord } from "@/lib/session-pages";
+import {
+  absolutePageAtProgress,
+  pagesBeforeSession,
+  pagesReadFromEndPage,
+  type SessionPageRecord,
+} from "@/lib/session-pages";
 
 const sessions: SessionPageRecord[] = [
   { id: "later", pages_read: 4, started_at: "2026-10-27T12:00:00.000Z", created_at: "2026-10-27T12:30:00.000Z" },
@@ -28,5 +33,17 @@ describe("pagesReadFromEndPage", () => {
   it("rejeita uma página final fora do intervalo", () => {
     expect(pagesReadFromEndPage(20, 20, 30)).toBeNull();
     expect(pagesReadFromEndPage(20, 31, 30)).toBeNull();
+  });
+
+  it("converte páginas finais impressas em progresso relativo do trecho", () => {
+    expect(pagesReadFromEndPage(0, 165, 30, 150)).toBe(15);
+    expect(pagesReadFromEndPage(15, 170, 30, 150)).toBe(5);
+    expect(pagesReadFromEndPage(15, 181, 30, 150)).toBeNull();
+    expect(pagesReadFromEndPage(15, 165, 30, 150)).toBeNull();
+  });
+
+  it("calcula a página impressa atual ou mantém o progresso relativo sem início de trecho", () => {
+    expect(absolutePageAtProgress(15, 150)).toBe(165);
+    expect(absolutePageAtProgress(15, null)).toBe(15);
   });
 });

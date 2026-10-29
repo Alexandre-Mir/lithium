@@ -63,7 +63,8 @@ export function QuickSessionDialog({
       : calculateSuggestedTimerDurationSeconds(activeReading, pace, todayISO());
     if (startReadingTimer(activeReading.id, activeReading.title, {
       currentPage: activeReading.pages_read,
-      totalPages: activeReading.full_book_pages ?? activeReading.target_pages,
+      totalPages: activeReading.target_pages,
+      segmentStartPage: activeReading.segment_start_page,
     }, durationSeconds)) onOpenChange(false);
   };
 

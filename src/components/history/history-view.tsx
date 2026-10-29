@@ -374,7 +374,8 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
           id: editingSession.reading_id,
           title: editingSession.reading?.title || "Leitura",
           currentPage: pagesBeforeSession(sessionsByReading.get(editingSession.reading_id) ?? [], editingSession.id),
-          totalPages: editingSession.reading?.full_book_pages ?? editingSession.reading?.target_pages ?? null,
+          totalPages: editingSession.reading?.target_pages ?? null,
+          segmentStartPage: editingSession.reading?.segment_start_page,
         } : null}
         session={editingSession ?? null}
         isOpen={Boolean(editingSession)}

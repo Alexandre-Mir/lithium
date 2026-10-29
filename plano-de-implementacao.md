@@ -11,6 +11,10 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
 
 ---
 
+## Ideias prematuras
+
+Registre aqui ideias acionáveis identificadas durante o trabalho que ainda precisem de contexto, validação ou refinamento. Quando estiverem maduras, mova-as para a seção apropriada (BUG, UX/UI, COG ou FEAT), sem perder o histórico da decisão.
+
 ## 1. Bugs e Inconsistências Identificados
 
 ### Pendentes
@@ -18,13 +22,6 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
   - **Contexto:** `getAllReadingSessions()` no backend aplica `warnIfTruncated` quando o total de sessões atinge 1.000 linhas, exibindo um aviso estático na tela. Estudantes com uso diário intenso ao longo dos meses não conseguem carregar sessões antigas além desse limite.
   - **Ação:** Adicionar suporte a paginação paginada (cursor ou página com botão "Carregar mais sessões") na Server Action e na view.
   - **Arquivos-chave:** `src/app/actions.ts`, `src/components/history/history-view.tsx`.
-
-- [ ] **`BUG-08` — Incompatibilidade entre Páginas Relativas (Trecho) e Absolutas (Livro) no Modal de Sessão e Marcos**
-  - **Contexto:** Quando uma leitura é cadastrada como trecho (`read_full_book = false`, ex: 30 páginas selecionadas de um livro com numeração original 150 a 180), o modal de sessão exige que o usuário digite a página onde parou (`endPage`), validando contra `target_pages`. Se o usuário digitar "165", a validação bloqueia ("A página final não pode passar da última página (30)"). Além disso, marcos (`milestones`) extraídos do sumário usam numeração absoluta do livro, enquanto `pages_read` conta o delta a partir de zero.
-  - **Ação:** Adicionar suporte explícito a dois modos de input no registro da sessão:
-    1. *Por quantidade de páginas lidas (delta direto)*: ex: "Li 15 páginas".
-    2. *Pela página onde parou*: considerando a página inicial do trecho quando informada.
-  - **Arquivos-chave:** `src/components/reading-session-modal.tsx`, `src/lib/session-pages.ts`, `src/lib/toc-parser.ts`, `src/types/database.ts`.
 
 ### Concluídos
 - [x] **`BUG-01` — Conclusão de Leitura Destrutiva sem Toast de "Desfazer" no Dashboard**
@@ -39,6 +36,8 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
   - *Resolução:* Agenda agora agrega `scheduled_reviews` e `spaced_reviews`; o Tier 1 do Dashboard reúne revisões de leitura e de marcos pendentes até hoje, com ação de conclusão apropriada para cada fluxo.
 - [x] **`BUG-06` — Falta de Toast com "Desfazer" ao Concluir Leitura na Biblioteca (`book-card.tsx`)**
   - *Resolução:* `handleMarkAsRead` em `book-card.tsx` passa a emitir `addToast` com `actionLabel: "Desfazer"` via helper `readingCompletedUndoToast`, espelhando o card da cascata.
+- [x] **`BUG-08` — Incompatibilidade entre Páginas Relativas (Trecho) e Absolutas (Livro) no Modal de Sessão e Marcos**
+  - *Resolução:* Modal passou a oferecer registro por quantidade ou página final. A página inicial opcional do trecho é persistida; sessões manuais, cronometradas e editadas convertem a página impressa em progresso relativo, e marcos do sumário são normalizados para o trecho mantendo sua página original nos resumos.
 - [x] **`BUG-09` — Disparo Incorreto do Resumo de Marco (Active Recall Solicita o Próximo Marco em Vez do Recém-Concluído)**
   - *Resolução:* `getCrossedMilestones` agora associa cada transição ao marco anterior e inclui o último marco quando `nextPage` alcança `target_pages`; `createReadingSession` consulta a meta para aplicar essa regra.
 
@@ -100,6 +99,11 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
     4. Cobrir com testes unitários em `src/lib/text.test.ts`: palavras simples, preposições internas, siglas (ISBN, DOI), nomes próprios compostos, strings já corretas.
   - **Arquivos-chave:** `src/lib/text.ts` (novo), `src/lib/text.test.ts` (novo), `src/components/setup/readings-table.tsx` (ou futuro `reading-form.tsx`).
 
+- [ ] **`UX-15` — Refinamento da Interface do Card de Leitura na Biblioteca**
+  - **Contexto:** O `BookCard` reúne capa, tipo, disciplina, título, autor, métricas de progresso, prazo e ações. A ideia original pede um ajuste visual, mas ainda não identifica um atrito específico.
+  - **Ação:** Revisar hierarquia visual, legibilidade e comportamento responsivo do card; definir os ajustes a partir dos problemas encontrados, preservando o Flat Design e sem alterar regras funcionais da leitura.
+  - **Arquivos-chave:** `src/components/library/book-card.tsx`, `src/components/library/library-view.tsx`, `src/components/library/reading-cover.tsx`.
+
 ### Concluídos
 - [x] **`UX-01` — Seletor de Leitura na "Sessão Rápida" (Dashboard)**
   - *Resolução:* Criado o componente `QuickSessionDialog` com agrupamento por tiers, ordenação por urgência, histórico da última sessão e recomendação diária.
@@ -141,6 +145,8 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
   - *Resolução:* Implementada a tabela `milestone_summaries` (v1.9) e `scheduled_reviews` (v1.10), disparando criação atômica de revisões D+1, D+7 e D+21 ao preencher o resumo de marco, com integração no Dashboard e na Agenda.
 - [x] **`COG-RECOM` — Recomendação Diária Inteligente de Leitura**
   - *Resolução:* Implementado o algoritmo em `src/lib/recommendation.ts` que sugere a leitura ideal do dia com base em proximidade da prova, meta diária atingida e cota de páginas necessária.
+- [x] **`COG-07` — Refinamento dos Critérios da Próxima Leitura Recomendada**
+  - *Resolução:* Prazos vencidos têm prioridade sobre o prazo de hoje, e prazos mais próximos passam à frente de leituras com maior carga diária mas vencimento distante. Para a mesma data, a carga diária necessária desempata; fila, inatividade, filtro de cota diária e limite do orçamento cognitivo foram preservados.
 
 ---
 
@@ -215,3 +221,7 @@ As propostas abaixo foram analisadas e **rejeitadas da forma em que foram formul
 | 2026-10-28 | `DOC-04` | Formalização das ideias prematuras (Seção 0) em itens estruturados: UX-11 (card de recomendação), UX-12 (reestruturação de navegação Setup→Biblioteca/Agenda), UX-13 (Title Case automático) e UX-14 (refatoração do formulário de leituras) | `plano-de-implementacao.md` |
 | 2026-10-28 | `BUG-09` | Active Recall gerado para o marco recém-concluído nas transições e ao atingir a meta | `milestone-crossing.ts`, `actions.ts` |
 | 2026-10-28 | `UX-14` | Formulário de leituras extraído, integrado à Biblioteca, guiado por etapas, validado e responsivo | `reading-form.tsx`, `library-view.tsx`, `readings-table.tsx`, `reading-validation.ts` |
+| 2026-10-29 | `DOC-05` | Ideias prematuras classificadas como UX-15 (card da Biblioteca) e COG-07 (critérios de recomendação) | `plano-de-implementacao.md` |
+| 2026-10-29 | `COG-07` | Recomendação desempata primeiro por urgência do prazo e depois por carga diária necessária, com cenários cobertos por testes | `src/lib/recommendation.ts`, `src/lib/recommendation.test.ts` |
+| 2026-10-29 | `DOC-06` | Regra para registrar ideias acionáveis na seção Ideias prematuras, antes de categorizá-las | `AGENTS.md`, `plano-de-implementacao.md` |
+| 2026-10-29 | `BUG-08` | Registro de sessões por quantidade ou página impressa, com conversão de marcos absolutos para o trecho | `migration-v1.11.sql`, `reading-session-modal.tsx`, `session-pages.ts`, `toc-parser.ts`, `actions.ts` |

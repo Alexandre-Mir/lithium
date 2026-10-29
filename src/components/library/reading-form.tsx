@@ -43,6 +43,7 @@ export interface ReadingFormState {
   doi: string;
   fullBookPages: number | "";
   readFullBook: boolean;
+  segmentStartPage: number | "";
   targetPages: number | "";
   deadline: string;
   hasDeadline: boolean;
@@ -77,6 +78,7 @@ function initialReadingFormState(subjectId: string): ReadingFormState {
     doi: "",
     fullBookPages: "",
     readFullBook: false,
+    segmentStartPage: "",
     targetPages: 30,
     deadline: "",
     hasDeadline: true,
@@ -178,6 +180,9 @@ export function ReadingForm({
     subject_id: state.subjectId,
     target_pages: effectiveTargetPages,
     full_book_pages: state.type === "book" ? state.fullBookPages : null,
+    segment_start_page: state.type === "book" && !state.readFullBook
+      ? state.segmentStartPage
+      : null,
     deadline: state.deadline,
     hasDeadline: state.hasDeadline,
   });
@@ -333,6 +338,11 @@ export function ReadingForm({
           ? state.fullBookPages
           : null,
         target_pages: effectiveTargetPages as number,
+        segment_start_page: state.type === "book" &&
+          !state.readFullBook &&
+          typeof state.segmentStartPage === "number"
+          ? state.segmentStartPage
+          : null,
         read_full_book: state.type === "book" && state.readFullBook,
         deadline: state.hasDeadline ? state.deadline : null,
         is_read: false,
@@ -696,6 +706,31 @@ export function ReadingForm({
               {showSetupErrors && state.readFullBook && createErrors.target_pages && (
                 <FieldError>Informe o total de páginas na etapa anterior ou desative “Livro inteiro”.</FieldError>
               )}
+            </div>
+          )}
+
+          {state.type === "book" && !state.readFullBook && (
+            <div className="max-w-xs space-y-1">
+              <label htmlFor="reading-form-segment-start-page" className="block text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                Página inicial do trecho <span className="font-normal text-gray-500">(opcional)</span>
+              </label>
+              <Input
+                id="reading-form-segment-start-page"
+                type="number"
+                min={1}
+                step={1}
+                value={state.segmentStartPage}
+                onChange={(event) => patch({
+                  segmentStartPage: event.target.value ? Number(event.target.value) : "",
+                })}
+                aria-invalid={Boolean(showSetupErrors && createErrors.segment_start_page)}
+                placeholder="Ex.: 150"
+                className="h-10 rounded font-mono text-sm"
+              />
+              <FieldError>{showSetupErrors ? createErrors.segment_start_page : undefined}</FieldError>
+              <p className="text-[10px] text-gray-500">
+                Com esse dado, é possível registrar a página impressa e alinhar os marcos do sumário; sem ele, use a quantidade lida.
+              </p>
             </div>
           )}
 

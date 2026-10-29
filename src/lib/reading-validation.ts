@@ -1,6 +1,7 @@
 interface ReadingUpdateFields {
   title?: unknown;
   target_pages?: unknown;
+  segment_start_page?: unknown;
   deadline?: unknown;
   milestones?: unknown;
 }
@@ -10,12 +11,13 @@ export interface ReadingCreateFields {
   subject_id: unknown;
   target_pages: unknown;
   full_book_pages?: unknown;
+  segment_start_page?: unknown;
   deadline?: unknown;
   hasDeadline?: boolean;
 }
 
 export type ReadingCreateFieldErrors = Partial<
-  Record<"title" | "subject_id" | "target_pages" | "full_book_pages" | "deadline", string>
+  Record<"title" | "subject_id" | "target_pages" | "full_book_pages" | "segment_start_page" | "deadline", string>
 >;
 
 function isValidDateISO(value: unknown): value is string {
@@ -43,6 +45,16 @@ export function validateReadingUpdate(input: ReadingUpdateFields): string | null
     (typeof input.target_pages !== "number" || !Number.isInteger(input.target_pages) || input.target_pages < 1)
   ) {
     return "A meta deve ser um número inteiro de pelo menos 1 página.";
+  }
+
+  if (
+    input.segment_start_page !== undefined &&
+    input.segment_start_page !== null &&
+    (typeof input.segment_start_page !== "number" ||
+      !Number.isInteger(input.segment_start_page) ||
+      input.segment_start_page < 1)
+  ) {
+    return "A página inicial do trecho deve ser um número inteiro positivo ou ficar vazia.";
   }
 
   if (input.deadline !== undefined && input.deadline !== null && !isValidDateISO(input.deadline)) {
@@ -103,6 +115,17 @@ export function getReadingCreateErrors(input: ReadingCreateFields): ReadingCreat
       input.full_book_pages < 1)
   ) {
     errors.full_book_pages = "O total do livro deve ser um número inteiro de pelo menos 1 página.";
+  }
+
+  if (
+    input.segment_start_page !== undefined &&
+    input.segment_start_page !== null &&
+    input.segment_start_page !== "" &&
+    (typeof input.segment_start_page !== "number" ||
+      !Number.isInteger(input.segment_start_page) ||
+      input.segment_start_page < 1)
+  ) {
+    errors.segment_start_page = "A página inicial do trecho deve ser um número inteiro positivo.";
   }
 
   if (input.hasDeadline && (typeof input.deadline !== "string" || !isValidDateISO(input.deadline))) {

@@ -65,6 +65,21 @@ describe("reading-timer", () => {
     expect(parse(serialize(timer))?.durationSeconds).toBe(5_400);
   });
 
+  it("preserva a página inicial do trecho ao persistir o cronômetro", () => {
+    const timer = startTimer("reading-1", "Trecho", base, {
+      currentPage: 15,
+      totalPages: 30,
+      segmentStartPage: 150,
+    });
+
+    expect(parse(serialize(timer))).toMatchObject({
+      currentPage: 15,
+      totalPages: 30,
+      segmentStartPage: 150,
+    });
+    expect(parse(serialize({ ...timer, segmentStartPage: 0 }))).toBeNull();
+  });
+
   it("migra timers antigos para a duração padrão", () => {
     const legacy = {
       readingId: "reading-1",

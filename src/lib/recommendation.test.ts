@@ -35,19 +35,56 @@ describe("motor de recomendação", () => {
     expect(getSuggestedReading([highFutureRatio, overdue], 15, "2026-10-24")?.id).toBe("overdue");
   });
 
-  it("prioriza o maior volume de páginas por dia entre prazos futuros", () => {
+  it("prioriza a leitura com maior carga diária quando os prazos coincidem", () => {
     const urgent = makeReading({
       id: "urgent",
       target_pages: 120,
-      deadline: "2026-10-26",
+      deadline: "2026-10-28",
     });
     const lessUrgent = makeReading({
       id: "less-urgent",
       target_pages: 30,
-      deadline: "2026-10-27",
+      deadline: "2026-10-28",
     });
 
     expect(getSuggestedReading([lessUrgent, urgent], 15, "2026-10-24")?.id).toBe("urgent");
+  });
+
+  it("prioriza o prazo mais próximo antes de uma carga diária maior com prazo distante", () => {
+    const distantAndDemanding = makeReading({
+      id: "distant",
+      target_pages: 500,
+      deadline: "2026-11-03",
+    });
+    const nearDeadline = makeReading({
+      id: "near",
+      target_pages: 40,
+      deadline: "2026-10-25",
+    });
+
+    expect(getSuggestedReading(
+      [distantAndDemanding, nearDeadline],
+      15,
+      "2026-10-24",
+    )?.id).toBe("near");
+  });
+
+  it("prioriza vencidos, depois o prazo de hoje e os vencidos mais antigos", () => {
+    const dueToday = makeReading({ id: "today", deadline: "2026-10-24" });
+    const dueTomorrow = makeReading({
+      id: "tomorrow",
+      target_pages: 10_000,
+      deadline: "2026-10-25",
+    });
+    const recentlyOverdue = makeReading({ id: "recently-overdue", deadline: "2026-10-23" });
+    const longOverdue = makeReading({ id: "long-overdue", deadline: "2026-10-20" });
+
+    expect(getSuggestedReading(
+      [dueToday, recentlyOverdue, longOverdue],
+      15,
+      "2026-10-24",
+    )?.id).toBe("long-overdue");
+    expect(getSuggestedReading([dueTomorrow, dueToday], 15, "2026-10-24")?.id).toBe("today");
   });
 
   it("usa fila por criação e dá bônus leve às leituras paradas", () => {

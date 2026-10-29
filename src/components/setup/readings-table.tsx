@@ -431,17 +431,39 @@ export function ReadingsTable({
 
                     <TableCell className="p-2 font-mono text-xs">
                       {isEditing ? (
-                        <Input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={editValues.target_pages ?? reading.target_pages}
-                          onChange={(event) =>
-                            setEditValues((prev) => ({ ...prev, target_pages: Number(event.target.value) }))
-                          }
-                          className="h-7 w-16 rounded px-1 text-xs"
-                          aria-label="Meta de páginas"
-                        />
+                        <div className="space-y-1">
+                          <Input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={editValues.target_pages ?? reading.target_pages}
+                            onChange={(event) =>
+                              setEditValues((prev) => ({ ...prev, target_pages: Number(event.target.value) }))
+                            }
+                            className="h-7 w-16 rounded px-1 text-xs"
+                            aria-label="Meta de páginas"
+                          />
+                          {reading.type === "book" && !reading.read_full_book && (
+                            <Input
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={editValues.segment_start_page === undefined
+                                ? reading.segment_start_page ?? ""
+                                : editValues.segment_start_page ?? ""}
+                              onChange={(event) =>
+                                setEditValues((prev) => ({
+                                  ...prev,
+                                  segment_start_page: event.target.value ? Number(event.target.value) : null,
+                                }))
+                              }
+                              className="h-7 w-16 rounded px-1 text-xs"
+                              aria-label="Página inicial do trecho"
+                              placeholder="Pág. inicial"
+                              title="Página inicial do trecho no livro"
+                            />
+                          )}
+                        </div>
                       ) : (
                         `${reading.target_pages}p`
                       )}
@@ -543,6 +565,7 @@ export function ReadingsTable({
                                 chapter_title: reading.chapter_title,
                                 author: reading.author,
                                 target_pages: reading.target_pages,
+                                segment_start_page: reading.segment_start_page,
                                 deadline: reading.deadline,
                                 milestones: reading.milestones ?? [],
                               });

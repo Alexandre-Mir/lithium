@@ -18,6 +18,15 @@ describe("getCrossedMilestones", () => {
     ]);
   });
 
+  it("mantém o marco anterior ao trecho como referência ao cruzar o primeiro marco interno", () => {
+    expect(getCrossedMilestones([
+      { title: "Capítulo em andamento", page: 0 },
+      { title: "Capítulo seguinte", page: 15 },
+    ], 0, 15, 30)).toEqual([
+      { title: "Capítulo em andamento", page: 0 },
+    ]);
+  });
+
   it("inclui o marco imediatamente anterior a cada transição, em ordem de página", () => {
     expect(getCrossedMilestones(milestones, 10, 70, 100)).toEqual([
       { title: "Capítulo 1", page: 10 },

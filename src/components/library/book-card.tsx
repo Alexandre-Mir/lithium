@@ -196,7 +196,8 @@ export function BookCard({
           type="button"
           onClick={() => startReadingTimer(reading.id, reading.title, {
             currentPage: reading.pages_read,
-            totalPages: reading.full_book_pages ?? reading.target_pages,
+            totalPages: reading.target_pages,
+            segmentStartPage: reading.segment_start_page,
           }, calculateSuggestedTimerDurationSeconds(reading, speed))}
           size="sm"
           aria-label={`Iniciar cronômetro para ${reading.title}`}

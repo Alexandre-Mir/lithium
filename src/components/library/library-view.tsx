@@ -73,7 +73,8 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
       id: reading.id,
       title: reading.title,
       currentPage: reading.pages_read,
-      totalPages: reading.full_book_pages ?? reading.target_pages,
+      totalPages: reading.target_pages,
+      segmentStartPage: reading.segment_start_page,
     });
     setSessionModalOpen(true);
   };

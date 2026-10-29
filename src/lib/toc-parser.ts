@@ -47,3 +47,32 @@ export function getCurrentMilestone<T extends ReadingMilestone>(
 
   return current;
 }
+
+/** Converte marcos absolutos do livro para o intervalo relativo de um trecho. */
+export function milestonesForSegment<T extends ReadingMilestone>(
+  milestones: readonly T[],
+  segmentStartPage: number | null,
+  targetPages: number,
+): Array<T & { originalPage?: number }> {
+  const ordered = milestones
+    .filter((milestone) => Number.isInteger(milestone.page) && milestone.page > 0)
+    .slice()
+    .sort((left, right) => left.page - right.page);
+  if (segmentStartPage === null) return ordered;
+  if (!Number.isInteger(segmentStartPage) || segmentStartPage < 1) return [];
+
+  const priorMilestones = ordered.filter((milestone) => milestone.page < segmentStartPage);
+  const priorMilestone = priorMilestones[priorMilestones.length - 1];
+  const inSegment = ordered.filter((milestone) =>
+    milestone.page >= segmentStartPage &&
+    milestone.page <= segmentStartPage + targetPages,
+  );
+  return [
+    ...(priorMilestone ? [{ ...priorMilestone, page: 0, originalPage: priorMilestone.page }] : []),
+    ...inSegment.map((milestone) => ({
+      ...milestone,
+      page: milestone.page - segmentStartPage,
+      originalPage: milestone.page,
+    })),
+  ];
+}

@@ -31,6 +31,7 @@ const session: ReadingSessionWithReading = {
     type: "book",
     target_pages: 120,
     full_book_pages: 120,
+    segment_start_page: null,
     subject: { name: "História", theme_color: "#123456" },
   },
 };

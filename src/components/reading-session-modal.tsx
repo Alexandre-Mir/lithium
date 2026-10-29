@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { elapsedSeconds, type TimerState } from "@/lib/reading-timer";
 import { formatDuration, pph, sessionSeconds } from "@/lib/session-time";
-import { pagesReadFromEndPage } from "@/lib/session-pages";
+import { absolutePageAtProgress, pagesReadFromEndPage } from "@/lib/session-pages";
 import { validateSessionInput } from "@/lib/session-validation";
 import { remainingSprintSeconds } from "@/lib/reading-timer-store";
 import type { ReadingSession, ReadingSessionSource } from "@/types/database";
@@ -19,6 +19,7 @@ export interface ReadingSessionTarget {
   title: string;
   currentPage: number;
   totalPages: number | null;
+  segmentStartPage?: number | null;
 }
 
 type SessionMode = "manual" | "timer" | "edit";
@@ -54,6 +55,7 @@ function ReadingSessionModalContent({
   endedAt,
   currentPage,
   totalPages,
+  segmentStartPage,
   onClose,
   onSuccess,
   onDiscardTimer,
@@ -66,6 +68,7 @@ function ReadingSessionModalContent({
   endedAt: string | null;
   currentPage: number;
   totalPages: number | null;
+  segmentStartPage?: number | null;
   onClose: () => void;
   onSuccess?: () => void;
   onDiscardTimer?: () => void;
@@ -78,7 +81,9 @@ function ReadingSessionModalContent({
   const remainingSeconds = remainingSprintSeconds(measuredSeconds, timerState?.durationSeconds);
   const [durationMinutes, setDurationMinutes] = useState("25");
   const [timerInput, setTimerInput] = useState(() => formatTimerInput(initialSeconds));
-  const initialEndPage = currentPage + (session?.pages_read ?? 10);
+  const initialEndPage = absolutePageAtProgress(currentPage + (session?.pages_read ?? 10), segmentStartPage ?? null);
+  const [pageInputMode, setPageInputMode] = useState<"count" | "end">("count");
+  const [pageCountInput, setPageCountInput] = useState(String(session?.pages_read ?? 10));
   const [endPageInput, setEndPageInput] = useState(String(initialEndPage));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,9 +92,16 @@ function ReadingSessionModalContent({
     ? (/^\d+$/.test(durationMinutes) ? Number(durationMinutes) * 60 : 0)
     : (parseTimerInput(timerInput) ?? 0);
   const endPage = /^\d+$/.test(endPageInput) ? Number(endPageInput) : null;
-  const calculatedPagesRead = endPage === null
-    ? null
-    : pagesReadFromEndPage(currentPage, endPage, totalPages);
+  const requestedPageCount = /^\d+$/.test(pageCountInput) ? Number(pageCountInput) : null;
+  const calculatedPagesRead = pageInputMode === "count"
+    ? requestedPageCount !== null &&
+      requestedPageCount > 0 &&
+      (totalPages === null || currentPage + requestedPageCount <= totalPages)
+      ? requestedPageCount
+      : null
+    : endPage === null
+      ? null
+      : pagesReadFromEndPage(currentPage, endPage, totalPages, segmentStartPage ?? null);
   const pagesRead = calculatedPagesRead ?? 0;
   const previewSpeed = durationSeconds > 0 && pagesRead > 0
     ? pph(pagesRead, durationSeconds)
@@ -111,13 +123,20 @@ function ReadingSessionModalContent({
     started_at: mode === "timer" ? timerState?.startedAt ?? null : mode === "edit" ? session?.started_at : null,
     ended_at: mode === "timer" ? endedAt : mode === "edit" ? session?.ended_at : null,
   };
-  const pageValidationMessage = endPage === null
-    ? "Informe a página final da leitura."
-    : endPage <= currentPage
-      ? `A página final deve ser maior que a página atual (${currentPage}).`
-      : totalPages !== null && endPage > totalPages
-        ? `A página final não pode passar da última página (${totalPages}).`
-        : null;
+  const currentAbsolutePage = absolutePageAtProgress(currentPage, segmentStartPage ?? null);
+  const pageValidationMessage = pageInputMode === "count"
+    ? requestedPageCount === null || requestedPageCount < 1
+      ? "Informe uma quantidade positiva de páginas lidas."
+      : totalPages !== null && currentPage + requestedPageCount > totalPages
+        ? `A quantidade não pode passar das ${totalPages} páginas da leitura.`
+        : null
+    : endPage === null
+      ? "Informe a página final da leitura."
+      : endPage <= currentAbsolutePage
+        ? `A página final deve ser maior que a página atual (${currentAbsolutePage}).`
+        : totalPages !== null && endPage > absolutePageAtProgress(totalPages, segmentStartPage ?? null)
+          ? `A página final não pode passar da última página (${absolutePageAtProgress(totalPages, segmentStartPage ?? null)}).`
+          : null;
   const validationMessage = pageValidationMessage ?? validateSessionInput(validationInput);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -178,6 +197,31 @@ function ReadingSessionModalContent({
       </DialogHeader>
 
       <form onSubmit={handleSubmit} className="space-y-3.5">
+        <div className="space-y-1">
+          <Label className="text-xs font-semibold">Como informar o progresso?</Label>
+          <div className="grid grid-cols-2 gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={pageInputMode === "count" ? "default" : "outline"}
+              aria-pressed={pageInputMode === "count"}
+              onClick={() => setPageInputMode("count")}
+              className="h-8 text-[11px]"
+            >
+              Quantidade lida
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={pageInputMode === "end" ? "default" : "outline"}
+              aria-pressed={pageInputMode === "end"}
+              onClick={() => setPageInputMode("end")}
+              className="h-8 text-[11px]"
+            >
+              Página final
+            </Button>
+          </div>
+        </div>
         {mode === "manual" ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -195,16 +239,26 @@ function ReadingSessionModalContent({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="pages-read" className="text-xs font-semibold">Página final</Label>
+              <Label htmlFor="pages-read" className="text-xs font-semibold">
+                {pageInputMode === "count"
+                  ? "Páginas lidas"
+                  : segmentStartPage ? "Página final no livro" : "Página final da leitura"}
+              </Label>
               <Input
                 id="pages-read"
                 type="number"
-                min={currentPage + 1}
-                max={totalPages ?? undefined}
+                min={pageInputMode === "count" ? 1 : currentAbsolutePage + 1}
+                max={pageInputMode === "count"
+                  ? totalPages === null ? undefined : Math.max(0, totalPages - currentPage)
+                  : totalPages === null ? undefined : absolutePageAtProgress(totalPages, segmentStartPage ?? null)}
                 step="1"
                 required
-                value={endPageInput}
-                onChange={(event) => setEndPageInput(event.target.value)}
+                value={pageInputMode === "count" ? pageCountInput : endPageInput}
+                onChange={(event) =>
+                  pageInputMode === "count"
+                    ? setPageCountInput(event.target.value)
+                    : setEndPageInput(event.target.value)
+                }
                 className="font-mono text-xs h-8 rounded border-gray-300 dark:border-gray-700"
               />
             </div>
@@ -236,16 +290,26 @@ function ReadingSessionModalContent({
                 {mode === "timer" && <p className="text-[10px] text-gray-500">Medido: {formatDuration(measuredSeconds)}</p>}
               </div>
               <div className="space-y-1">
-                <Label htmlFor="timer-pages-read" className="text-xs font-semibold">Página final</Label>
+                <Label htmlFor="timer-pages-read" className="text-xs font-semibold">
+                  {pageInputMode === "count"
+                    ? "Páginas lidas"
+                    : segmentStartPage ? "Página final no livro" : "Página final da leitura"}
+                </Label>
                 <Input
                   id="timer-pages-read"
                   type="number"
-                  min={currentPage + 1}
-                  max={totalPages ?? undefined}
+                  min={pageInputMode === "count" ? 1 : currentAbsolutePage + 1}
+                  max={pageInputMode === "count"
+                    ? totalPages === null ? undefined : Math.max(0, totalPages - currentPage)
+                    : totalPages === null ? undefined : absolutePageAtProgress(totalPages, segmentStartPage ?? null)}
                   step="1"
                   required
-                  value={endPageInput}
-                  onChange={(event) => setEndPageInput(event.target.value)}
+                  value={pageInputMode === "count" ? pageCountInput : endPageInput}
+                  onChange={(event) =>
+                    pageInputMode === "count"
+                      ? setPageCountInput(event.target.value)
+                      : setEndPageInput(event.target.value)
+                  }
                   className="font-mono text-xs h-8 rounded border-gray-300 dark:border-gray-700"
                 />
               </div>
@@ -262,7 +326,10 @@ function ReadingSessionModalContent({
           </>
         )}
 
-        <p className="text-[10px] text-gray-500">Página atual registrada: {currentPage}{totalPages !== null ? ` de ${totalPages}` : ""}.</p>
+        <p className="text-[10px] text-gray-500">
+          Progresso registrado: {currentPage}{totalPages !== null ? ` de ${totalPages}` : ""} páginas
+          {segmentStartPage ? ` (página impressa ${currentAbsolutePage})` : ""}.
+        </p>
         {totalPages !== null && currentPage >= totalPages && (
           <p className="text-xs text-gray-500">
             Todas as páginas já estão registradas para esta leitura.
@@ -328,6 +395,7 @@ export function ReadingSessionModal({
           endedAt={endedAt}
           currentPage={reading.currentPage}
           totalPages={reading.totalPages}
+          segmentStartPage={reading.segmentStartPage}
           onClose={onClose}
           onSuccess={onSuccess}
           onDiscardTimer={onDiscardTimer}

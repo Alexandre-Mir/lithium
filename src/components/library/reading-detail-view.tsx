@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { metadataAttemptsSummary } from "@/lib/metadata-labels";
 import { isUnusualSession } from "@/lib/session-anomaly";
 import { pagesBeforeSession } from "@/lib/session-pages";
-import { getCurrentMilestone } from "@/lib/toc-parser";
+import { getCurrentMilestone, milestonesForSegment } from "@/lib/toc-parser";
 import { ArrowLeft, ArrowRight, Calendar, Clock, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 
 interface Props {
@@ -68,8 +68,11 @@ export function ReadingDetailView({
   const totalSecondsSpent = sessions.reduce((sum, session) => sum + sessionSeconds(session), 0);
   const speed = pph(totalPagesRead, totalSecondsSpent);
   const calibratedSpeed = sessions.length > 0 ? speed : reading.current_speed_pph;
-  const milestones = (reading.milestones ?? []).slice().sort((left, right) => left.page - right.page);
-  const totalBookPages = reading.full_book_pages ?? reading.target_pages;
+  const milestones = milestonesForSegment(
+    reading.milestones ?? [],
+    reading.segment_start_page,
+    reading.target_pages,
+  );
   const currentMilestone = getCurrentMilestone(projection.pagesRead, milestones);
   const currentMilestoneIndex = currentMilestone
     ? milestones.findIndex((milestone) => milestone === currentMilestone)
@@ -222,7 +225,8 @@ export function ReadingDetailView({
           <div className="flex flex-wrap items-start gap-2">
             <Button size="sm" onClick={() => startReadingTimer(reading.id, reading.title, {
               currentPage: projection.pagesRead,
-              totalPages: reading.full_book_pages ?? reading.target_pages,
+              totalPages: reading.target_pages,
+              segmentStartPage: reading.segment_start_page,
             }, calculateSuggestedTimerDurationSeconds({
               ...reading,
               pages_read: projection.pagesRead,
@@ -309,7 +313,7 @@ export function ReadingDetailView({
             }}
           />
           {milestones.map((milestone, index) => {
-            const position = Math.min(100, Math.max(0, (milestone.page / totalBookPages) * 100));
+            const position = Math.min(100, Math.max(0, (milestone.page / reading.target_pages) * 100));
             return (
               <span
                 key={`${milestone.page}-${index}`}
@@ -340,7 +344,7 @@ export function ReadingDetailView({
             </p>
           ) : (
             <p className="mb-3 text-xs text-gray-500">
-              O primeiro marco começa na página {milestones[0].page}.
+              O primeiro marco começa na página {milestones[0].originalPage ?? milestones[0].page}.
             </p>
           )}
           <ol className="space-y-0 border-l border-gray-200 dark:border-gray-700">
@@ -363,7 +367,7 @@ export function ReadingDetailView({
                       {milestone.title}
                     </span>
                     <span className="inline-flex items-center gap-2 font-mono text-[10px] text-gray-500">
-                      p. {milestone.page}
+                      p. {milestone.originalPage ?? milestone.page}
                       <span>{isCurrent ? "Atual" : isCompleted ? "Concluído" : "Próximo"}</span>
                     </span>
                   </div>
@@ -521,7 +525,8 @@ export function ReadingDetailView({
           id: reading.id,
           title: reading.title,
           currentPage: projection.pagesRead,
-          totalPages: reading.full_book_pages ?? reading.target_pages,
+          totalPages: reading.target_pages,
+          segmentStartPage: reading.segment_start_page,
         }}
         isOpen={modalOpen}
         mode="manual"
@@ -536,7 +541,8 @@ export function ReadingDetailView({
           id: reading.id,
           title: reading.title,
           currentPage: pagesBeforeSession(sessions, editingSession.id),
-          totalPages: reading.full_book_pages ?? reading.target_pages,
+          totalPages: reading.target_pages,
+          segmentStartPage: reading.segment_start_page,
         } : null}
         session={editingSession ?? null}
         isOpen={Boolean(editingSession)}

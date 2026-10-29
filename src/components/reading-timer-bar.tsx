@@ -187,6 +187,7 @@ export function ReadingTimerBar() {
           title: finishingTimer.readingTitle,
           currentPage: finishingTimer.currentPage ?? 0,
           totalPages: finishingTimer.totalPages ?? null,
+          segmentStartPage: finishingTimer.segmentStartPage,
         } : null}
         isOpen={finishingTimer !== null}
         mode="timer"
@@ -229,4 +230,3 @@ export function ReadingTimerBar() {
     </>
   );
 }
-

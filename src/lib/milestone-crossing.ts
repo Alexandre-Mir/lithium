@@ -1,17 +1,17 @@
 import type { ReadingMilestone } from "@/types/database";
 
-export function getCrossedMilestones(
-  milestones: readonly ReadingMilestone[],
+export function getCrossedMilestones<T extends ReadingMilestone>(
+  milestones: readonly T[],
   previousPage: number,
   nextPage: number,
   targetPages: number,
-): ReadingMilestone[] {
+): T[] {
   if (!Number.isFinite(previousPage) || !Number.isFinite(nextPage) || nextPage <= previousPage) {
     return [];
   }
 
   const ordered = milestones
-    .filter((milestone) => Number.isInteger(milestone.page) && milestone.page > 0)
+    .filter((milestone) => Number.isInteger(milestone.page) && milestone.page >= 0)
     .slice()
     .sort((left, right) => left.page - right.page);
   if (ordered.length === 0) return [];
