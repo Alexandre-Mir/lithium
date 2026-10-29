@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { getDashboardData, getMilestoneSummaries, getSubjectStats } from "@/app/actions";
+import { todayISO } from "@/lib/dates";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import type { AgendaMilestoneReviewEvent } from "@/lib/agenda";
 import { emptyConsistencyHeatmap, type ConsistencyHeatmapModel } from "@/lib/consistency-heatmap";
@@ -30,6 +31,9 @@ export default async function HomePage() {
   let averageSpeedPph = 20;
   let recommendedReadingId: string | null = null;
   let recommendedPages = 0;
+  let alternativeReadingId: string | null = null;
+  let alternativePages = 0;
+  let today = todayISO();
   let cognitiveBudget = {
     budgetMinutes: 60,
     demandedMinutes: 0,
@@ -64,6 +68,9 @@ export default async function HomePage() {
     averageSpeedPph = data.averageSpeedPph ?? 20;
     recommendedReadingId = data.recommendedReadingId ?? null;
     recommendedPages = data.recommendedPages ?? 0;
+    alternativeReadingId = data.alternativeReadingId ?? null;
+    alternativePages = data.alternativePages ?? 0;
+    today = data.today;
     cognitiveBudget = data.cognitiveBudget ?? cognitiveBudget;
     consistencyHeatmap = data.consistencyHeatmap ?? consistencyHeatmap;
     if (data.schemaError) connectionError = data.schemaError;
@@ -125,6 +132,9 @@ export default async function HomePage() {
         averageSpeedPph={averageSpeedPph}
         recommendedReadingId={recommendedReadingId}
         recommendedPages={recommendedPages}
+        alternativeReadingId={alternativeReadingId}
+        alternativePages={alternativePages}
+        today={today}
         cognitiveBudget={cognitiveBudget}
         consistencyHeatmap={consistencyHeatmap}
         milestoneSummaries={milestoneSummaries}

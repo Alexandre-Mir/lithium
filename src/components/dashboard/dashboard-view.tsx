@@ -56,6 +56,9 @@ interface DashboardViewProps {
   averageSpeedPph: number;
   recommendedReadingId: string | null;
   recommendedPages: number;
+  alternativeReadingId: string | null;
+  alternativePages: number;
+  today: string;
   cognitiveBudget: CognitiveBudgetSummary;
   consistencyHeatmap: ConsistencyHeatmapModel;
   milestoneSummaries: MilestoneSummaryWithBook[];
@@ -77,6 +80,9 @@ export function DashboardView({
   averageSpeedPph,
   recommendedReadingId,
   recommendedPages,
+  alternativeReadingId,
+  alternativePages,
+  today,
   cognitiveBudget,
   consistencyHeatmap,
   milestoneSummaries,
@@ -90,6 +96,19 @@ export function DashboardView({
   const recommendedReading = [...tier2, ...tier3, ...tier4].find(
     (reading) => reading.id === recommendedReadingId,
   ) ?? null;
+  const alternativeReading = [...tier2, ...tier3, ...tier4].find(
+    (reading) => reading.id === alternativeReadingId,
+  ) ?? null;
+  const recommendedDeliverable = recommendedReading
+    ? allDeliverables.find((deliverable) =>
+      deliverable.id === readingDeliverableMap[recommendedReading.id],
+    ) ?? null
+    : null;
+  const alternativeDeliverable = alternativeReading
+    ? allDeliverables.find((deliverable) =>
+      deliverable.id === readingDeliverableMap[alternativeReading.id],
+    ) ?? null
+    : null;
 
   const handleOpenSession = (reading: ReadingWithSubject) => {
     setActiveReading({
@@ -227,6 +246,11 @@ export function DashboardView({
       <RecommendationCard
         reading={recommendedReading}
         suggestedPages={recommendedPages}
+        alternativeReading={alternativeReading}
+        alternativePages={alternativePages}
+        linkedDeliverable={recommendedDeliverable}
+        alternativeDeliverable={alternativeDeliverable}
+        today={today}
         goalReached={todayReadingMinutes >= dailyGoalMinutes}
         onStartTimer={handleStartRecommendedTimer}
         onRegisterSession={handleOpenSession}

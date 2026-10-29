@@ -3,6 +3,7 @@ import {
   calculateBudgetAwareSuggestedPages,
   calculateSuggestedPages,
   calculateSuggestedTimerDurationSeconds,
+  getRecommendationContext,
   getSuggestedReading,
   OVERDUE_URGENCY_SCORE,
   type RecommendationReading,
@@ -23,6 +24,20 @@ function makeReading(overrides: Partial<RecommendationReading> = {}): Recommenda
 }
 
 describe("motor de recomendação", () => {
+  it("calcula páginas restantes e distância até o prazo para contextualizar a sugestão", () => {
+    expect(getRecommendationContext(makeReading({
+      target_pages: 100,
+      pages_read: 62,
+      deadline: "2026-10-29",
+    }), "2026-10-24")).toEqual({
+      pagesRemaining: 38,
+      daysUntilDeadline: 5,
+    });
+    expect(getRecommendationContext(makeReading({
+      deadline: null,
+    }), "2026-10-24").daysUntilDeadline).toBeNull();
+  });
+
   it("atribui urgência máxima a uma leitura com prazo vencido", () => {
     const overdue = makeReading({ id: "overdue", deadline: "2026-10-23" });
     const highFutureRatio = makeReading({

@@ -66,14 +66,6 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - **Ação:** Remover a classe de rolagem horizontal desnecessária (`overflow-x-auto`), e vertical, e assegurar que a grade, rótulos e legenda se ajustem fluidamente dentro do card sem barras de rolagem internas no Dashboard e na tela de Histórico.
   - **Arquivos-chave:** `src/components/consistency-heatmap.tsx`, `src/components/dashboard/dashboard-view.tsx`, `src/components/history/history-view.tsx`.
 
-- [ ] **`UX-11` — Refinamento do Card de Recomendação Diária no Dashboard**
-  - **Contexto:** O card `RecommendationCard` em `src/components/dashboard/recommendation-card.tsx` (~120 linhas) exibe a leitura sugerida pelo algoritmo de `src/lib/recommendation.ts` (`getSuggestedReading`). O algoritmo funciona bem (pontuação por proximidade de prova, inatividade e cota), mas o card apresenta limitações de UX: (1) o estado vazio aponta o usuário para `/setup` (L49: "adicione textos na aba Setup") quando o cadastro de leituras será migrado para `/library` (cf. `UX-12`); (2) exibe uma única sugestão sem alternativa visível — o estudante não tem contexto sobre *por que* aquela leitura foi escolhida nem pode trocar rapidamente sem ir à biblioteca; (3) não mostra a posição da leitura em relação ao prazo (dias restantes, proximidade da prova vinculada).
-  - **Ação:**
-    1. Atualizar o link do estado vazio para `/library` (alinhado com `UX-12`).
-    2. Adicionar indicador contextual de urgência (ex: "5 dias até a Prova 1 · 38 pág. restantes") derivado dos dados já disponíveis em `getDashboardData`.
-    3. Avaliar a inclusão de uma ação secundária "Trocar sugestão" que exiba a segunda melhor opção do ranking sem recarregar a página.
-  - **Arquivos-chave:** `src/components/dashboard/recommendation-card.tsx`, `src/components/dashboard/dashboard-view.tsx`, `src/lib/recommendation.ts`.
-
 - [ ] **`UX-12` — Reestruturação da Navegação: Leituras na Biblioteca, Entregas na Agenda, Setup Vira Disciplinas**
   - **Contexto:** Hoje o Setup (`/setup`) concentra 3 abas independentes: *Leituras* (`readings-table.tsx`, ~600 linhas), *Entregas* (`deliverables-table.tsx`) e *Disciplinas* (`subjects-table.tsx`). O formulário de criação de leituras já foi extraído e integrado à Biblioteca em `UX-14`, mas a listagem e edição continuam no Setup; Entregas também continuam fora da Agenda. A proposta conclui a reorganização:
     - **Leituras → Biblioteca:** Formulário de criação já integrado; mover listagem e gerenciamento das leituras para a própria `/library`, onde o estudante visualiza e atualiza seus livros.
@@ -88,7 +80,7 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
     6. Revalidar caminhos em Server Actions (`revalidatePath`).
   - **Progresso:** Formulário reutilizável e botão “Adicionar leitura” integrado à Biblioteca em `UX-14`; mover Entregas para a Agenda e simplificar o restante do Setup continuam pendentes.
   - **Arquivos-chave:** `src/components/setup/readings-table.tsx`, `src/components/library/library-view.tsx`, `src/components/setup/deliverables-table.tsx`, `src/components/setup/setup-view.tsx`, `src/components/agenda/`, `src/app/setup/page.tsx`, `src/app/library/page.tsx`, `src/app/agenda/page.tsx`, `src/components/dashboard/recommendation-card.tsx`.
-  - **Dependências:** A extração e a integração do formulário estão concluídas em `UX-14`; as demais mudanças de navegação continuam pendentes, alinhadas com `UX-11`.
+  - **Dependências:** A extração e a integração do formulário estão concluídas em `UX-14`; o link do estado vazio do card de recomendação para `/library` foi alinhado em `UX-11`. As demais mudanças de navegação continuam pendentes.
 
 - [ ] **`UX-13` — Formatação Automática de Títulos e Autores em Title Case**
   - **Contexto:** Não existe nenhuma transformação de casing no fluxo de criação de leituras. O campo `title` e `author` são armazenados exatamente como digitados pelo usuário ou retornados pela API (ISBN via Google Books / DOI via CrossRef). Isso produz inconsistências visuais frequentes: Google Books pode retornar títulos em CAIXA ALTA; CrossRef retorna autores em "SOBRENOME, Nome"; e o próprio usuário pode digitar em minúsculas corridas. Na Biblioteca e no Dashboard, leituras com casing inconsistente quebram a harmonia visual do Flat Design.
@@ -117,6 +109,8 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - *Resolução:* Grid ajustado para `grid-cols-1 min-[480px]:grid-cols-2 ...`, prevenindo esmagamento em smartphones de 390px.
 - [x] **`UX-14` — Refatoração e Melhoria do Formulário de Adição de Leituras**
   - *Resolução:* Extraído para `ReadingForm` com estado em `useReducer`, fluxo guiado em três etapas e uma quarta etapa opcional para sumário colado; inclui validação inline e no servidor, busca bibliográfica preservada e layout responsivo. Integrado à Biblioteca em seção recolhível; no Setup, a ação de cadastro aponta para a Biblioteca.
+- [x] **`UX-11` — Refinamento do Card de Recomendação Diária no Dashboard**
+  - *Resolução:* Estado vazio direciona à Biblioteca; urgência contextual exibe prazo vinculado e páginas restantes; ação para alternar entre a recomendação principal e a próxima opção elegível, mantendo o cálculo de cota pelo orçamento cognitivo.
 
 ---
 
@@ -225,3 +219,4 @@ As propostas abaixo foram analisadas e **rejeitadas da forma em que foram formul
 | 2026-10-29 | `COG-07` | Recomendação desempata primeiro por urgência do prazo e depois por carga diária necessária, com cenários cobertos por testes | `src/lib/recommendation.ts`, `src/lib/recommendation.test.ts` |
 | 2026-10-29 | `DOC-06` | Regra para registrar ideias acionáveis na seção Ideias prematuras, antes de categorizá-las | `AGENTS.md`, `plano-de-implementacao.md` |
 | 2026-10-29 | `BUG-08` | Registro de sessões por quantidade ou página impressa, com conversão de marcos absolutos para o trecho | `migration-v1.11.sql`, `reading-session-modal.tsx`, `session-pages.ts`, `toc-parser.ts`, `actions.ts` |
+| 2026-10-29 | `UX-11` | Card exibe prazo e páginas restantes, permite alternar para segunda opção elegível e direciona estado vazio à Biblioteca | `recommendation-card.tsx`, `recommendation.ts`, `actions.ts`, `dashboard-view.tsx` |

@@ -1411,6 +1411,29 @@ export async function getDashboardData() {
     };
   const recommendedPages = budgetAware.pages;
   const cognitiveBudget = budgetAware.budget;
+  const alternativeReading = recommendedReading
+    ? getSuggestedReading(
+      [...tier2, ...tier3, ...tier4].filter(
+        (reading) => reading.id !== recommendedReading.id,
+      ),
+      userPacePagesPerDay,
+      today,
+      {
+        todayPagesByReading: todaySummary.pagesByReading,
+        dailyGoalReached: todayReadingMinutes >= dailyGoalMinutes,
+      },
+    )
+    : null;
+  const alternativeBudget = alternativeReading
+    ? calculateBudgetAwareSuggestedPages({
+      reading: alternativeReading,
+      userPace: userPacePagesPerDay,
+      budgetMinutes: dailyGoalMinutes,
+      reviewCount,
+      tier2Readings: tier2,
+      today,
+    })
+    : null;
 
   return {
     tier1: tier1 ?? [],
@@ -1428,6 +1451,11 @@ export async function getDashboardData() {
     averageSpeedPph: globalAverageSpeedPph(speedStats),
     recommendedReadingId: recommendedReading?.id ?? null,
     recommendedPages,
+    alternativeReadingId: alternativeBudget && alternativeBudget.pages > 0
+      ? alternativeReading?.id ?? null
+      : null,
+    alternativePages: alternativeBudget?.pages ?? 0,
+    today,
     cognitiveBudget: {
       budgetMinutes: cognitiveBudget.budgetMinutes,
       demandedMinutes: cognitiveBudget.demandedMinutes,

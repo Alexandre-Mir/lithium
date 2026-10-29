@@ -26,6 +26,11 @@ export interface RecommendationProgress {
   dailyGoalReached?: boolean;
 }
 
+export interface RecommendationContext {
+  pagesRemaining: number;
+  daysUntilDeadline: number | null;
+}
+
 export const OVERDUE_URGENCY_SCORE = Number.MAX_SAFE_INTEGER;
 const DEADLINE_PRIORITY_SCORE = 1_000;
 const QUEUE_PRIORITY_WEIGHT = 2;
@@ -33,7 +38,9 @@ const INACTIVITY_BONUS_PER_DAY = 0.1;
 const MAX_INACTIVITY_BONUS = 2.5;
 const MAX_INACTIVITY_DAYS = MAX_INACTIVITY_BONUS / INACTIVITY_BONUS_PER_DAY;
 
-function remainingPages(reading: RecommendationReading): number {
+function remainingPages(
+  reading: Pick<RecommendationReading, "target_pages" | "pages_read">,
+): number {
   const targetPages = Number.isFinite(reading.target_pages) ? reading.target_pages : 0;
   const pagesRead = Number.isFinite(reading.pages_read) ? reading.pages_read : 0;
   return Math.max(0, targetPages - pagesRead);
@@ -41,6 +48,18 @@ function remainingPages(reading: RecommendationReading): number {
 
 function safeUserPace(userPace: number): number {
   return Number.isFinite(userPace) && userPace > 0 ? userPace : DEFAULT_PAGES_PER_DAY;
+}
+
+export function getRecommendationContext(
+  reading: Pick<RecommendationReading, "target_pages" | "pages_read" | "deadline">,
+  today: string,
+): RecommendationContext {
+  return {
+    pagesRemaining: remainingPages(reading),
+    daysUntilDeadline: reading.deadline
+      ? daysBetweenISO(today, reading.deadline)
+      : null,
+  };
 }
 
 /** Escolhe a próxima leitura pendente por prazo, fila e inatividade. */
