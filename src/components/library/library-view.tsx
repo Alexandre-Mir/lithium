@@ -7,10 +7,11 @@ import { ReadingSessionModal } from "@/components/reading-session-modal";
 import type { ReadingSessionTarget } from "@/components/reading-session-modal";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, BookOpen } from "lucide-react";
+import { Search, BookOpen, Plus, X, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { backfillMissingMetadata } from "@/app/actions";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ReadingForm } from "@/components/library/reading-form";
 
 interface LibraryViewProps {
   initialReadings: ReadingWithProgress[];
@@ -28,6 +29,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
   const [activeReadingForSession, setActiveReadingForSession] = useState<ReadingSessionTarget | null>(null);
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillSummary, setBackfillSummary] = useState<string | null>(null);
+  const [isReadingFormOpen, setIsReadingFormOpen] = useState(false);
 
   const pendingMetadataCount = initialReadings.filter(
     (reading) => (reading.isbn || reading.doi) && !reading.metadata_fetched_at
@@ -99,6 +101,15 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
         </div>
 
         <div className="flex flex-wrap gap-1.5 text-xs font-mono items-center">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setIsReadingFormOpen((open) => !open)}
+            className="h-8 gap-1.5 bg-gray-900 text-xs text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+          >
+            {isReadingFormOpen ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+            {isReadingFormOpen ? "Fechar" : "Adicionar leitura"}
+          </Button>
           <Badge variant="outline" className="border-gray-300 px-2 py-0.5">
             {initialReadings.length} Total
           </Badge>
@@ -119,6 +130,16 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
           )}
         </div>
       </div>
+
+      {isReadingFormOpen && (
+        <ReadingForm
+          subjects={subjects}
+          onCreated={() => {
+            setIsReadingFormOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
 
       {backfillSummary && <p className="text-xs text-gray-600 dark:text-gray-400">{backfillSummary}</p>}
 

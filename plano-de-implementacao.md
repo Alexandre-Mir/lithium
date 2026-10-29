@@ -76,19 +76,20 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
   - **Arquivos-chave:** `src/components/dashboard/recommendation-card.tsx`, `src/components/dashboard/dashboard-view.tsx`, `src/lib/recommendation.ts`.
 
 - [ ] **`UX-12` — Reestruturação da Navegação: Leituras na Biblioteca, Entregas na Agenda, Setup Vira Disciplinas**
-  - **Contexto:** Hoje o Setup (`/setup`) concentra 3 abas independentes: *Leituras* (`readings-table.tsx`, 1039 linhas), *Entregas* (`deliverables-table.tsx`, 367 linhas) e *Disciplinas* (`subjects-table.tsx`, 663 linhas). A Biblioteca (`/library`) é somente de consulta e seu estado vazio diz literalmente "adicione textos na **aba Setup**" (`library-view.tsx` L187). Essa separação força o estudante a sair da tela de livros para cadastrar um novo e a navegar até o Setup para ver entregas que pertencem logicamente ao calendário. A proposta reorganiza a informação de forma coerente:
-    - **Leituras → Biblioteca:** O formulário de inserção rápida de leituras (ISBN/DOI lookup, sumário, marcos) deve residir na própria `/library`, onde o estudante visualiza e gerencia seus livros.
+  - **Contexto:** Hoje o Setup (`/setup`) concentra 3 abas independentes: *Leituras* (`readings-table.tsx`, ~600 linhas), *Entregas* (`deliverables-table.tsx`) e *Disciplinas* (`subjects-table.tsx`). O formulário de criação de leituras já foi extraído e integrado à Biblioteca em `UX-14`, mas a listagem e edição continuam no Setup; Entregas também continuam fora da Agenda. A proposta conclui a reorganização:
+    - **Leituras → Biblioteca:** Formulário de criação já integrado; mover listagem e gerenciamento das leituras para a própria `/library`, onde o estudante visualiza e atualiza seus livros.
     - **Entregas → Agenda:** Entregas/provas são eventos com data fixa e pertencem ao contexto de calendário (`/agenda`), já existente.
     - **Setup → Disciplinas:** A aba `/setup` passa a conter apenas o CRUD de disciplinas, simplificando a navegação e o propósito da rota.
   - **Ação (faseada):**
-    1. Extrair o formulário de criação de leitura de `readings-table.tsx` para um componente reutilizável (`src/components/library/reading-form.tsx`) com estado gerenciado por `useReducer` ou formulário controlado simples em vez dos atuais 22 `useState`.
-    2. Integrar o novo componente na `LibraryView` como dialog ou seção colapsável com botão "Adicionar Leitura".
+    1. **Concluído em `UX-14`:** Extrair o formulário de criação de leitura para `src/components/library/reading-form.tsx`, com estado gerenciado por `useReducer`.
+    2. **Concluído em `UX-14`:** Integrar o componente na `LibraryView` em seção recolhível com botão "Adicionar leitura".
     3. Mover `DeliverablesTable` para `src/components/agenda/` e renderizá-la como seção na rota `/agenda`.
     4. Renomear/simplificar `/setup` para conter exclusivamente `SubjectsTable`, removendo o wrapper `Tabs`.
     5. Atualizar todos os links e textos que referenciam "Setup" para o novo destino (library-view.tsx L187, recommendation-card.tsx L49, setup-view.tsx).
     6. Revalidar caminhos em Server Actions (`revalidatePath`).
+  - **Progresso:** Formulário reutilizável e botão “Adicionar leitura” integrado à Biblioteca em `UX-14`; mover Entregas para a Agenda e simplificar o restante do Setup continuam pendentes.
   - **Arquivos-chave:** `src/components/setup/readings-table.tsx`, `src/components/library/library-view.tsx`, `src/components/setup/deliverables-table.tsx`, `src/components/setup/setup-view.tsx`, `src/components/agenda/`, `src/app/setup/page.tsx`, `src/app/library/page.tsx`, `src/app/agenda/page.tsx`, `src/components/dashboard/recommendation-card.tsx`.
-  - **Dependências:** Deve ser implementado antes ou junto com `UX-11` e `UX-14`.
+  - **Dependências:** A extração e a integração do formulário estão concluídas em `UX-14`; as demais mudanças de navegação continuam pendentes, alinhadas com `UX-11`.
 
 - [ ] **`UX-13` — Formatação Automática de Títulos e Autores em Title Case**
   - **Contexto:** Não existe nenhuma transformação de casing no fluxo de criação de leituras. O campo `title` e `author` são armazenados exatamente como digitados pelo usuário ou retornados pela API (ISBN via Google Books / DOI via CrossRef). Isso produz inconsistências visuais frequentes: Google Books pode retornar títulos em CAIXA ALTA; CrossRef retorna autores em "SOBRENOME, Nome"; e o próprio usuário pode digitar em minúsculas corridas. Na Biblioteca e no Dashboard, leituras com casing inconsistente quebram a harmonia visual do Flat Design.
@@ -98,17 +99,6 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
     3. Aplicar igualmente nos callbacks de auto-fill por ISBN/DOI (`handleIsbnBlur`, `handleDoiBlur`) para normalizar dados de APIs externas.
     4. Cobrir com testes unitários em `src/lib/text.test.ts`: palavras simples, preposições internas, siglas (ISBN, DOI), nomes próprios compostos, strings já corretas.
   - **Arquivos-chave:** `src/lib/text.ts` (novo), `src/lib/text.test.ts` (novo), `src/components/setup/readings-table.tsx` (ou futuro `reading-form.tsx`).
-
-- [ ] **`UX-14` — Refatoração e Melhoria do Formulário de Adição de Leituras**
-  - **Contexto:** O componente `ReadingsTable` em `src/components/setup/readings-table.tsx` (1039 linhas) concentra formulário de criação, tabela de listagem, edição inline, edição de marcos e dois diálogos de confirmação em um único monolito. O formulário de criação sozinho (L392–L674) utiliza 22 hooks `useState` independentes para gerenciar campos, faltando validação visual em tempo real (o botão desabilita sem mensagem de erro), layout de grade denso de 12 colunas que colapsa mal em mobile, e seção de sumário/marcos permanentemente visível para livros (mesmo quando não é necessária).
-  - **Ação:**
-    1. Extrair o formulário para componente dedicado (`src/components/library/reading-form.tsx`), alinhado com `UX-12`.
-    2. Substituir os 22 `useState` por `useReducer` com estado tipado (`ReadingFormState`) ou por derivação de um único objeto de estado, reduzindo a superfície de bugs e simplificando resets.
-    3. Implementar fluxo guiado em etapas lógicas: **Passo 1** — Tipo (Livro/Artigo) + Identificador (ISBN/DOI) com auto-fill; **Passo 2** — Dados bibliográficos (título, autor, editora, ano, páginas); **Passo 3** — Configuração de leitura (trecho/livro inteiro, prazo, disciplina); **Passo 4 (condicional)** — Sumário e marcos (apenas para livros com sumário colado).
-    4. Adicionar mensagens de validação inline (ex: "Título é obrigatório", "Informe o número de páginas") usando estado derivado, sem `alert()`.
-    5. Garantir responsividade mobile com layout em stack vertical em telas estreitas.
-  - **Arquivos-chave:** `src/components/setup/readings-table.tsx` (origem), `src/components/library/reading-form.tsx` (destino), `src/components/library/library-view.tsx`.
-  - **Dependências:** Deve ser implementado junto com `UX-12`.
 
 ### Concluídos
 - [x] **`UX-01` — Seletor de Leitura na "Sessão Rápida" (Dashboard)**
@@ -121,6 +111,8 @@ Este documento centraliza as dívidas técnicas, correções de bugs, oportunida
   - *Resolução:* Barras de progresso ajustadas para `h-2` com fundo neutro contrastante em `reading-tier-card.tsx`.
 - [x] **`UX-06` — Grid Responsivo na Biblioteca (`/library`)**
   - *Resolução:* Grid ajustado para `grid-cols-1 min-[480px]:grid-cols-2 ...`, prevenindo esmagamento em smartphones de 390px.
+- [x] **`UX-14` — Refatoração e Melhoria do Formulário de Adição de Leituras**
+  - *Resolução:* Extraído para `ReadingForm` com estado em `useReducer`, fluxo guiado em três etapas e uma quarta etapa opcional para sumário colado; inclui validação inline e no servidor, busca bibliográfica preservada e layout responsivo. Integrado à Biblioteca em seção recolhível; no Setup, a ação de cadastro aponta para a Biblioteca.
 
 ---
 
@@ -222,3 +214,4 @@ As propostas abaixo foram analisadas e **rejeitadas da forma em que foram formul
 | 2026-10-28 | `DOC-03` | Adição ao backlog de BUG-09 (Active Recall solicitando marco anterior lido) e UX-10 (remoção de scroll interno no heatmap) | `plano-de-implementacao.md` |
 | 2026-10-28 | `DOC-04` | Formalização das ideias prematuras (Seção 0) em itens estruturados: UX-11 (card de recomendação), UX-12 (reestruturação de navegação Setup→Biblioteca/Agenda), UX-13 (Title Case automático) e UX-14 (refatoração do formulário de leituras) | `plano-de-implementacao.md` |
 | 2026-10-28 | `BUG-09` | Active Recall gerado para o marco recém-concluído nas transições e ao atingir a meta | `milestone-crossing.ts`, `actions.ts` |
+| 2026-10-28 | `UX-14` | Formulário de leituras extraído, integrado à Biblioteca, guiado por etapas, validado e responsivo | `reading-form.tsx`, `library-view.tsx`, `readings-table.tsx`, `reading-validation.ts` |

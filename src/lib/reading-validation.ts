@@ -5,6 +5,19 @@ interface ReadingUpdateFields {
   milestones?: unknown;
 }
 
+export interface ReadingCreateFields {
+  title: unknown;
+  subject_id: unknown;
+  target_pages: unknown;
+  full_book_pages?: unknown;
+  deadline?: unknown;
+  hasDeadline?: boolean;
+}
+
+export type ReadingCreateFieldErrors = Partial<
+  Record<"title" | "subject_id" | "target_pages" | "full_book_pages" | "deadline", string>
+>;
+
 function isValidDateISO(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -60,4 +73,41 @@ export function validateReadingUpdate(input: ReadingUpdateFields): string | null
   }
 
   return null;
+}
+
+export function getReadingCreateErrors(input: ReadingCreateFields): ReadingCreateFieldErrors {
+  const errors: ReadingCreateFieldErrors = {};
+
+  if (typeof input.title !== "string" || !input.title.trim()) {
+    errors.title = "Informe o título da leitura.";
+  }
+
+  if (typeof input.subject_id !== "string" || !input.subject_id.trim()) {
+    errors.subject_id = "Escolha uma disciplina.";
+  }
+
+  if (
+    typeof input.target_pages !== "number" ||
+    !Number.isInteger(input.target_pages) ||
+    input.target_pages < 1
+  ) {
+    errors.target_pages = "Informe um número inteiro de páginas (mínimo: 1).";
+  }
+
+  if (
+    input.full_book_pages !== undefined &&
+    input.full_book_pages !== null &&
+    input.full_book_pages !== "" &&
+    (typeof input.full_book_pages !== "number" ||
+      !Number.isInteger(input.full_book_pages) ||
+      input.full_book_pages < 1)
+  ) {
+    errors.full_book_pages = "O total do livro deve ser um número inteiro de pelo menos 1 página.";
+  }
+
+  if (input.hasDeadline && (typeof input.deadline !== "string" || !isValidDateISO(input.deadline))) {
+    errors.deadline = "Informe uma data válida para o prazo.";
+  }
+
+  return errors;
 }

@@ -2,25 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Reading, ReadingMilestone, Subject, Deliverable, ReadingType } from "@/types/database";
+import { Reading, ReadingMilestone, Subject, Deliverable } from "@/types/database";
 import {
-  createReading,
   updateReading,
   deleteReading,
   markReadingAsRead,
   markReadingAsUnread,
-  lookupBookByIsbn,
-  lookupArticleByDoi,
 } from "@/app/actions";
 import { formatDateBR, todayISO } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { validateReadingUpdate } from "@/lib/reading-validation";
 import { parseRawTocToMilestones } from "@/lib/toc-parser";
-import { metadataAttemptsSummary } from "@/lib/metadata-labels";
-import type { MetadataAttempt } from "@/lib/book-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
@@ -33,14 +27,10 @@ import {
 } from "@/components/ui/table";
 import { addToast } from "@/lib/toast-store";
 import {
-  Plus,
   Trash2,
   Check,
-  Book,
-  FileText,
   CheckCircle2,
   ArrowRight,
-  Loader2,
   AlertCircle,
 } from "lucide-react";
 
@@ -120,31 +110,6 @@ export function ReadingsTable({
     setReadings(initialReadings);
   }
   const [loading, setLoading] = useState(false);
-  const [fetchingMetadata, setFetchingMetadata] = useState(false);
-
-  // Quick Add Row state
-  const [newSubjectId, setNewSubjectId] = useState(subjects[0]?.id || "");
-  const [newType, setNewType] = useState<ReadingType>("book");
-  const [newTitle, setNewTitle] = useState("");
-  const [newChapterTitle, setNewChapterTitle] = useState("");
-  const [newAuthor, setNewAuthor] = useState("");
-  const [newIsbn, setNewIsbn] = useState("");
-  const [newDoi, setNewDoi] = useState("");
-  const [newFullPages, setNewFullPages] = useState<number | "">("");
-  const [newReadFull, setNewReadFull] = useState(false);
-  const [newTargetPages, setNewTargetPages] = useState<number | "">(30);
-  const [newDeadline, setNewDeadline] = useState("");
-  const [newHasDeadline, setNewHasDeadline] = useState(true);
-  const [newTocText, setNewTocText] = useState("");
-  const [newMilestones, setNewMilestones] = useState<ReadingMilestone[]>([]);
-  const [newTocMessage, setNewTocMessage] = useState<string | null>(null);
-  const [newCover, setNewCover] = useState<string | null>(null);
-  const [newPublisher, setNewPublisher] = useState<string | null>(null);
-  const [newPublishedYear, setNewPublishedYear] = useState<number | null>(null);
-  const [newMetadataSource, setNewMetadataSource] = useState<string | null>(null);
-  const [lookedUpIsbn, setLookedUpIsbn] = useState("");
-  const [lookedUpDoi, setLookedUpDoi] = useState("");
-  const [metadataNotice, setMetadataNotice] = useState<{ kind: "not_found" | "error"; text: string; attempts: MetadataAttempt[]; type: "ISBN" | "DOI" } | null>(null);
 
   // Inline editing state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -158,16 +123,6 @@ export function ReadingsTable({
   const deleteReadingTarget = readings.find((reading) => reading.id === deleteReadingId);
 
   const subjectMap = new Map(subjects.map((s) => [s.id, s]));
-
-  const generateNewMilestones = () => {
-    const generated = parseRawTocToMilestones(newTocText);
-    if (!generated.length) {
-      setNewTocMessage("Não encontrei títulos com número de página no sumário.");
-      return;
-    }
-    setNewMilestones(generated);
-    setNewTocMessage(`${generated.length} marco(s) gerado(s). Revise antes de cadastrar.`);
-  };
 
   const generateEditMilestones = () => {
     const generated = parseRawTocToMilestones(editTocText);
@@ -187,131 +142,6 @@ export function ReadingsTable({
     list.push(d);
     deliverablesBySubject.set(d.subject_id, list);
   }
-
-  // ============================================================
-  // FETCH AUTOMÁTICO: GOOGLE BOOKS API (onBlur do ISBN)
-  // ============================================================
-  const handleIsbnBlur = async () => {
-    const cleanIsbn = newIsbn.replace(/[^0-9X]/gi, "");
-    if (!cleanIsbn || cleanIsbn.length < 10 || cleanIsbn === lookedUpIsbn) return;
-
-    try {
-      setFetchingMetadata(true);
-      const result = await lookupBookByIsbn(cleanIsbn);
-      if (result.status === "ok") {
-        setLookedUpIsbn(cleanIsbn);
-        setMetadataNotice(null);
-        if (result.data.title && !newTitle) setNewTitle(result.data.title);
-        if (result.data.authors && !newAuthor) setNewAuthor(result.data.authors);
-        if (result.data.pageCount && !newFullPages) setNewFullPages(result.data.pageCount);
-        setNewCover(result.data.coverUrl);
-        setNewPublisher(result.data.publisher);
-        setNewPublishedYear(result.data.publishedYear);
-        setNewMetadataSource(result.data.source);
-      } else if (result.status === "not_found") {
-        setLookedUpIsbn(cleanIsbn);
-        setMetadataNotice({ kind: "not_found", text: "Nenhum resultado para este ISBN. Preencha manualmente.", attempts: result.attempts, type: "ISBN" });
-      } else {
-        setMetadataNotice({ kind: "error", text: `Sem resposta dos provedores (${metadataAttemptsSummary(result.attempts)}). Preencha manualmente ou tente de novo.`, attempts: result.attempts, type: "ISBN" });
-      }
-    } catch {
-      setMetadataNotice({ kind: "error", text: "Sem resposta dos provedores. Preencha manualmente ou tente de novo.", attempts: [], type: "ISBN" });
-    } finally {
-      setFetchingMetadata(false);
-    }
-  };
-
-  // ============================================================
-  // FETCH AUTOMÁTICO: CROSSREF API (onBlur do DOI)
-  // ============================================================
-  const handleDoiBlur = async () => {
-    const cleanDoi = newDoi.trim().replace(/^https?:\/\/doi\.org\//i, "");
-    if (!cleanDoi || cleanDoi.length < 5 || cleanDoi === lookedUpDoi) return;
-
-    try {
-      setFetchingMetadata(true);
-      const result = await lookupArticleByDoi(cleanDoi);
-      if (result.status === "ok") {
-        setLookedUpDoi(cleanDoi);
-        setMetadataNotice(null);
-        if (result.data.title && !newTitle) setNewTitle(result.data.title);
-        if (result.data.authors && !newAuthor) setNewAuthor(result.data.authors);
-        setNewPublisher(result.data.publisher);
-        setNewPublishedYear(result.data.publishedYear);
-        setNewMetadataSource(result.data.source);
-      } else if (result.status === "not_found") {
-        setLookedUpDoi(cleanDoi);
-        setMetadataNotice({ kind: "not_found", text: "Nenhum resultado para este DOI. Preencha manualmente.", attempts: result.attempts, type: "DOI" });
-      } else {
-        setMetadataNotice({ kind: "error", text: `Sem resposta dos provedores (${metadataAttemptsSummary(result.attempts)}). Preencha manualmente ou tente de novo.`, attempts: result.attempts, type: "DOI" });
-      }
-    } catch {
-      setMetadataNotice({ kind: "error", text: "Sem resposta dos provedores. Preencha manualmente ou tente de novo.", attempts: [], type: "DOI" });
-    } finally {
-      setFetchingMetadata(false);
-    }
-  };
-
-  const handleCreate = async () => {
-    if (!newTitle.trim() || !newSubjectId || (newHasDeadline && !newDeadline)) return;
-    try {
-      setLoading(true);
-      const targetP = typeof newTargetPages === "number" ? newTargetPages : 0;
-      const fullP = typeof newFullPages === "number" ? newFullPages : null;
-
-      const created = await createReading({
-        subject_id: newSubjectId,
-        title: newTitle.trim(),
-        chapter_title: newType === "book" ? newChapterTitle.trim() || null : null,
-        author: newAuthor.trim() || null,
-        type: newType,
-        isbn: newType === "book" ? newIsbn.trim() || null : null,
-        doi: newType === "article" ? newDoi.trim() || null : null,
-        full_book_pages: fullP,
-        target_pages: targetP,
-        read_full_book: newReadFull,
-        deadline: newHasDeadline ? newDeadline : null,
-        is_read: false,
-        cover_url: newCover,
-        publisher: newPublisher,
-        published_year: newPublishedYear,
-        metadata_source: newMetadataSource,
-        metadata_fetched_at: null,
-        milestones: newMilestones,
-      });
-
-      if (created) {
-        setReadings((prev) =>
-          [...prev, created].sort(compareReadingDeadlines)
-        );
-        setNewTitle("");
-        setNewChapterTitle("");
-        setNewAuthor("");
-        setNewIsbn("");
-        setNewDoi("");
-        setNewCover(null);
-        setNewPublisher(null);
-        setNewPublishedYear(null);
-        setNewMetadataSource(null);
-        setLookedUpIsbn("");
-        setLookedUpDoi("");
-        setNewFullPages("");
-        setNewReadFull(false);
-        setNewTargetPages(30);
-        setNewDeadline("");
-        setNewHasDeadline(true);
-        setNewTocText("");
-        setNewMilestones([]);
-        setNewTocMessage(null);
-        onRefresh?.();
-      }
-    } catch (err) {
-      console.error(err);
-      addToast({ message: "Erro ao cadastrar leitura." });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleToggleRead = async (reading: Reading) => {
     if (reading.is_read) {
@@ -389,288 +219,17 @@ export function ReadingsTable({
 
   return (
     <div className="space-y-4">
-      {/* Formulário Dinâmico de Inserção - Flat Design */}
-      <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-bold tracking-wider text-gray-500 dark:text-gray-400 uppercase flex items-center gap-2">
-            Inserção Rápida de Leitura
-            {fetchingMetadata && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-normal text-indigo-600 dark:text-indigo-400">
-                <Loader2 className="w-3 h-3 animate-spin" /> Buscando metadados...
-              </span>
-            )}
-          </h3>
-
-          {/* Seletor Dinâmico de Tipo: Livro vs Artigo */}
-          <div className="flex rounded border border-gray-200 dark:border-gray-800 p-0.5 bg-gray-50 dark:bg-gray-950">
-            <button
-              type="button"
-              onClick={() => setNewType("book")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                newType === "book"
-                  ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 font-semibold"
-                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
-              }`}
-            >
-              <Book className="w-3 h-3" /> Livro
-            </button>
-            <button
-              type="button"
-              onClick={() => setNewType("article")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                newType === "article"
-                  ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 font-semibold"
-                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
-              }`}
-            >
-              <FileText className="w-3 h-3" /> Artigo
-            </button>
-          </div>
+      <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">Adicione novas leituras pela Biblioteca</p>
+          <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">O formulário guiado e as capas ficam junto aos seus livros e artigos.</p>
         </div>
-
-        {/* Linha 1: Campos Específicos por Tipo */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
-          <div className="md:col-span-3">
-            <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-              Disciplina
-            </label>
-            <select
-              value={newSubjectId}
-              onChange={(e) => setNewSubjectId(e.target.value)}
-              className="w-full h-8 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 py-1 text-xs"
-            >
-              {subjects.map((sub) => (
-                <option key={sub.id} value={sub.id}>
-                  {sub.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {newType === "book" ? (
-            <>
-              {/* LIVRO: ISBN com onBlur, Título do Livro, Título do Capítulo */}
-              <div className="md:col-span-2">
-                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-                  ISBN (auto-preenche)
-                </label>
-                <Input
-                  placeholder="Ex: 9788539003839"
-                  value={newIsbn}
-                  onChange={(e) => {
-                    setNewIsbn(e.target.value);
-                    if (e.target.value.replace(/[^0-9X]/gi, "") !== lookedUpIsbn) {
-                      setLookedUpIsbn("");
-                      setNewCover(null);
-                      setNewPublisher(null);
-                      setNewPublishedYear(null);
-                      setNewMetadataSource(null);
-                    }
-                  }}
-                  onBlur={handleIsbnBlur}
-                  className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
-                />
-              </div>
-
-              <div className="md:col-span-4">
-                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-                  Título do Livro *
-                </label>
-                <Input
-                  placeholder="Nome do Livro"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="h-8 text-xs rounded border-gray-300 dark:border-gray-700"
-                />
-              </div>
-
-              <div className="md:col-span-3">
-                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-                  Título do Capítulo (Opcional)
-                </label>
-                <Input
-                  placeholder="Ex: Cap. 3 - Carga Cognitiva"
-                  value={newChapterTitle}
-                  onChange={(e) => setNewChapterTitle(e.target.value)}
-                  className="h-8 text-xs rounded border-gray-300 dark:border-gray-700"
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              {/* ARTIGO: DOI com onBlur, Título do Artigo */}
-              <div className="md:col-span-3">
-                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-                  DOI (auto-preenche)
-                </label>
-                <Input
-                  placeholder="Ex: 10.1037/0033-295X.101.2.346"
-                  value={newDoi}
-                  onChange={(e) => {
-                    setNewDoi(e.target.value);
-                    if (e.target.value.trim() !== lookedUpDoi) {
-                      setLookedUpDoi("");
-                      setNewPublisher(null);
-                      setNewPublishedYear(null);
-                      setNewMetadataSource(null);
-                    }
-                  }}
-                  onBlur={handleDoiBlur}
-                  className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
-                />
-              </div>
-
-              <div className="md:col-span-6">
-                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-                  Título do Artigo *
-                </label>
-                <Input
-                  placeholder="Nome do Artigo Científico"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="h-8 text-xs rounded border-gray-300 dark:border-gray-700"
-                />
-              </div>
-            </>
-          )}
-        </div>
-
-        {metadataNotice && (
-          <div className={`md:col-span-12 mt-2 flex items-center justify-between gap-2 border p-2 text-[11px] ${metadataNotice.kind === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
-            <span>{metadataNotice.text}</span>
-            {metadataNotice.kind === "error" && <Button type="button" size="sm" variant="outline" className="h-6 text-[11px]" onClick={() => { if (metadataNotice.type === "ISBN") { setLookedUpIsbn(""); void handleIsbnBlur(); } else { setLookedUpDoi(""); void handleDoiBlur(); } }}>Tentar de novo</Button>}
-          </div>
-        )}
-
-        {/* Linha 2: Autor, Páginas, Deadline e Botão */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end mt-2.5 pt-2.5 border-t border-gray-100 dark:border-gray-800">
-          <div className="md:col-span-3">
-            <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-              Autor(es)
-            </label>
-            <Input
-              placeholder="Ex: John Sweller"
-              value={newAuthor}
-              onChange={(e) => setNewAuthor(e.target.value)}
-              className="h-8 text-xs rounded border-gray-300 dark:border-gray-700"
-            />
-          </div>
-
-          {newType === "book" && (
-            <>
-              <div className="md:col-span-2">
-                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-                  Total Livro (Págs)
-                </label>
-                <Input
-                  type="number"
-                  placeholder="Ex: 350"
-                  value={newFullPages}
-                  onChange={(e) => {
-                    const val = e.target.value ? parseInt(e.target.value) : "";
-                    setNewFullPages(val);
-                    if (newReadFull && typeof val === "number") {
-                      setNewTargetPages(val);
-                    }
-                  }}
-                  className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
-                />
-              </div>
-
-              <div className="md:col-span-2 flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800/60 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 h-8">
-                <Switch
-                  id="new-full-book"
-                  checked={newReadFull}
-                  onCheckedChange={(checked) => {
-                    setNewReadFull(checked);
-                    if (checked && typeof newFullPages === "number") {
-                      setNewTargetPages(newFullPages);
-                    }
-                  }}
-                />
-                <label
-                  htmlFor="new-full-book"
-                  className="text-[11px] font-medium cursor-pointer text-gray-700 dark:text-gray-300 truncate"
-                >
-                  Livro inteiro
-                </label>
-              </div>
-            </>
-          )}
-
-          <div className={newType === "book" ? "md:col-span-2" : "md:col-span-3"}>
-            <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-              Meta Páginas *
-            </label>
-            <Input
-              type="number"
-              value={newTargetPages}
-              onChange={(e) =>
-                setNewTargetPages(e.target.value ? parseInt(e.target.value) : "")
-              }
-              className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
-            />
-          </div>
-
-          <div className={newType === "book" ? "md:col-span-2" : "md:col-span-4"}>
-            <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-              Prazo
-            </label>
-            <label className="mb-1 flex items-center gap-1.5 text-[10px] text-gray-600 dark:text-gray-400">
-              <input
-                type="checkbox"
-                checked={newHasDeadline}
-                onChange={(event) => setNewHasDeadline(event.target.checked)}
-                className="h-3 w-3 accent-gray-800"
-              />
-              Possui prazo fixo? (Ex: Faculdade)
-            </label>
-            {newHasDeadline && (
-              <Input
-                type="date"
-                value={newDeadline}
-                onChange={(e) => setNewDeadline(e.target.value)}
-                className="h-8 text-xs font-mono rounded border-gray-300 dark:border-gray-700"
-              />
-            )}
-          </div>
-
-          <div className={newType === "book" ? "md:col-span-1" : "md:col-span-2"}>
-            <Button
-              onClick={handleCreate}
-              disabled={loading || !newTitle.trim() || (newHasDeadline && !newDeadline) || !newSubjectId}
-              size="sm"
-              className="w-full h-8 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs font-semibold rounded shadow-none"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar
-            </Button>
-          </div>
-        </div>
-
-        {newType === "book" && (
-          <div className="mt-2.5 space-y-2 border-t border-gray-100 pt-2.5 dark:border-gray-800">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-              <div>
-                <label htmlFor="new-reading-toc" className="mb-1 block text-[11px] font-semibold text-gray-600 dark:text-gray-400">
-                  Colar Sumário (Opcional)
-                </label>
-                <textarea
-                  id="new-reading-toc"
-                  value={newTocText}
-                  onChange={(event) => setNewTocText(event.target.value)}
-                  placeholder={"Introdução ........ 9\nCapítulo 1 - A origem - pág. 15"}
-                  rows={3}
-                  className="w-full resize-y rounded border border-gray-300 bg-white px-2 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-950"
-                />
-              </div>
-              <Button type="button" size="sm" variant="outline" onClick={generateNewMilestones} className="h-8 text-xs">
-                Gerar Marcos
-              </Button>
-            </div>
-            {newTocMessage && <p className="text-[10px] text-gray-500">{newTocMessage}</p>}
-            <MilestoneListEditor milestones={newMilestones} onChange={setNewMilestones} />
-          </div>
-        )}
+        <Link
+          href="/library"
+          className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+        >
+          Adicionar leitura <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
 
       {editErrorMessage && (
@@ -949,6 +508,7 @@ export function ReadingsTable({
                           <Button
                             size="icon-sm"
                             variant="ghost"
+                            disabled={loading}
                             onClick={() => handleUpdate(reading.id)}
                             className="text-emerald-600 h-6 w-6"
                           >

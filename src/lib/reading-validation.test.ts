@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateReadingUpdate } from "@/lib/reading-validation";
+import { getReadingCreateErrors, validateReadingUpdate } from "@/lib/reading-validation";
 
 describe("validateReadingUpdate", () => {
   it("aceita campos válidos e datas de calendário existentes", () => {
@@ -31,5 +31,48 @@ describe("validateReadingUpdate", () => {
     expect(validateReadingUpdate({ milestones: [{ title: "", page: 1 }] })).toContain("título e uma página");
     expect(validateReadingUpdate({ milestones: [{ title: "Capítulo", page: 0 }] })).toContain("página válida");
     expect(validateReadingUpdate({ milestones: "sumário" })).toContain("marcos da leitura");
+  });
+});
+
+describe("getReadingCreateErrors", () => {
+  it("exige título, disciplina e uma meta inteira positiva", () => {
+    expect(getReadingCreateErrors({ title: " ", subject_id: "", target_pages: 0 })).toEqual({
+      title: "Informe o título da leitura.",
+      subject_id: "Escolha uma disciplina.",
+      target_pages: "Informe um número inteiro de páginas (mínimo: 1).",
+    });
+  });
+
+  it("exige um prazo válido apenas quando o usuário escolhe prazo fixo", () => {
+    expect(
+      getReadingCreateErrors({
+        title: "Livro",
+        subject_id: "subject-id",
+        target_pages: 20,
+        hasDeadline: true,
+        deadline: "",
+      }),
+    ).toEqual({ deadline: "Informe uma data válida para o prazo." });
+
+    expect(
+      getReadingCreateErrors({
+        title: "Livro",
+        subject_id: "subject-id",
+        target_pages: 20,
+        hasDeadline: false,
+      }),
+    ).toEqual({});
+  });
+
+  it("valida o total do livro quando informado", () => {
+    expect(
+      getReadingCreateErrors({
+        title: "Livro",
+        subject_id: "subject-id",
+        target_pages: 20,
+        full_book_pages: 1.5,
+        hasDeadline: false,
+      }),
+    ).toEqual({ full_book_pages: "O total do livro deve ser um número inteiro de pelo menos 1 página." });
   });
 });

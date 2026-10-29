@@ -17,7 +17,7 @@ import {
   CONSISTENCY_HEATMAP_DAYS,
   type HeatmapSessionInput,
 } from "@/lib/consistency-heatmap";
-import { validateReadingUpdate } from "@/lib/reading-validation";
+import { getReadingCreateErrors, validateReadingUpdate } from "@/lib/reading-validation";
 import { warnIfTruncated } from "@/lib/warn-if-truncated";
 import { computeRemaining } from "@/lib/progress";
 import { computeSubjectPageProgress } from "@/lib/subject-progress";
@@ -520,6 +520,17 @@ export async function getReadingDetail(id: string) {
 }
 
 export async function createReading(input: ReadingInsert) {
+  const createErrors = getReadingCreateErrors({
+    title: input.title,
+    subject_id: input.subject_id,
+    target_pages: input.target_pages,
+    full_book_pages: input.full_book_pages,
+    deadline: input.deadline,
+    hasDeadline: input.deadline !== null && input.deadline !== undefined,
+  });
+  const createError = Object.values(createErrors)[0];
+  if (createError) throw new Error(createError);
+
   const validationError = validateReadingUpdate({ deadline: input.deadline, milestones: input.milestones });
   if (validationError) throw new Error(validationError);
 
