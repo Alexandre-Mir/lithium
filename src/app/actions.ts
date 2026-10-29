@@ -133,6 +133,7 @@ export async function createSubject(input: SubjectInsert) {
   if (error) throw new Error(error.message);
   revalidatePath("/");
   revalidatePath("/setup");
+  revalidatePath("/agenda");
   return data;
 }
 
@@ -154,6 +155,7 @@ export async function updateSubject(id: string, input: SubjectUpdate) {
   revalidatePath("/");
   revalidatePath("/setup");
   revalidatePath("/library", "layout");
+  revalidatePath("/agenda");
   return data;
 }
 
@@ -162,6 +164,8 @@ export async function deleteSubject(id: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/");
   revalidatePath("/setup");
+  revalidatePath("/library", "layout");
+  revalidatePath("/agenda");
 }
 
 // ============================================================
@@ -187,7 +191,7 @@ export async function createDeliverable(input: DeliverableInsert) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
-  revalidatePath("/setup");
+  revalidatePath("/agenda");
   return data;
 }
 
@@ -200,7 +204,7 @@ export async function updateDeliverable(id: string, input: DeliverableUpdate) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
-  revalidatePath("/setup");
+  revalidatePath("/agenda");
   return data;
 }
 
@@ -208,7 +212,7 @@ export async function deleteDeliverable(id: string) {
   const { error } = await supabase.from("deliverables").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/");
-  revalidatePath("/setup");
+  revalidatePath("/agenda");
 }
 
 // ============================================================
@@ -553,8 +557,8 @@ export async function createReading(input: ReadingInsert) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
-  revalidatePath("/setup");
   revalidatePath("/library");
+  revalidatePath("/agenda");
   return data;
 }
 
@@ -622,8 +626,8 @@ export async function updateReading(id: string, input: ReadingUpdate) {
     .single();
   if (error) throw new Error(error.message);
   revalidatePath("/");
-  revalidatePath("/setup");
   revalidatePath("/library");
+  revalidatePath("/agenda");
   revalidatePath(`/library/${id}`);
   return data;
 }
@@ -632,8 +636,8 @@ export async function deleteReading(id: string) {
   const { error } = await supabase.from("readings").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/");
-  revalidatePath("/setup");
   revalidatePath("/library");
+  revalidatePath("/agenda");
 }
 
 // ============================================================
@@ -1030,7 +1034,7 @@ export async function markReadingAsRead(readingId: string) {
 
   revalidatePath("/");
   revalidatePath("/library");
-  revalidatePath("/setup");
+  revalidatePath("/agenda");
 }
 
 export async function markReadingAsUnread(readingId: string) {
@@ -1048,7 +1052,7 @@ export async function markReadingAsUnread(readingId: string) {
 
   revalidatePath("/");
   revalidatePath("/library");
-  revalidatePath("/setup");
+  revalidatePath("/agenda");
 }
 
 // ============================================================

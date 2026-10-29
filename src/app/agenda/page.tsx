@@ -1,8 +1,9 @@
 import { connection } from "next/server";
-import { getAgendaData } from "@/app/actions";
+import { getAgendaData, getDeliverables, getSubjects } from "@/app/actions";
 import { AgendaView } from "@/components/agenda/agenda-view";
 import { getAgendaMonthRange, sortAgendaEvents, type AgendaEvent } from "@/lib/agenda";
 import { todayISO } from "@/lib/dates";
+import type { Deliverable, Subject } from "@/types/database";
 
 export const instant = false;
 
@@ -11,11 +12,19 @@ export default async function AgendaPage() {
   const today = todayISO();
   const { from, to, monthISO } = getAgendaMonthRange(today);
   let events: AgendaEvent[] = [];
+  let deliverables: Deliverable[] = [];
+  let subjects: Subject[] = [];
   let connectionError: string | null = null;
 
   try {
-    const data = await getAgendaData(from, to);
+    const [data, allDeliverables, allSubjects] = await Promise.all([
+      getAgendaData(from, to),
+      getDeliverables(),
+      getSubjects(),
+    ]);
     events = sortAgendaEvents([...data.deliverables, ...data.reviews]);
+    deliverables = allDeliverables ?? [];
+    subjects = allSubjects ?? [];
   } catch (cause: unknown) {
     console.warn("Aviso ao carregar a Agenda:", cause);
     connectionError = cause instanceof Error ? cause.message : "Falha na conexão com o banco.";
@@ -29,7 +38,13 @@ export default async function AgendaPage() {
           <code className="font-mono">supabase/migration-v1.10.sql</code> e a conexão do Supabase.
         </div>
       )}
-      <AgendaView events={events} today={today} monthISO={monthISO} />
+      <AgendaView
+        events={events}
+        today={today}
+        monthISO={monthISO}
+        deliverables={deliverables}
+        subjects={subjects}
+      />
     </div>
   );
 }

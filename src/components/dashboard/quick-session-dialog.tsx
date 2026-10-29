@@ -103,7 +103,7 @@ export function QuickSessionDialog({
         ) : (
           <div className="border border-gray-200 px-3 py-4 text-center text-xs text-gray-600 dark:border-gray-800 dark:text-gray-300">
             <p>Nenhuma leitura pendente para registrar uma sessão.</p>
-            <Link href="/setup" className="mt-2 inline-block font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
+            <Link href="/library" className="mt-2 inline-block font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
               Cadastrar leituras
             </Link>
           </div>

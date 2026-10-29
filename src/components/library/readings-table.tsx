@@ -221,15 +221,9 @@ export function ReadingsTable({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">Adicione novas leituras pela Biblioteca</p>
-          <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">O formulário guiado e as capas ficam junto aos seus livros e artigos.</p>
+          <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">Gerenciamento de leituras</p>
+          <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Edite dados, marcos e prazos ou altere o status das leituras.</p>
         </div>
-        <Link
-          href="/library"
-          className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-        >
-          Adicionar leitura <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
       </div>
 
       {editErrorMessage && (

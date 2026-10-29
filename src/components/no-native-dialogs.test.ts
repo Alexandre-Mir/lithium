@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 
 /** Arquivos que o UX-02 migrou de alert()/confirm() para ConfirmDialog/addToast/inline. */
 const TARGET_FILES = [
-  "src/components/setup/readings-table.tsx",
+  "src/components/library/readings-table.tsx",
   "src/components/setup/subjects-table.tsx",
-  "src/components/setup/deliverables-table.tsx",
+  "src/components/agenda/deliverables-table.tsx",
   "src/components/dashboard/tier1-card.tsx",
   "src/components/dashboard/reading-tier-card.tsx",
 ] as const;

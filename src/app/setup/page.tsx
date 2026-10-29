@@ -1,26 +1,17 @@
 import { connection } from "next/server";
-import { getSubjects, getDeliverables, getReadings } from "@/app/actions";
+import { getSubjects } from "@/app/actions";
 import { SetupView } from "@/components/setup/setup-view";
-import { Subject, Deliverable, Reading } from "@/types/database";
+import { Subject } from "@/types/database";
 
 export const instant = false;
 
 export default async function SetupPage() {
   await connection();
   let subjects: Subject[] = [];
-  let deliverables: Deliverable[] = [];
-  let readings: Reading[] = [];
   let connectionError: string | null = null;
 
   try {
-    const [subs, dels, reads] = await Promise.all([
-      getSubjects(),
-      getDeliverables(),
-      getReadings(),
-    ]);
-    subjects = subs || [];
-    deliverables = dels || [];
-    readings = reads || [];
+    subjects = (await getSubjects()) || [];
   } catch (err: unknown) {
     console.error("Erro ao carregar dados do Supabase:", err);
     connectionError = err instanceof Error ? err.message : "Falha na conexão com o banco.";
@@ -34,11 +25,7 @@ export default async function SetupPage() {
           <code className="bg-amber-100 dark:bg-amber-900/40 px-1 py-0.5 rounded font-mono">.env.local</code>.
         </div>
       )}
-      <SetupView
-        initialSubjects={subjects}
-        initialDeliverables={deliverables}
-        initialReadings={readings}
-      />
+      <SetupView initialSubjects={subjects} />
     </div>
   );
 }

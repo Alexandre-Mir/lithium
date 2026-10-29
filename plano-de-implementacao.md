@@ -66,7 +66,7 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - **Ação:** Remover a classe de rolagem horizontal desnecessária (`overflow-x-auto`), e vertical, e assegurar que a grade, rótulos e legenda se ajustem fluidamente dentro do card sem barras de rolagem internas no Dashboard e na tela de Histórico.
   - **Arquivos-chave:** `src/components/consistency-heatmap.tsx`, `src/components/dashboard/dashboard-view.tsx`, `src/components/history/history-view.tsx`.
 
-- [ ] **`UX-12` — Reestruturação da Navegação: Leituras na Biblioteca, Entregas na Agenda, Setup Vira Disciplinas**
+- [x] **`UX-12` — Reestruturação da Navegação: Leituras na Biblioteca, Entregas na Agenda, Setup Vira Disciplinas**
   - **Contexto:** Hoje o Setup (`/setup`) concentra 3 abas independentes: *Leituras* (`readings-table.tsx`, ~600 linhas), *Entregas* (`deliverables-table.tsx`) e *Disciplinas* (`subjects-table.tsx`). O formulário de criação de leituras já foi extraído e integrado à Biblioteca em `UX-14`, mas a listagem e edição continuam no Setup; Entregas também continuam fora da Agenda. A proposta conclui a reorganização:
     - **Leituras → Biblioteca:** Formulário de criação já integrado; mover listagem e gerenciamento das leituras para a própria `/library`, onde o estudante visualiza e atualiza seus livros.
     - **Entregas → Agenda:** Entregas/provas são eventos com data fixa e pertencem ao contexto de calendário (`/agenda`), já existente.
@@ -74,13 +74,13 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - **Ação (faseada):**
     1. **Concluído em `UX-14`:** Extrair o formulário de criação de leitura para `src/components/library/reading-form.tsx`, com estado gerenciado por `useReducer`.
     2. **Concluído em `UX-14`:** Integrar o componente na `LibraryView` em seção recolhível com botão "Adicionar leitura".
-    3. Mover `DeliverablesTable` para `src/components/agenda/` e renderizá-la como seção na rota `/agenda`.
-    4. Renomear/simplificar `/setup` para conter exclusivamente `SubjectsTable`, removendo o wrapper `Tabs`.
-    5. Atualizar todos os links e textos que referenciam "Setup" para o novo destino (library-view.tsx L187, recommendation-card.tsx L49, setup-view.tsx).
-    6. Revalidar caminhos em Server Actions (`revalidatePath`).
-  - **Progresso:** Formulário reutilizável e botão “Adicionar leitura” integrado à Biblioteca em `UX-14`; mover Entregas para a Agenda e simplificar o restante do Setup continuam pendentes.
-  - **Arquivos-chave:** `src/components/setup/readings-table.tsx`, `src/components/library/library-view.tsx`, `src/components/setup/deliverables-table.tsx`, `src/components/setup/setup-view.tsx`, `src/components/agenda/`, `src/app/setup/page.tsx`, `src/app/library/page.tsx`, `src/app/agenda/page.tsx`, `src/components/dashboard/recommendation-card.tsx`.
-  - **Dependências:** A extração e a integração do formulário estão concluídas em `UX-14`; o link do estado vazio do card de recomendação para `/library` foi alinhado em `UX-11`. As demais mudanças de navegação continuam pendentes.
+    3. **Concluído:** Mover `DeliverablesTable` para `src/components/agenda/` e renderizá-la como seção de gerenciamento na rota `/agenda`.
+    4. **Concluído:** Simplificar `/setup` para conter exclusivamente `SubjectsTable`, removendo o wrapper `Tabs`.
+    5. **Concluído:** Atualizar a navegação para apresentar `/setup` como “Disciplinas” e direcionar os atalhos de cadastro de leituras à Biblioteca.
+    6. **Concluído:** Revalidar `/agenda`, `/library` e `/setup` nas Server Actions correspondentes.
+  - **Progresso:** Reestruturação concluída; a listagem em cards foi preservada na Biblioteca e a tabela de gerenciamento de leituras fica disponível por alternância, sem duplicar conteúdo na tela.
+  - **Arquivos-chave:** `src/components/library/readings-table.tsx`, `src/components/library/library-view.tsx`, `src/components/agenda/deliverables-table.tsx`, `src/components/agenda/agenda-view.tsx`, `src/components/setup/setup-view.tsx`, `src/app/setup/page.tsx`, `src/app/library/page.tsx`, `src/app/agenda/page.tsx`, `src/components/navbar.tsx`, `src/app/actions.ts`.
+  - **Dependências:** Formulário de leituras integrado à Biblioteca em `UX-14`; destino do estado vazio do card de recomendação alinhado em `UX-11`. Todas as etapas restantes foram concluídas.
 
 - [ ] **`UX-13` — Formatação Automática de Títulos e Autores em Title Case**
   - **Contexto:** Não existe nenhuma transformação de casing no fluxo de criação de leituras. O campo `title` e `author` são armazenados exatamente como digitados pelo usuário ou retornados pela API (ISBN via Google Books / DOI via CrossRef). Isso produz inconsistências visuais frequentes: Google Books pode retornar títulos em CAIXA ALTA; CrossRef retorna autores em "SOBRENOME, Nome"; e o próprio usuário pode digitar em minúsculas corridas. Na Biblioteca e no Dashboard, leituras com casing inconsistente quebram a harmonia visual do Flat Design.
@@ -89,7 +89,7 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
     2. Aplicar a transformação no `handleCreate` do formulário de leituras (atualmente em `readings-table.tsx` L260–265; futuro `reading-form.tsx` pós-`UX-12`) como sugestão visual com preview — não impositiva, permitindo override manual.
     3. Aplicar igualmente nos callbacks de auto-fill por ISBN/DOI (`handleIsbnBlur`, `handleDoiBlur`) para normalizar dados de APIs externas.
     4. Cobrir com testes unitários em `src/lib/text.test.ts`: palavras simples, preposições internas, siglas (ISBN, DOI), nomes próprios compostos, strings já corretas.
-  - **Arquivos-chave:** `src/lib/text.ts` (novo), `src/lib/text.test.ts` (novo), `src/components/setup/readings-table.tsx` (ou futuro `reading-form.tsx`).
+  - **Arquivos-chave:** `src/lib/text.ts` (novo), `src/lib/text.test.ts` (novo), `src/components/library/reading-form.tsx`.
 
 - [ ] **`UX-15` — Refinamento da Interface do Card de Leitura na Biblioteca**
   - **Contexto:** O `BookCard` reúne capa, tipo, disciplina, título, autor, métricas de progresso, prazo e ações. A ideia original pede um ajuste visual, mas ainda não identifica um atrito específico.
@@ -111,6 +111,8 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - *Resolução:* Extraído para `ReadingForm` com estado em `useReducer`, fluxo guiado em três etapas e uma quarta etapa opcional para sumário colado; inclui validação inline e no servidor, busca bibliográfica preservada e layout responsivo. Integrado à Biblioteca em seção recolhível; no Setup, a ação de cadastro aponta para a Biblioteca.
 - [x] **`UX-11` — Refinamento do Card de Recomendação Diária no Dashboard**
   - *Resolução:* Estado vazio direciona à Biblioteca; urgência contextual exibe prazo vinculado e páginas restantes; ação para alternar entre a recomendação principal e a próxima opção elegível, mantendo o cálculo de cota pelo orçamento cognitivo.
+- [x] **`UX-12` — Reestruturação da Navegação: Leituras na Biblioteca, Entregas na Agenda, Setup Vira Disciplinas**
+  - *Resolução:* A Biblioteca preserva os cards e incorpora a tabela de gerenciamento de leituras; a Agenda recebe a tabela CRUD de entregas; `/setup` fica dedicado às disciplinas, com navegação renomeada e revalidação dos caminhos ajustada.
 
 ---
 
@@ -220,3 +222,4 @@ As propostas abaixo foram analisadas e **rejeitadas da forma em que foram formul
 | 2026-10-29 | `DOC-06` | Regra para registrar ideias acionáveis na seção Ideias prematuras, antes de categorizá-las | `AGENTS.md`, `plano-de-implementacao.md` |
 | 2026-10-29 | `BUG-08` | Registro de sessões por quantidade ou página impressa, com conversão de marcos absolutos para o trecho | `migration-v1.11.sql`, `reading-session-modal.tsx`, `session-pages.ts`, `toc-parser.ts`, `actions.ts` |
 | 2026-10-29 | `UX-11` | Card exibe prazo e páginas restantes, permite alternar para segunda opção elegível e direciona estado vazio à Biblioteca | `recommendation-card.tsx`, `recommendation.ts`, `actions.ts`, `dashboard-view.tsx` |
+| 2026-10-29 | `UX-12` | Leituras gerenciadas na Biblioteca, entregas na Agenda e `/setup` dedicado às disciplinas | `library/`, `agenda/`, `setup/`, `navbar.tsx`, `actions.ts` |

@@ -351,7 +351,7 @@ export function DashboardView({
         <div className="rounded-md border border-gray-200 bg-white p-5 text-center text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
           <p>Nada pendente por agora</p>
           <Link
-            href="/setup"
+            href="/library"
             className="mt-2 inline-block font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
           >
             Cadastrar leituras

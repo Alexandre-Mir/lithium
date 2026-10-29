@@ -1,20 +1,26 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CalendarDays, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgendaCalendar } from "@/components/agenda/agenda-calendar";
 import { AgendaList } from "@/components/agenda/agenda-list";
+import { DeliverablesTable } from "@/components/agenda/deliverables-table";
 import { formatDateBR } from "@/lib/dates";
 import { formatAgendaMonthLabel, sortAgendaEvents, type AgendaEvent } from "@/lib/agenda";
+import type { Deliverable, Subject } from "@/types/database";
 
 interface AgendaViewProps {
   events: AgendaEvent[];
   today: string;
   monthISO: string;
+  deliverables: Deliverable[];
+  subjects: Subject[];
 }
 
-export function AgendaView({ events, today, monthISO }: AgendaViewProps) {
+export function AgendaView({ events, today, monthISO, deliverables, subjects }: AgendaViewProps) {
+  const router = useRouter();
   const [view, setView] = useState<"calendar" | "list">("calendar");
   const [selectedDateState, setSelectedDateState] = useState<string | null>(null);
   const selectedDate = selectedDateState ?? today;
@@ -96,6 +102,20 @@ export function AgendaView({ events, today, monthISO }: AgendaViewProps) {
           emptyMessage="Nenhuma entrega ou revisão agendada para este mês."
         />
       )}
+
+      <section className="space-y-3 border-t border-gray-200 pt-5 dark:border-gray-800">
+        <header className="border-b border-gray-200 pb-2 dark:border-gray-800">
+          <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">Gerenciar entregas e provas</h2>
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+            Cadastre e atualize prazos; todos os eventos aparecem no calendário da Agenda.
+          </p>
+        </header>
+        <DeliverablesTable
+          initialDeliverables={deliverables}
+          subjects={subjects}
+          onRefresh={() => router.refresh()}
+        />
+      </section>
     </div>
   );
 }

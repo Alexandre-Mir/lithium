@@ -135,7 +135,7 @@ export function DeliverablesTable({
       {/* Quick Add Row Flat */}
       <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
         <h3 className="text-xs font-bold tracking-wider text-gray-500 dark:text-gray-400 uppercase mb-3">
-          Cadastrar Entrega / Prova
+          Adicionar Entrega / Prova à Agenda
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
           <div className="md:col-span-3">

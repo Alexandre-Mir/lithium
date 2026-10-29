@@ -1,24 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { ReadingWithProgress, Subject } from "@/types/database";
+import { Deliverable, ReadingWithProgress, Subject } from "@/types/database";
 import { BookCard } from "./book-card";
 import { ReadingSessionModal } from "@/components/reading-session-modal";
 import type { ReadingSessionTarget } from "@/components/reading-session-modal";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, BookOpen, Plus, X, Loader2 } from "lucide-react";
+import { Search, BookOpen, Plus, X, Loader2, Table2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { backfillMissingMetadata } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { ReadingForm } from "@/components/library/reading-form";
+import { ReadingsTable } from "@/components/library/readings-table";
 
 interface LibraryViewProps {
   initialReadings: ReadingWithProgress[];
   subjects: Subject[];
+  deliverables: Deliverable[];
 }
 
-export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
+export function LibraryView({ initialReadings, subjects, deliverables }: LibraryViewProps) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSubject, setSelectedSubject] = useState<string>("all");
@@ -30,6 +32,7 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillSummary, setBackfillSummary] = useState<string | null>(null);
   const [isReadingFormOpen, setIsReadingFormOpen] = useState(false);
+  const [isManagingReadings, setIsManagingReadings] = useState(false);
 
   const pendingMetadataCount = initialReadings.filter(
     (reading) => (reading.isbn || reading.doi) && !reading.metadata_fetched_at
@@ -97,11 +100,22 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
             Biblioteca de Textos
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Acompanhe suas leituras, sessões e prazos em um só lugar.
+            Acompanhe, leia e gerencie seus livros e artigos em um só lugar.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-1.5 text-xs font-mono items-center">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            aria-pressed={isManagingReadings}
+            onClick={() => setIsManagingReadings((managing) => !managing)}
+            className="h-8 gap-1.5 text-xs"
+          >
+            <Table2 className="h-3.5 w-3.5" />
+            {isManagingReadings ? "Voltar à Biblioteca" : "Gerenciar leituras"}
+          </Button>
           <Button
             type="button"
             size="sm"
@@ -144,83 +158,94 @@ export function LibraryView({ initialReadings, subjects }: LibraryViewProps) {
 
       {backfillSummary && <p className="text-xs text-gray-600 dark:text-gray-400">{backfillSummary}</p>}
 
-      {/* Barra de Filtros */}
-      <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex flex-col gap-2.5 md:grid md:grid-cols-12">
-          <div className="md:col-span-4 relative">
-            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
-            <Input
-              placeholder="Buscar por título, capítulo ou autor..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 text-xs h-8 rounded border-gray-300 dark:border-gray-700"
-            />
-          </div>
-
-          <div className="md:col-span-3">
-            <select
-              value={selectedSubject}
-              onChange={(e) => setSelectedSubject(e.target.value)}
-              className="w-full h-8 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 text-xs"
-            >
-              <option value="all">Todas as Disciplinas</option>
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="md:col-span-2">
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value as "all" | "book" | "article")}
-              className="w-full h-8 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 text-xs"
-            >
-              <option value="all">Todos os Tipos</option>
-              <option value="book">Livros</option>
-              <option value="article">Artigos</option>
-            </select>
-          </div>
-
-          <div className="md:col-span-3">
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value as "all" | "pending" | "read")}
-              className="w-full h-8 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-2 text-xs"
-            >
-              <option value="all">Todos os Status</option>
-              <option value="pending">Apenas Pendentes</option>
-              <option value="read">Apenas Concluídos</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Grid de Cards */}
-      {filteredReadings.length === 0 ? (
-        <div className="py-12 text-center rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-          <BookOpen className="w-8 h-8 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-          <h3 className="font-bold text-sm text-gray-700 dark:text-gray-300">
-            Nenhuma leitura encontrada
-          </h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Ajuste os filtros ou adicione textos na aba Setup.
-          </p>
-        </div>
+      {isManagingReadings ? (
+        <ReadingsTable
+          initialReadings={initialReadings}
+          subjects={subjects}
+          deliverables={deliverables}
+          onRefresh={handleRefresh}
+        />
       ) : (
-        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {filteredReadings.map((reading) => (
-            <BookCard
-              key={reading.id}
-              reading={reading}
-              subject={subjectMap.get(reading.subject_id)}
-              onOpenSessionModal={handleOpenSession}
-              onRefresh={handleRefresh}
-            />
-          ))}
-        </div>
+        <>
+          {/* Barra de Filtros */}
+          <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex flex-col gap-2.5 md:grid md:grid-cols-12">
+              <div className="relative md:col-span-4">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                <Input
+                  placeholder="Buscar por título, capítulo ou autor..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-8 rounded border-gray-300 pl-8 text-xs dark:border-gray-700"
+                />
+              </div>
+
+              <div className="md:col-span-3">
+                <select
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  className="h-8 w-full rounded border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-950"
+                >
+                  <option value="all">Todas as Disciplinas</option>
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value as "all" | "book" | "article")}
+                  className="h-8 w-full rounded border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-950"
+                >
+                  <option value="all">Todos os Tipos</option>
+                  <option value="book">Livros</option>
+                  <option value="article">Artigos</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-3">
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value as "all" | "pending" | "read")}
+                  className="h-8 w-full rounded border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-950"
+                >
+                  <option value="all">Todos os Status</option>
+                  <option value="pending">Apenas Pendentes</option>
+                  <option value="read">Apenas Concluídos</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Grid de Cards */}
+          {filteredReadings.length === 0 ? (
+            <div className="rounded-md border border-gray-200 bg-white py-12 text-center dark:border-gray-800 dark:bg-gray-900">
+              <BookOpen className="mx-auto mb-2 h-8 w-8 text-gray-300 dark:text-gray-700" />
+              <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                Nenhuma leitura encontrada
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Ajuste os filtros ou adicione textos à Biblioteca.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {filteredReadings.map((reading) => (
+                <BookCard
+                  key={reading.id}
+                  reading={reading}
+                  subject={subjectMap.get(reading.subject_id)}
+                  onOpenSessionModal={handleOpenSession}
+                  onRefresh={handleRefresh}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Modal de Sessão de Leitura */}
