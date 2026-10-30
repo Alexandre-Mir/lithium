@@ -1,32 +1,62 @@
 import type { ReadingSession, ReadingSessionSource } from "@/types/database";
-import { todayISO, timestampToDateISO } from "@/lib/dates";
+import { addDaysISO, startOfDayUtcISO, todayISO, timestampToDateISO } from "@/lib/dates";
 
 type SessionDuration = Pick<ReadingSession, "duration_minutes"> &
   Partial<Pick<ReadingSession, "duration_seconds">>;
 
-type SessionWithTimestamps = SessionDuration &
-  Partial<Pick<ReadingSession, "started_at" | "ended_at" | "created_at">>;
+type SessionWithTimestamps = SessionDuration & {
+  started_at?: string | null;
+  ended_at?: string | null;
+  created_at?: string | null;
+};
+
+type SessionPages = Pick<ReadingSession, "pages_read"> & SessionWithTimestamps;
 
 export function sessionSeconds(session: SessionDuration): number {
   // Compatibilidade com sessões anteriores à coluna duration_seconds.
   return session.duration_seconds ?? session.duration_minutes * 60;
 }
 
-/** Soma em minutos as sessões cujo início ou fim caiu hoje em São Paulo. */
+/** Retorna a fração da sessão que ocorreu em uma data local. */
+export function sessionFractionOnDate(
+  session: SessionWithTimestamps,
+  date: string,
+): number {
+  const startedAt = session.started_at ? Date.parse(session.started_at) : Number.NaN;
+  const endedAt = session.ended_at ? Date.parse(session.ended_at) : Number.NaN;
+
+  if (Number.isFinite(startedAt) && Number.isFinite(endedAt) && endedAt > startedAt) {
+    const dayStart = Date.parse(startOfDayUtcISO(date));
+    const dayEnd = Date.parse(startOfDayUtcISO(addDaysISO(date, 1)));
+    const overlap = Math.max(0, Math.min(endedAt, dayEnd) - Math.max(startedAt, dayStart));
+    return overlap / (endedAt - startedAt);
+  }
+
+  const assignedDate =
+    timestampToDateISO(session.started_at) ??
+    timestampToDateISO(session.ended_at) ??
+    timestampToDateISO(session.created_at);
+  return assignedDate === date ? 1 : 0;
+}
+
+export function sessionSecondsOnDate(
+  session: SessionWithTimestamps,
+  date: string,
+): number {
+  return sessionSeconds(session) * sessionFractionOnDate(session, date);
+}
+
+export function sessionPagesOnDate(session: SessionPages, date: string): number {
+  return session.pages_read * sessionFractionOnDate(session, date);
+}
+
+/** Soma os segundos ocorridos hoje no fuso America/Sao_Paulo. */
 export function getTodayTotalReadingTime(sessions: readonly SessionWithTimestamps[]): number {
   const today = todayISO();
-  const totalSeconds = sessions.reduce((total, session) => {
-    const startedToday = timestampToDateISO(session.started_at) === today;
-    const endedToday = timestampToDateISO(session.ended_at) === today;
-    const legacyManualSession =
-      !session.started_at &&
-      !session.ended_at &&
-      timestampToDateISO(session.created_at) === today;
-
-    return startedToday || endedToday || legacyManualSession
-      ? total + sessionSeconds(session)
-      : total;
-  }, 0);
+  const totalSeconds = sessions.reduce(
+    (total, session) => total + sessionSecondsOnDate(session, today),
+    0,
+  );
 
   return totalSeconds / 60;
 }

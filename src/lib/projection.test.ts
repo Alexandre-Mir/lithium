@@ -40,6 +40,7 @@ function makeSession(pagesRead: number, durationSeconds: number): ReadingSession
   return {
     id: `session-${pagesRead}-${durationSeconds}`,
     reading_id: "reading-1",
+    request_id: null,
     pages_read: pagesRead,
     duration_minutes: Math.round(durationSeconds / 60),
     duration_seconds: durationSeconds,

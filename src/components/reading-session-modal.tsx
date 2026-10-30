@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createReadingSession, updateReadingSession } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -87,6 +87,8 @@ function ReadingSessionModalContent({
   const [endPageInput, setEndPageInput] = useState(String(initialEndPage));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitLock = useRef(false);
+  const requestIdRef = useRef<string | null>(null);
 
   const durationSeconds = mode === "manual"
     ? (/^\d+$/.test(durationMinutes) ? Number(durationMinutes) * 60 : 0)
@@ -141,6 +143,7 @@ function ReadingSessionModalContent({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitLock.current) return;
     setError(null);
     if (validationMessage) {
       setError(validationMessage);
@@ -155,6 +158,9 @@ function ReadingSessionModalContent({
       return;
     }
 
+    submitLock.current = true;
+    const submissionRequestId = requestIdRef.current ?? crypto.randomUUID();
+    requestIdRef.current = submissionRequestId;
     try {
       setLoading(true);
       onBusyChange(true);
@@ -166,6 +172,7 @@ function ReadingSessionModalContent({
       } else {
         await createReadingSession({
           reading_id: reading.id,
+          request_id: submissionRequestId,
           pages_read: pagesRead,
           duration_seconds: durationSeconds,
           started_at: mode === "timer" ? timerState?.startedAt : null,
@@ -173,11 +180,13 @@ function ReadingSessionModalContent({
           source,
         });
       }
+      requestIdRef.current = null;
       onSuccess?.();
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Erro ao registrar sessão de leitura.");
     } finally {
+      submitLock.current = false;
       setLoading(false);
       onBusyChange(false);
     }

@@ -50,8 +50,9 @@ interface DashboardViewProps {
   allDeliverables: Deliverable[];
   subjectStats?: SubjectStat[];
   subjectStatsTruncated?: boolean;
+  metricWarnings?: string[];
   lastSessionReadingId?: string | null;
-  todayReadingMinutes: number;
+  todayReadingMinutes: number | null;
   dailyGoalMinutes: number;
   averageSpeedPph: number;
   recommendedReadingId: string | null;
@@ -74,6 +75,7 @@ export function DashboardView({
   allDeliverables,
   subjectStats = [],
   subjectStatsTruncated = false,
+  metricWarnings = [],
   lastSessionReadingId = null,
   todayReadingMinutes,
   dailyGoalMinutes,
@@ -218,6 +220,15 @@ export function DashboardView({
         </div>
       </div>
 
+      {metricWarnings.length > 0 && (
+        <div role="status" className="space-y-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <strong>Algumas métricas estão indisponíveis.</strong>
+          <ul className="list-inside list-disc">
+            {metricWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
+      )}
+
       <ConsistencyHeatmap model={consistencyHeatmap} />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
@@ -251,7 +262,7 @@ export function DashboardView({
         linkedDeliverable={recommendedDeliverable}
         alternativeDeliverable={alternativeDeliverable}
         today={today}
-        goalReached={todayReadingMinutes >= dailyGoalMinutes}
+        goalReached={todayReadingMinutes !== null && todayReadingMinutes >= dailyGoalMinutes}
         onStartTimer={handleStartRecommendedTimer}
         onRegisterSession={handleOpenSession}
       />

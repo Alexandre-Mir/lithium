@@ -28,10 +28,71 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
 ## 1. Bugs e Inconsistências Identificados
 
 ### Pendentes
-- [ ] **`BUG-07` — Limite de 1.000 Registros sem Paginação no Histórico (`/history`)**
+- [x] **`BUG-07` — Limite de 1.000 Registros sem Paginação no Histórico (`/history`)**
   - **Contexto:** `getAllReadingSessions()` no backend aplica `warnIfTruncated` quando o total de sessões atinge 1.000 linhas, exibindo um aviso estático na tela. Estudantes com uso diário intenso ao longo dos meses não conseguem carregar sessões antigas além desse limite.
   - **Ação:** Adicionar suporte a paginação paginada (cursor ou página com botão "Carregar mais sessões") na Server Action e na view.
   - **Arquivos-chave:** `src/app/actions.ts`, `src/components/history/history-view.tsx`.
+  - *Resolução:* Histórico carrega sessões em páginas de 50 com “Carregar mais sessões”; resumo agregado e heatmap dos últimos 28 dias são independentes da página carregada.
+
+- [x] **`BUG-10` — Divergência de Dia em Sessões Próximas à Virada do Fuso**
+  - **Contexto:** Sessões iniciadas perto da meia-noite podem ser agrupadas em dias diferentes caso algum fluxo use UTC enquanto o restante da aplicação usa `America/Sao_Paulo`.
+  - **Ação:** Reproduzir a virada do dia em registros manuais e cronometrados; centralizar a conversão nos utilitários de data e garantir que Dashboard, Histórico e heatmap atribuam a sessão ao mesmo dia.
+  - **Arquivos-chave:** `src/lib/dates.ts`, `src/app/actions.ts`, `src/lib/consistency-heatmap.ts`.
+  - *Resolução:* Dashboard e heatmap usam intervalos de calendário em `America/Sao_Paulo`; sessões com timestamps válidos são rateadas por dia e registros legados mantêm fallback pela data local.
+
+- [x] **`BUG-11` — Criação Duplicada por Submissões Repetidas de Sessão**
+  - **Contexto:** Cliques repetidos durante uma resposta lenta podem enviar mais de uma vez o mesmo registro manual ou a conclusão do cronômetro.
+  - **Ação:** Verificar os fluxos de criação e, se reproduzido, bloquear submissões concorrentes na interface e proteger a ação contra duplicidade sem impedir sessões legítimas consecutivas.
+  - **Arquivos-chave:** `src/components/reading-session-modal.tsx`, `src/components/reading-timer-bar.tsx`, `src/app/actions.ts`.
+  - *Resolução:* Modal bloqueia envio concorrente e mantém UUID da tentativa para retry; índice único e RPC idempotente impedem duplicação no banco.
+
+- [x] **`BUG-12` — Progresso Inconsistente Após Redução da Meta de Páginas**
+  - **Contexto:** Ao editar `target_pages` para um valor inferior ao progresso atual, os dados podem ficar acima de 100% ou divergir entre cards, detalhes e cálculos de conclusão.
+  - **Ação:** Reproduzir a edição em leituras abertas e concluídas; definir uma validação coerente para a meta e o progresso, cobrindo o comportamento com testes antes de alterar dados persistidos.
+  - **Arquivos-chave:** `src/app/actions.ts`, `src/lib/progress.ts`, `src/components/library/reading-form.tsx`.
+  - *Resolução:* A Server Action valida a meta contra páginas lidas e trigger no banco impede que atualizações concorrentes persistam meta inferior ao progresso.
+
+- [x] **`BUG-13` — Referências Inválidas ao Excluir Disciplina ou Leitura**
+  - **Contexto:** A exclusão de registros que possuem leituras, sessões, marcos ou entregas associados pode falhar parcialmente ou deixar conteúdo órfão visível.
+  - **Ação:** Auditar as relações e reproduzir exclusões com dependências; garantir transação ou mensagem de erro explícita, preservando o vínculo prova↔leitura e sem apagar histórico inesperadamente.
+  - **Arquivos-chave:** `src/app/actions.ts`, `src/lib/cascade.ts`, `src/types/database.ts`.
+  - *Resolução:* Ações bloqueiam exclusões com dependências e FKs restritivas preservam sessões, revisões, marcos e entregas contra exclusão concorrente ou direta.
+
+- [x] **`BUG-14` — Recálculo de Velocidade com Sessões Inválidas ou de Duração Zero**
+  - **Contexto:** Sessões importadas ou editadas com duração ausente, zero ou páginas negativas podem distorcer a velocidade média se forem aceitas pelos fluxos de persistência.
+  - **Ação:** Conferir validação no servidor e no recálculo após criação, edição e exclusão; rejeitar entradas inválidas com retorno claro e cobrir os limites em testes.
+  - **Arquivos-chave:** `src/app/actions.ts`, `src/lib/session-time.ts`, `src/lib/speed.ts`.
+  - *Resolução:* Validação de entrada rejeita páginas/duração inválidas; RPCs recalculam velocidade dentro da mesma transação de criação, edição ou exclusão.
+
+- [x] **`BUG-15` — Políticas RLS Permitem Acesso Anônimo às Tabelas Centrais**
+  - **Contexto:** O schema habilita RLS, mas cria políticas `"Allow all"` para `subjects`, `deliverables`, `readings`, `reading_sessions`, `spaced_reviews` e `app_settings`. A aplicação usa uma chave anon no cliente Supabase compartilhado; a proteção visual por login não substitui autorização no banco.
+  - **Ação:** Definir o modelo de propriedade dos dados e substituir as políticas abertas por políticas restritas, migrando as chamadas de leitura e escrita para clientes autenticados. Validar o comportamento com usuários autenticados e anônimos antes de aplicar a migração.
+  - **Arquivos-chave:** `supabase/schema.sql`, novas migrações em `supabase/`, `src/lib/supabase.ts`, `src/app/actions.ts`.
+  - *Resolução:* Migração v1.12 restringe RLS ao proprietário autenticado, revoga acesso anônimo e exige um único usuário proprietário; ações usam cliente autenticado. A migração precisa ser aplicada pelo responsável no Supabase.
+
+- [x] **`BUG-16` — Sessões que Cruzam a Meia-Noite Distorcem Totais Diários**
+  - **Contexto:** `getTodayTotalReadingTime` soma a duração inteira quando o início ou o fim da sessão cai hoje. Uma sessão que atravesse a meia-noite pode, portanto, ter a duração integral contabilizada em dois dias; o heatmap, por outro lado, atribui a sessão inteira à data de início.
+  - **Ação:** Definir uma regra única de atribuição ou rateio por intervalo de tempo, aplicar ao orçamento diário e ao heatmap e cobrir sessões iniciadas/encerradas em dias diferentes no fuso `America/Sao_Paulo`.
+  - **Arquivos-chave:** `src/lib/session-time.ts`, `src/lib/consistency-heatmap.ts`, `src/app/actions.ts`.
+  - *Resolução:* Duração e páginas são rateadas pela fração de tempo em cada data local; heatmap e meta diária compartilham o mesmo cálculo com testes de virada.
+
+- [x] **`BUG-17` — Falhas em Consultas de Métricas São Exibidas como Dados Zerados**
+  - **Contexto:** `getReadingProgressMap` retorna mapa vazio quando a consulta falha, e `getTodayReadingSummary` retorna zero minutos e nenhuma página; o Dashboard pode apresentar valores plausíveis como se fossem reais, sem sinalizar que a consulta falhou.
+  - **Ação:** Diferenciar erro de consulta de resultado vazio e propagar um estado degradado até a interface, preservando a disponibilidade do restante do Dashboard sem mascarar métricas ausentes.
+  - **Arquivos-chave:** `src/app/actions.ts`, `src/app/page.tsx`, componentes do Dashboard.
+  - *Resolução:* Consultas com falha propagam estado indisponível e avisos para o Dashboard; recomendações que dependem de métricas ausentes deixam de ser calculadas como se fossem zero.
+
+- [x] **`BUG-18` — Operações de Sessão e Conclusão Podem Persistir Parcialmente**
+  - **Contexto:** `createReadingSession` grava a sessão antes de criar resumos de marcos e recalcular velocidade; `markReadingAsRead` altera a leitura antes de criar revisões espaçadas. Uma falha numa etapa posterior deixa dados parcialmente atualizados.
+  - **Ação:** Mover cada sequência que exige consistência para uma transação/RPC idempotente e informar falhas sem sugerir que a operação inteira foi revertida quando não foi.
+  - **Arquivos-chave:** `src/app/actions.ts`, `supabase/schema.sql`, novas migrações em `supabase/`.
+  - *Resolução:* RPCs transacionais para criação/edição/exclusão de sessão e conclusão/estorno de leitura agrupam as alterações dependentes; criação de sessão também é idempotente.
+
+- [x] **`BUG-19` — Listas de Leituras e Disciplinas Podem Ser Truncadas sem Aviso na Interface**
+  - **Contexto:** Consultas como `getReadings`, `getSubjects` e as leituras usadas por `getSubjectStats` não paginam os resultados do Supabase. `getReadings` apenas registra um aviso no servidor ao atingir 1.000 linhas, sem informar a tela nem carregar o restante.
+  - **Ação:** Implementar paginação ou consultas agregadas conforme o uso e comunicar truncamento quando a lista não puder ser carregada integralmente; testar acima do limite padrão do Supabase.
+  - **Arquivos-chave:** `src/app/actions.ts`, `src/components/library/library-view.tsx`, `src/components/setup/subjects-table.tsx`.
+  - *Resolução:* Leituras, disciplinas, sessões e dados usados pelas métricas são buscados em páginas completas; a validação de dias de aula também pagina a lista de disciplinas.
 
 ### Concluídos
 - [x] **`BUG-01` — Conclusão de Leitura Destrutiva sem Toast de "Desfazer" no Dashboard**
@@ -106,6 +167,56 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - **Ação:** Revisar hierarquia visual, legibilidade e comportamento responsivo do card; definir os ajustes a partir dos problemas encontrados, preservando o Flat Design e sem alterar regras funcionais da leitura.
   - **Arquivos-chave:** `src/components/library/book-card.tsx`, `src/components/library/library-view.tsx`, `src/components/library/reading-cover.tsx`.
 
+- [ ] **`UX-16` — Busca e Filtros Combináveis na Biblioteca**
+  - **Contexto:** Conforme a coleção cresce, localizar uma leitura por título, autor, disciplina ou estado exige percorrer vários cards ou alternar a tabela de gerenciamento.
+  - **Ação:** Adicionar busca textual e filtros combináveis com contagem de resultados, estado vazio específico e controles utilizáveis por teclado; manter filtros na URL apenas se isso seguir o padrão já adotado nas rotas.
+  - **Arquivos-chave:** `src/components/library/library-view.tsx`, `src/components/library/book-card.tsx`, `src/components/library/readings-table.tsx`.
+
+- [ ] **`UX-17` — Preservação do Contexto ao Voltar de um Detalhe**
+  - **Contexto:** Ao abrir uma leitura e retornar à Biblioteca, filtros, ordenação e posição da lista podem se perder e obrigar o estudante a refazer a busca.
+  - **Ação:** Validar o comportamento nos modos de cards e tabela; preservar o contexto de navegação sem manter estado obsoleto quando a coleção for atualizada.
+  - **Arquivos-chave:** `src/components/library/library-view.tsx`, `src/app/library/[id]/page.tsx`.
+
+- [ ] **`UX-18` — Foco e Navegação por Teclado em Diálogos**
+  - **Contexto:** Fluxos de sessão, confirmação e edição podem ser difíceis de concluir sem mouse caso o foco inicial, a ordem de tabulação ou o retorno do foco ao fechar não sejam consistentes.
+  - **Ação:** Auditar os diálogos principais com teclado e leitor de tela; corrigir foco inicial, contenção, tecla Escape e retorno ao acionador seguindo o componente de diálogo existente.
+  - **Arquivos-chave:** `src/components/ui/dialog.tsx`, `src/components/reading-session-modal.tsx`, `src/components/confirm-dialog.tsx`.
+
+- [ ] **`UX-19` — Feedback de Carregamento em Ações Assíncronas**
+  - **Contexto:** Em conexões lentas, botões de salvar, concluir ou excluir podem parecer inativos e permitir tentativas repetidas antes de a ação responder.
+  - **Ação:** Padronizar estados de carregamento e prevenção de duplo envio nos formulários e ações mais usadas, mantendo mensagens de erro e sucesso acessíveis.
+  - **Arquivos-chave:** `src/components/library/reading-form.tsx`, `src/components/agenda/deliverables-table.tsx`, `src/components/reading-session-modal.tsx`.
+
+- [ ] **`UX-20` — Densidade e Legibilidade das Tabelas em Telas Estreitas**
+  - **Contexto:** As telas de disciplinas, entregas e gerenciamento de leituras têm campos e ações diferentes; em larguras intermediárias, colunas podem comprimir conteúdo antes de a versão móvel ficar disponível. Na inspeção autenticada em 390 px, a tabela de disciplinas manteve a largura de desktop e exibiu rolagem horizontal; a coluna de professor ficou parcialmente cortada.
+  - **Ação:** Verificar pontos de quebra e hierarquia em larguras de 320 a 768 px; priorizar dados essenciais e disponibilizar ações sem rolagem horizontal desnecessária.
+  - **Arquivos-chave:** `src/components/setup/subjects-table.tsx`, `src/components/agenda/deliverables-table.tsx`, `src/components/library/readings-table.tsx`.
+
+- [ ] **`UX-21` — Informar Falha ao Marcar Leitura como Concluída**
+  - **Contexto:** Em `ReadingDetailView`, a ação otimista de marcar como lida reverte o estado em caso de erro, mas o `catch` não exibe aviso; a pessoa pode não entender por que a leitura continua pendente.
+  - **Ação:** Exibir feedback acessível de falha e manter o estado visual sincronizado com o servidor, sem ocultar o erro nem duplicar notificações.
+  - **Arquivos-chave:** `src/components/library/reading-detail-view.tsx`, `src/lib/toast-store.ts`.
+
+- [ ] **`UX-22` — Editar os Dados da Leitura na Página de Detalhes**
+  - **Contexto:** A ideia de editar uma leitura diretamente na própria página de detalhes foi registrada como prematura, mas ainda não especificava quais campos ou como preservar as validações já existentes.
+  - **Ação:** Permitir editar os dados cadastrais relevantes sem sair do detalhe, reutilizando validações e fluxos existentes da Biblioteca; definir quais campos podem ser alterados e garantir que edições não sobrescrevam progresso, sessões ou marcos inadvertidamente.
+  - **Arquivos-chave:** `src/components/library/reading-detail-view.tsx`, `src/components/library/reading-form.tsx`, `src/app/actions.ts`.
+
+- [ ] **`UX-23` — Posicionamento Vertical do Formulário de Login**
+  - **Contexto:** Na inspeção visual da rota `/login` em 1365×900 e 390×844, o formulário fica próximo ao topo (padding de 16/24 unidades) e sobra uma grande área vazia abaixo, especialmente no celular.
+  - **Ação:** Revisar o alinhamento vertical em telas baixas e altas, equilibrando o espaço ao redor do formulário sem prejudicar a visualização quando o teclado virtual está aberto ou houver mensagens de erro.
+  - **Arquivos-chave:** `src/app/login/page.tsx`.
+
+- [ ] **`UX-24` — Espaço Vertical Excessivo no Card de Recomendação do Dashboard**
+  - **Contexto:** Na inspeção autenticada em 390×844, o card de próxima leitura recomendada reservou uma área vazia alta acima do título e das ações, que ficaram concentrados perto da parte inferior do card.
+  - **Ação:** Ajustar a distribuição vertical do conteúdo em telas estreitas para reduzir espaço sem função e manter recomendação, progresso e ações visíveis com hierarquia clara.
+  - **Arquivos-chave:** `src/components/dashboard/recommendation-card.tsx`, `src/components/dashboard/dashboard-view.tsx`.
+
+- [ ] **`UX-25` — Capas Altas Demais nos Cards da Biblioteca Mobile**
+  - **Contexto:** Na rota `/library` em 390×844, a capa dos cards ocupa grande parte da altura disponível; em cards com capa de fallback, título e controles ficam abaixo de uma área sólida extensa, aumentando a rolagem necessária para comparar leituras.
+  - **Ação:** Rever a proporção ou apresentação das capas em telas estreitas para equilibrar reconhecimento visual e densidade da lista, sem prejudicar a leitura dos metadados nem a apresentação em telas maiores.
+  - **Arquivos-chave:** `src/components/library/book-card.tsx`, `src/components/library/reading-cover.tsx`.
+
 ### Concluídos
 - [x] **`UX-03` — Alinhamento Ergonômico dos Botões de Dias da Semana (`/setup`)**
   - *Resolução:* Seletores de dias de cadastro e edição agora usam grade de seis colunas, botões com altura uniforme e estado acessível `aria-pressed`.
@@ -156,6 +267,31 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - **Funcionalidade:** Aplicar média ponderada amortecida entre a velocidade de referência da disciplina e as primeiras medições até que se acumulem ao menos 45 minutos de leitura.
   - **Arquivos-chave:** `src/lib/speed.ts`, `src/app/actions.ts` (`recalculateReadingSpeed`).
 
+- [ ] **`COG-08` — Faixa de Confiança para Previsões de Conclusão**
+  - **Conceito:** Uma data única de término pode transmitir precisão excessiva quando há poucas sessões ou grande variação no ritmo.
+  - **Funcionalidade:** Após validar amostra mínima e dispersão das sessões, exibir uma faixa de previsão ou sinalizar baixa confiança em vez de apresentar uma estimativa pontual como certeza.
+  - **Arquivos-chave:** `src/lib/projection.ts`, `src/lib/speed.ts`, `src/components/library/reading-detail-view.tsx`.
+
+- [ ] **`COG-09` — Comparativo entre Ritmo Recente e Ritmo de Referência**
+  - **Conceito:** A média acumulada pode esconder mudanças sustentadas de ritmo; o estudante não tem uma forma simples de perceber se o progresso recente está acelerando ou desacelerando.
+  - **Funcionalidade:** Comparar períodos recentes com o histórico da própria leitura usando uma janela mínima de sessões e indicar a tendência sem transformar variações pequenas em alertas.
+  - **Arquivos-chave:** `src/lib/speed.ts`, `src/lib/projection.ts`, `src/components/library/reading-detail-view.tsx`.
+
+- [ ] **`COG-10` — Revisão do Orçamento Cognitivo com Duração Real**
+  - **Conceito:** O orçamento diário usa estimativas de duração para revisões e cotas; dados reais de tempo podem revelar que a carga prevista está sistematicamente acima ou abaixo do esforço observado.
+  - **Funcionalidade:** Comparar previsão e duração registrada por tipo de atividade, apresentar a diferença de forma informativa e permitir avaliar calibração sem alterar automaticamente a meta diária.
+  - **Arquivos-chave:** `src/lib/cognitive-budget.ts`, `src/lib/session-time.ts`, `src/components/dashboard/`.
+
+- [ ] **`COG-11` — Detecção de Desvio Persistente entre Plano e Execução**
+  - **Conceito:** Uma leitura pode acumular dias de diferença entre a carga recomendada e o ritmo efetivo sem que uma sessão isolada seja suficiente para indicar um problema.
+  - **Funcionalidade:** Definir uma janela de observação e um limiar explicável para destacar desvios persistentes, distinguindo atraso recuperável de dados insuficientes e sem reordenar a recomendação automaticamente.
+  - **Arquivos-chave:** `src/lib/recommendation.ts`, `src/lib/projection.ts`, `src/components/dashboard/recommendation-card.tsx`.
+
+- [ ] **`COG-12` — Sinalização de Revisões Acumuladas sem Sobrecarga de Alertas**
+  - **Conceito:** Revisões D+1, D+7 e D+21 vencidas em sequência podem se acumular e competir com novas leituras dentro do orçamento cognitivo diário.
+  - **Funcionalidade:** Medir o acúmulo e indicar uma prioridade de recuperação transparente, respeitando o ciclo espaçado existente e sem descartar nem reagendar revisões silenciosamente.
+  - **Arquivos-chave:** `src/lib/cognitive-budget.ts`, `src/lib/agenda.ts`, `src/components/dashboard/`.
+
 ### Concluídos
 - [x] **`COG-01` — Orçamento Diário de Carga Cognitiva (Daily Cognitive Budget)**
   - *Resolução:* Meta diária (`daily_goal_minutes`) passa a atuar como orçamento cognitivo. `computeCognitiveBudget` soma Tier 1 (15 min/revisão) + cotas Tier 2; o Dashboard exibe alerta de *Sobrecarga cognitiva* e `calculateBudgetAwareSuggestedPages` limita a meta recomendada.
@@ -182,6 +318,26 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
 - [ ] **`FEAT-06` — Painel Resumo Semanal no Dashboard**
   - **Conceito:** Visão compacta da semana corrente (segunda a domingo) no Dashboard, mostrando provas/entregas da semana e o total de horas lidas vs. carga prevista.
   - **Arquivos-chave:** `src/components/dashboard/dashboard-view.tsx`, `src/lib/agenda.ts`.
+
+- [ ] **`FEAT-07` — Instalação como Aplicativo Web (PWA)**
+  - **Conceito:** Permitir instalar o Lithium em dispositivos compatíveis, com ícone, nome e janela próprios, mantendo a experiência autenticada e sem prometer disponibilidade offline antes de ela existir.
+  - **Arquivos-chave:** `src/app/`, configuração de metadados e recursos estáticos.
+
+- [ ] **`FEAT-08` — Assinatura ICS de Eventos da Agenda**
+  - **Conceito:** Disponibilizar provas, entregas e revisões em um arquivo ou feed ICS para consulta em calendários externos, sem substituir a Agenda do Lithium.
+  - **Arquivos-chave:** `src/app/agenda/`, `src/lib/agenda.ts`, `src/app/actions.ts`.
+
+- [ ] **`FEAT-09` — Notificações Web Configuráveis para Prazos e Revisões**
+  - **Conceito:** Oferecer lembretes opcionais no navegador para eventos próximos, com controle explícito de permissão, frequência e tipos de notificação.
+  - **Arquivos-chave:** `src/components/agenda/`, `src/app/agenda/`, service worker e infraestrutura de notificações.
+
+- [ ] **`FEAT-10` — Notas Pessoais Associadas a uma Leitura**
+  - **Conceito:** Permitir guardar observações livres sobre uma obra, separadas dos resumos estruturados de Active Recall e sem exigir associação a uma página ou marco.
+  - **Arquivos-chave:** `src/components/library/reading-detail-view.tsx`, `src/app/actions.ts`, `src/types/database.ts`, migração Supabase.
+
+- [ ] **`FEAT-11` — Relatório Pessoal de Evolução de Estudos**
+  - **Conceito:** Reunir em uma tela de consulta os minutos estudados, páginas avançadas, sessões e leituras concluídas em períodos selecionáveis, sem gamificação ou ranking.
+  - **Arquivos-chave:** `src/app/history/`, `src/lib/consistency-heatmap.ts`, componentes de Histórico e Dashboard.
 
 ### Concluídos
 - [x] **`FEAT-03` — Heatmap Minimalista de Consistência (Últimos 28 Dias)**
@@ -246,3 +402,9 @@ As propostas abaixo foram analisadas e **rejeitadas da forma em que foram formul
 | 2026-10-29 | `UX-11` | Card exibe prazo e páginas restantes, permite alternar para segunda opção elegível e direciona estado vazio à Biblioteca | `recommendation-card.tsx`, `recommendation.ts`, `actions.ts`, `dashboard-view.tsx` |
 | 2026-10-29 | `UX-12` | Leituras gerenciadas na Biblioteca, entregas na Agenda e `/setup` dedicado às disciplinas | `library/`, `agenda/`, `setup/`, `navbar.tsx`, `actions.ts` |
 | 2026-10-29 | `UX-03/07/09/10/13/15` | Conclusão dos itens pendentes de UX/UI: grade semanal, som do cronômetro, aviso de sessão expirada, heatmap responsivo, sugestões Title Case e refinamento de cards | `subjects-table.tsx`, `reading-timer-bar.tsx`, `auth-redirect.ts`, `consistency-heatmap.tsx`, `text.ts`, `reading-form.tsx`, `book-card.tsx` |
+| 2026-10-29 | `DOC-07` | Inclusão de cinco novos pontos pendentes em Bugs, UX/UI, Motor Cognitivo e Funcionalidades | `plano-de-implementacao.md` |
+| 2026-10-30 | `DOC-08` | Auditoria estática: registro de riscos observados em RLS, métricas diárias, tratamento de falhas, atomicidade e limites de consulta; feedback de conclusão na Biblioteca | `plano-de-implementacao.md` |
+| 2026-10-30 | `DOC-09` | Ideia prematura de editar uma leitura na página de detalhes refinada e classificada como UX-22; propostas anteriormente não aprovadas mantidas sem promoção | `plano-de-implementacao.md` |
+| 2026-10-30 | `DOC-10` | Revisão visual do login em desktop e mobile; anotado o excesso de espaço abaixo do formulário em viewports observados | `plano-de-implementacao.md` |
+| 2026-10-30 | `DOC-11` | Revisão visual autenticada em desktop e mobile; UX-20 detalhado com o corte da tabela de disciplinas e registrados os atritos UX-24/25; Agenda e Histórico mobile sem problemas evidentes nas telas revistas | `plano-de-implementacao.md` |
+| 2026-10-30 | `BUG-07; BUG-10 a BUG-19` | Paginação do Histórico e listas, rateio por data local, validações de progresso, exclusões restritivas, métricas degradadas e RPCs transacionais; migração v1.12 preparada, não aplicada | `src/app/actions.ts`, `src/lib/session-time.ts`, `src/lib/consistency-heatmap.ts`, componentes de Histórico/Dashboard, `supabase/migration-v1.12.sql`, `supabase/schema.sql` |

@@ -1,5 +1,5 @@
 import { addDaysISO, formatDateBR, todayISO, timestampToDateISO } from "@/lib/dates";
-import { sessionSeconds } from "@/lib/session-time";
+import { sessionSecondsOnDate } from "@/lib/session-time";
 
 export const CONSISTENCY_HEATMAP_DAYS = 28;
 
@@ -80,14 +80,16 @@ export function buildConsistencyHeatmap(
 
   const totals = new Map<string, { minutes: number; sessions: number }>();
   for (const session of sessions) {
-    const date = sessionHeatmapDate(session);
-    if (!date || date < windowStart || date > windowEnd) continue;
-    const minutes = sessionSeconds(session) / 60;
-    const current = totals.get(date) ?? { minutes: 0, sessions: 0 };
-    totals.set(date, {
-      minutes: current.minutes + minutes,
-      sessions: current.sessions + 1,
-    });
+    for (let offset = 0; offset < safeWindow; offset += 1) {
+      const date = addDaysISO(windowStart, offset);
+      const seconds = sessionSecondsOnDate(session, date);
+      if (seconds <= 0) continue;
+      const current = totals.get(date) ?? { minutes: 0, sessions: 0 };
+      totals.set(date, {
+        minutes: current.minutes + seconds / 60,
+        sessions: current.sessions + 1,
+      });
+    }
   }
 
   const days: HeatmapDay[] = [];

@@ -1,5 +1,5 @@
 // ============================================================
-// Lithium — Database Types (mirrors Supabase schema v1.11)
+// Lithium — Database Types (mirrors Supabase schema v1.12)
 // ============================================================
 
 export type ReadingType = "book" | "article";
@@ -70,6 +70,7 @@ export interface Reading {
 export interface ReadingSession {
   id: string;
   reading_id: string;
+  request_id: string | null;
   duration_minutes: number; // Legado obrigatório no banco; derivado dos segundos ao gravar.
   duration_seconds: number | null;
   started_at: string | null;
@@ -98,6 +99,7 @@ export interface SpacedReview {
 
 export interface AppSettings {
   id: number;
+  owner_id: string;
   daily_goal_minutes: number;
   updated_at: string;
 }
@@ -173,6 +175,7 @@ export type ReadingUpdate = Partial<ReadingInsert>;
 
 export interface ReadingSessionInsert {
   reading_id: string;
+  request_id: string;
   pages_read: number;
   duration_seconds: number;
   started_at?: string | null;

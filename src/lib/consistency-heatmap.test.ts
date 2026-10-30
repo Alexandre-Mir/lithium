@@ -69,6 +69,28 @@ describe("consistency-heatmap", () => {
     expect(oct28).toMatchObject({ sessions: 1, minutes: 15, level: 2 });
   });
 
+  it("distribui o tempo de uma sessão entre os dias locais atravessados", () => {
+    const model = buildConsistencyHeatmap(
+      [{
+        duration_minutes: 20,
+        duration_seconds: 1_200,
+        started_at: "2026-10-24T02:50:00Z",
+        ended_at: "2026-10-24T03:10:00Z",
+      }],
+      "2026-10-24",
+    );
+
+    expect(model.days.find((day) => day.date === "2026-10-23")).toMatchObject({
+      sessions: 1,
+      minutes: 10,
+    });
+    expect(model.days.find((day) => day.date === "2026-10-24")).toMatchObject({
+      sessions: 1,
+      minutes: 10,
+    });
+    expect(model.totalMinutes).toBe(20);
+  });
+
   it("gera grade semanal com padding Seg→Dom", () => {
     const model = buildConsistencyHeatmap([], "2026-10-28"); // quarta
     const grid = buildHeatmapWeekGrid(model.days);

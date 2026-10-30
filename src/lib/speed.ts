@@ -71,6 +71,13 @@ export function speedFromTotals(
   stats: readonly ReadingSpeedStat[],
   type: ReadingType,
 ): number {
-  if (!totals || totals.sessions < 1) return pickInitialSpeed(stats, type);
+  if (
+    !totals ||
+    totals.sessions < 1 ||
+    totals.pages_read < 1 ||
+    totals.total_seconds < 1
+  ) {
+    return pickInitialSpeed(stats, type);
+  }
   return Math.round(pph(totals.pages_read, totals.total_seconds) * 100) / 100;
 }

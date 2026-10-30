@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteReadingSession } from "@/app/actions";
+import { deleteReadingSession, getAllReadingSessions } from "@/app/actions";
 import { ReadingSessionWithReading } from "@/types/database";
 import { formatDateTimeBR } from "@/lib/dates";
 import { formatDuration, pph, sessionSeconds, sessionSourceLabel } from "@/lib/session-time";
 import { isUnusualSession } from "@/lib/session-anomaly";
 import { pagesBeforeSession } from "@/lib/session-pages";
-import { buildConsistencyHeatmap } from "@/lib/consistency-heatmap";
+import { buildConsistencyHeatmap, type HeatmapSessionInput } from "@/lib/consistency-heatmap";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,25 +28,46 @@ import Link from "next/link";
 
 interface HistoryViewProps {
   initialSessions: ReadingSessionWithReading[];
-  truncated?: boolean;
+  initialNextOffset?: number;
+  initialHasMore?: boolean;
+  initialHeatmapSessions?: HeatmapSessionInput[];
+  totalCount?: number;
+  totalPages?: number;
+  totalSeconds?: number;
 }
 
-export function HistoryView({ initialSessions, truncated = false }: HistoryViewProps) {
+export function HistoryView({
+  initialSessions,
+  initialNextOffset = initialSessions.length,
+  initialHasMore = false,
+  initialHeatmapSessions = [],
+  totalCount = initialSessions.length,
+  totalPages,
+  totalSeconds,
+}: HistoryViewProps) {
   const router = useRouter();
+  const [loadedSessions, setLoadedSessions] = useState<ReadingSessionWithReading[]>([]);
+  const [loadedHasMore, setLoadedHasMore] = useState<boolean | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
-  const editingSession = initialSessions.find((session) => session.id === editingSessionId);
-  const deletingSession = initialSessions.find((session) => session.id === deletingSessionId);
+  const sessions = [...initialSessions, ...loadedSessions];
+  const nextOffset = initialNextOffset + loadedSessions.length;
+  const hasMore = loadedHasMore ?? initialHasMore;
+
+  const editingSession = sessions.find((session) => session.id === editingSessionId);
+  const deletingSession = sessions.find((session) => session.id === deletingSessionId);
   const sessionsByReading = new Map<string, ReadingSessionWithReading[]>();
-  for (const session of initialSessions) {
+  for (const session of sessions) {
     const current = sessionsByReading.get(session.reading_id) ?? [];
     current.push(session);
     sessionsByReading.set(session.reading_id, current);
   }
 
-  const filteredSessions = initialSessions.filter((s) => {
+  const filteredSessions = sessions.filter((s) => {
     const title = s.reading?.title || "";
     const author = s.reading?.author || "";
     const subject = s.reading?.subject?.name || "";
@@ -58,16 +79,31 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
     );
   });
 
-  const totalSeconds = initialSessions.reduce(
+  const summarySeconds = totalSeconds ?? sessions.reduce(
     (acc, session) => acc + sessionSeconds(session),
-    0
+    0,
   );
-  const totalPages = initialSessions.reduce(
-    (acc, s) => acc + (s.pages_read || 0),
-    0
+  const summaryPages = totalPages ?? sessions.reduce(
+    (acc, session) => acc + (session.pages_read || 0),
+    0,
   );
-  const avgSpeed = pph(totalPages, totalSeconds).toFixed(1);
-  const consistencyHeatmap = buildConsistencyHeatmap(initialSessions);
+  const avgSpeed = pph(summaryPages, summarySeconds).toFixed(1);
+  const consistencyHeatmap = buildConsistencyHeatmap(initialHeatmapSessions);
+
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    setLoadError(null);
+    try {
+      const result = await getAllReadingSessions(nextOffset);
+      setLoadedSessions((current) => [...current, ...(result.sessions as ReadingSessionWithReading[])]);
+      setLoadedHasMore(result.hasMore);
+    } catch (error: unknown) {
+      setLoadError(error instanceof Error ? error.message : "Não foi possível carregar mais sessões.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-8 space-y-6">
@@ -95,14 +131,14 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
           <div className="rounded-md border border-gray-200 bg-white p-2.5 dark:border-gray-800 dark:bg-gray-900">
             <span className="text-[10px] font-semibold text-gray-500 uppercase block">Tempo Total</span>
             <span className="text-base font-bold font-mono text-gray-900 dark:text-gray-100">
-              {formatDuration(totalSeconds)}
+              {formatDuration(summarySeconds)}
             </span>
           </div>
 
           <div className="rounded-md border border-gray-200 bg-white p-2.5 dark:border-gray-800 dark:bg-gray-900">
             <span className="text-[10px] font-semibold text-gray-500 uppercase block">Páginas</span>
             <span className="text-base font-bold font-mono text-gray-900 dark:text-gray-100">
-              {totalPages}p
+              {summaryPages}p
             </span>
           </div>
 
@@ -116,12 +152,6 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
       </div>
 
       <ConsistencyHeatmap model={consistencyHeatmap} />
-
-      {truncated && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          Dados truncados em 1.000 registros
-        </div>
-      )}
 
       {/* Busca */}
       <div className="relative max-w-sm">
@@ -213,6 +243,18 @@ export function HistoryView({ initialSessions, truncated = false }: HistoryViewP
                         )}
                       </div>
                     </div>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-[11px] text-gray-500" aria-live="polite">
+                      Exibindo {sessions.length} de {totalCount} sessões
+                    </p>
+                    {loadError && <p role="alert" className="text-xs text-red-700">{loadError}</p>}
+                    {hasMore && (
+                      <Button type="button" variant="outline" size="sm" onClick={handleLoadMore} disabled={loadingMore}>
+                        {loadingMore ? "Carregando..." : "Carregar mais sessões"}
+                      </Button>
+                    )}
                   </div>
 
                   <div className="flex justify-end border-t border-gray-100 pt-1 dark:border-gray-800">

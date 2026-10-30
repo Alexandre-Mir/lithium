@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { getReadingCreateErrors, validateReadingUpdate } from "@/lib/reading-validation";
+import {
+  getReadingCreateErrors,
+  validateReadingUpdate,
+  validateTargetPagesAgainstProgress,
+} from "@/lib/reading-validation";
+
+describe("validateTargetPagesAgainstProgress", () => {
+  it("permite uma meta igual ou superior ao progresso e rejeita uma meta inferior", () => {
+    expect(validateTargetPagesAgainstProgress(80, 80)).toBeNull();
+    expect(validateTargetPagesAgainstProgress(100, 80)).toBeNull();
+    expect(validateTargetPagesAgainstProgress(79, 80)).toContain("progresso atual (80 páginas)");
+  });
+});
 
 describe("validateReadingUpdate", () => {
   it("aceita campos válidos e datas de calendário existentes", () => {

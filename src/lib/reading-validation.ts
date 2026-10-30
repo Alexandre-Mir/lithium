@@ -20,6 +20,16 @@ export type ReadingCreateFieldErrors = Partial<
   Record<"title" | "subject_id" | "target_pages" | "full_book_pages" | "segment_start_page" | "deadline", string>
 >;
 
+export function validateTargetPagesAgainstProgress(
+  targetPages: number,
+  pagesRead: number,
+): string | null {
+  if (Number.isFinite(pagesRead) && pagesRead > targetPages) {
+    return `A meta não pode ser menor que o progresso atual (${pagesRead} páginas).`;
+  }
+  return null;
+}
+
 function isValidDateISO(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);

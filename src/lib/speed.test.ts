@@ -47,6 +47,13 @@ describe("speedFromTotals", () => {
     )).toBe(66.7);
   });
 
+  it.each([
+    { sessions: 1, pages_read: 10, total_seconds: 0 },
+    { sessions: 1, pages_read: 0, total_seconds: 600 },
+  ])("ignora totais inválidos ou sem duração útil", (totals) => {
+    expect(speedFromTotals(totals, [], "book")).toBe(20);
+  });
+
   it("usa a referência de 20 p/h quando não há sessões nem estatísticas suficientes", () => {
     expect(speedFromTotals(null, [], "book")).toBe(20);
   });

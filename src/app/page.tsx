@@ -27,7 +27,7 @@ export default async function HomePage() {
   let subjectStats: SubjectStat[] = [];
   let subjectStatsTruncated = false;
   let lastSessionReadingId: string | null = null;
-  let todayReadingMinutes = 0;
+  let todayReadingMinutes: number | null = null;
   let dailyGoalMinutes = 60;
   let averageSpeedPph = 20;
   let recommendedReadingId: string | null = null;
@@ -47,6 +47,7 @@ export default async function HomePage() {
   let milestoneSummaries: MilestoneSummaryWithBook[] = [];
   let consistencyHeatmap: ConsistencyHeatmapModel = emptyConsistencyHeatmap();
   let connectionError: string | null = null;
+  let metricWarnings: string[] = [];
 
   const [dashboardResult, statsResult, summariesResult] = await Promise.allSettled([
     getDashboardData(),
@@ -67,7 +68,8 @@ export default async function HomePage() {
     readingDeliverableMap = data.readingDeliverableMap || {};
     allDeliverables = data.allDeliverables || [];
     lastSessionReadingId = data.lastSessionReadingId ?? null;
-    todayReadingMinutes = data.todayReadingMinutes ?? 0;
+    todayReadingMinutes = data.todayReadingMinutes ?? null;
+    metricWarnings = data.metricWarnings ?? [];
     dailyGoalMinutes = data.dailyGoalMinutes ?? 60;
     averageSpeedPph = data.averageSpeedPph ?? 20;
     recommendedReadingId = data.recommendedReadingId ?? null;
@@ -88,6 +90,7 @@ export default async function HomePage() {
   if (statsResult.status === "fulfilled") {
     subjectStats = statsResult.value.stats || [];
     subjectStatsTruncated = statsResult.value.truncated;
+    if (statsResult.value.error) metricWarnings.push("As métricas por disciplina estão indisponíveis.");
   } else {
     console.warn("Aviso ao carregar métricas por disciplina:", statsResult.reason);
     connectionError ??= statsResult.reason instanceof Error
@@ -130,6 +133,7 @@ export default async function HomePage() {
         allDeliverables={allDeliverables}
         subjectStats={subjectStats}
         subjectStatsTruncated={subjectStatsTruncated}
+        metricWarnings={metricWarnings}
         lastSessionReadingId={lastSessionReadingId}
         todayReadingMinutes={todayReadingMinutes}
         dailyGoalMinutes={dailyGoalMinutes}

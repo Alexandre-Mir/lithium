@@ -3,6 +3,7 @@ import {
   formatDuration,
   getTodayTotalReadingTime,
   pph,
+  sessionPagesOnDate,
   secondsToMinutes,
   sessionSeconds,
 } from "@/lib/session-time";
@@ -37,23 +38,23 @@ describe("session-time", () => {
     expect(formatDuration(seconds)).toBe(expected);
   });
 
-  it("soma sessões iniciadas ou encerradas hoje no fuso de São Paulo", () => {
+  it("divide o tempo de sessões que cruzam a meia-noite de São Paulo", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-24T15:00:00Z"));
 
     expect(
       getTodayTotalReadingTime([
         {
-          duration_minutes: 10,
-          duration_seconds: 630,
-          started_at: "2026-10-24T02:50:00Z", // Dia 23 em São Paulo; termina no dia 24.
-          ended_at: "2026-10-24T03:00:30Z",
+          duration_minutes: 20,
+          duration_seconds: 1_200,
+          started_at: "2026-10-24T02:50:00Z",
+          ended_at: "2026-10-24T03:10:00Z",
         },
         {
           duration_minutes: 5,
           duration_seconds: 300,
-          started_at: "2026-10-24T02:00:00Z",
-          ended_at: "2026-10-24T02:05:00Z",
+          started_at: "2026-10-24T03:00:00Z",
+          ended_at: "2026-10-24T03:05:00Z",
         },
         {
           duration_minutes: 4,
@@ -62,7 +63,20 @@ describe("session-time", () => {
           ended_at: "2026-10-23T15:04:00Z",
         },
       ]),
-    ).toBe(10.5);
+    ).toBe(15);
+  });
+
+  it("distribui as páginas da sessão entre os dias locais atravessados", () => {
+    const session = {
+      pages_read: 10,
+      duration_minutes: 20,
+      duration_seconds: 1_200,
+      started_at: "2026-10-24T02:50:00Z",
+      ended_at: "2026-10-24T03:10:00Z",
+    };
+
+    expect(sessionPagesOnDate(session, "2026-10-23")).toBe(5);
+    expect(sessionPagesOnDate(session, "2026-10-24")).toBe(5);
   });
 
   it("usa created_at para sessões manuais legadas sem início e fim", () => {

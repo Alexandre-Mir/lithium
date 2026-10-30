@@ -1,12 +1,11 @@
 "use server";
 
-import { supabase } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { todayISO, addDaysISO, daysUntil, startOfDayUtcISO } from "@/lib/dates";
 import { findLinkedDeliverable } from "@/lib/cascade";
 import { fetchArticleMetadata, fetchBookMetadata } from "@/lib/book-metadata";
-import { globalAverageSpeedPph, pickInitialSpeed, pickUserPacePagesPerDay, speedFromTotals } from "@/lib/speed";
+import { globalAverageSpeedPph, pickInitialSpeed, pickUserPacePagesPerDay } from "@/lib/speed";
 import { projectReadingQueue } from "@/lib/projection";
 import {
   calculateBudgetAwareSuggestedPages,
@@ -18,14 +17,15 @@ import {
   CONSISTENCY_HEATMAP_DAYS,
   type HeatmapSessionInput,
 } from "@/lib/consistency-heatmap";
-import { getReadingCreateErrors, validateReadingUpdate } from "@/lib/reading-validation";
-import { warnIfTruncated } from "@/lib/warn-if-truncated";
+import {
+  getReadingCreateErrors,
+  validateReadingUpdate,
+  validateTargetPagesAgainstProgress,
+} from "@/lib/reading-validation";
 import { computeRemaining } from "@/lib/progress";
 import { computeSubjectPageProgress } from "@/lib/subject-progress";
-import { getTodayTotalReadingTime, pph, secondsToMinutes, sessionSeconds } from "@/lib/session-time";
+import { getTodayTotalReadingTime, pph, sessionPagesOnDate, sessionSeconds } from "@/lib/session-time";
 import { validateSessionInput } from "@/lib/session-validation";
-import { getCrossedMilestones } from "@/lib/milestone-crossing";
-import { milestonesForSegment } from "@/lib/toc-parser";
 import {
   getDueAgendaReviews,
   getReviewScheduleDates,
@@ -62,8 +62,12 @@ import type {
   ReadingSpeedStat,
   MilestoneSummary,
   MilestoneSummaryWithBook,
-  ReadingMilestone,
 } from "@/types/database";
+
+async function getActionClient() {
+  const { client } = await requireSupabaseUser();
+  return client;
+}
 
 // ============================================================
 // VALIDAÇÃO DE DIAS DE AULA
@@ -78,13 +82,19 @@ export async function validateClassDays(
 ): Promise<{ valid: boolean; exceededDay?: string }> {
   if (!classDays || classDays.length === 0) return { valid: true };
 
-  const { data: allSubjects, error } = await supabase
-    .from("subjects")
-    .select("id, class_days");
-
-  if (error) {
-    console.warn("Aviso ao validar class_days:", error.message);
-    return { valid: true }; // Não bloqueia caso o banco ainda esteja sincronizando
+  const client = await getActionClient();
+  const allSubjects: Array<Pick<Subject, "id" | "class_days">> = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
+      .from("subjects")
+      .select("id, class_days")
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(`Não foi possível validar os dias da disciplina: ${error.message}`);
+    const rows = (data ?? []) as Array<Pick<Subject, "id" | "class_days">>;
+    allSubjects.push(...rows);
+    if (rows.length < pageSize) break;
   }
 
   // Contar disciplinas por dia
@@ -111,22 +121,32 @@ export async function validateClassDays(
 // ============================================================
 
 export async function getSubjects() {
-  const { data, error } = await supabase
-    .from("subjects")
-    .select("*")
-    .order("created_at", { ascending: true });
-  if (error) throw new Error(error.message);
-  return data;
+  const client = await getActionClient();
+  const pageSize = 1000;
+  const subjects: Subject[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
+      .from("subjects")
+      .select("*")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as Subject[];
+    subjects.push(...rows);
+    if (rows.length < pageSize) return subjects;
+  }
 }
 
 export async function createSubject(input: SubjectInsert) {
+  const client = await getActionClient();
   // Validação: limite de 2 disciplinas por dia
   const validation = await validateClassDays(input.class_days || []);
   if (!validation.valid) {
     throw new Error(`Limite de 2 disciplinas por dia atingido (dia: ${validation.exceededDay}).`);
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from("subjects")
     .insert(input)
     .select()
@@ -139,6 +159,7 @@ export async function createSubject(input: SubjectInsert) {
 }
 
 export async function updateSubject(id: string, input: SubjectUpdate) {
+  const client = await getActionClient();
   if (input.class_days) {
     const validation = await validateClassDays(input.class_days, id);
     if (!validation.valid) {
@@ -146,7 +167,7 @@ export async function updateSubject(id: string, input: SubjectUpdate) {
     }
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from("subjects")
     .update(input)
     .eq("id", id)
@@ -161,8 +182,21 @@ export async function updateSubject(id: string, input: SubjectUpdate) {
 }
 
 export async function deleteSubject(id: string) {
-  const { error } = await supabase.from("subjects").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  const client = await getActionClient();
+  const [{ count: deliverables, error: deliverableError }, { count: readings, error: readingError }] =
+    await Promise.all([
+      client.from("deliverables").select("id", { count: "exact", head: true }).eq("subject_id", id),
+      client.from("readings").select("id", { count: "exact", head: true }).eq("subject_id", id),
+    ]);
+  if (deliverableError) throw new Error(deliverableError.message);
+  if (readingError) throw new Error(readingError.message);
+  if ((deliverables ?? 0) > 0 || (readings ?? 0) > 0) {
+    throw new Error("Não é possível excluir esta disciplina enquanto houver leituras ou entregas vinculadas.");
+  }
+  const { error } = await client.from("subjects").delete().eq("id", id);
+  if (error) throw new Error(error.code === "23503"
+    ? "Não é possível excluir esta disciplina enquanto houver dados vinculados."
+    : error.message);
   revalidatePath("/");
   revalidatePath("/setup");
   revalidatePath("/library", "layout");
@@ -174,18 +208,28 @@ export async function deleteSubject(id: string) {
 // ============================================================
 
 export async function getDeliverables(subjectId?: string) {
-  let query = supabase
-    .from("deliverables")
-    .select("*")
-    .order("date", { ascending: true });
-  if (subjectId) query = query.eq("subject_id", subjectId);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data;
+  const client = await getActionClient();
+  const pageSize = 1000;
+  const deliverables: Deliverable[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    let query = client
+      .from("deliverables")
+      .select("*")
+      .order("date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (subjectId) query = query.eq("subject_id", subjectId);
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as Deliverable[];
+    deliverables.push(...rows);
+    if (rows.length < pageSize) return deliverables;
+  }
 }
 
 export async function createDeliverable(input: DeliverableInsert) {
-  const { data, error } = await supabase
+  const client = await getActionClient();
+  const { data, error } = await client
     .from("deliverables")
     .insert(input)
     .select()
@@ -197,7 +241,8 @@ export async function createDeliverable(input: DeliverableInsert) {
 }
 
 export async function updateDeliverable(id: string, input: DeliverableUpdate) {
-  const { data, error } = await supabase
+  const client = await getActionClient();
+  const { data, error } = await client
     .from("deliverables")
     .update(input)
     .eq("id", id)
@@ -210,7 +255,8 @@ export async function updateDeliverable(id: string, input: DeliverableUpdate) {
 }
 
 export async function deleteDeliverable(id: string) {
-  const { error } = await supabase.from("deliverables").delete().eq("id", id);
+  const client = await getActionClient();
+  const { error } = await client.from("deliverables").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/");
   revalidatePath("/agenda");
@@ -252,46 +298,48 @@ function attachSuggestedDeadlines<T extends ReadingQueueSource>(
 }
 
 async function getUndatedActiveReadings() {
-  const { data, error } = await supabase
-    .from("readings")
-    .select("id, target_pages, created_at, deadline, is_read")
-    .eq("is_read", false)
-    .is("deadline", null)
-    .order("created_at", { ascending: true });
-  if (error) throw new Error(error.message);
-  const rows = data ?? [];
-  warnIfTruncated(rows, "getUndatedActiveReadings");
-  return rows as Pick<Reading, "id" | "target_pages" | "created_at" | "deadline" | "is_read">[];
+  const client = await getActionClient();
+  const pageSize = 1000;
+  const rows: Array<Pick<Reading, "id" | "target_pages" | "created_at" | "deadline" | "is_read">> = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
+      .from("readings")
+      .select("id, target_pages, created_at, deadline, is_read")
+      .eq("is_read", false)
+      .is("deadline", null)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as typeof rows;
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
 }
 
 async function getReadingProgressMap(): Promise<Map<string, ReadingProgressSummary>> {
-  try {
-    const { data, error } = await supabase
+  const client = await getActionClient();
+  const pageSize = 1000;
+  const rows: ReadingProgressViewRow[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
       .from("reading_progress")
-      .select("reading_id, sessions, pages_read, total_seconds");
-
-    if (error) {
-      console.warn("Não foi possível consultar reading_progress; páginas lidas serão consideradas zero:", error.message);
-      return new Map();
-    }
-
-    const rows = (data ?? []) as unknown as ReadingProgressViewRow[];
-    warnIfTruncated(rows, "getReadingProgressMap");
-    return new Map(rows.map((row) => [
-      row.reading_id,
-      {
-        pages_read: Number(row.pages_read) || 0,
-        sessions: Number(row.sessions) || 0,
-        total_seconds: Number(row.total_seconds) || 0,
-      },
-    ]));
-  } catch (error: unknown) {
-    console.warn(
-      "Erro ao consultar reading_progress; páginas lidas serão consideradas zero:",
-      error instanceof Error ? error.message : "Falha desconhecida.",
-    );
-    return new Map();
+      .select("reading_id, sessions, pages_read, total_seconds")
+      .order("reading_id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(`Não foi possível carregar o progresso das leituras: ${error.message}`);
+    const page = (data ?? []) as unknown as ReadingProgressViewRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
   }
+  return new Map(rows.map((row) => [
+    row.reading_id,
+    {
+      pages_read: Number(row.pages_read) || 0,
+      sessions: Number(row.sessions) || 0,
+      total_seconds: Number(row.total_seconds) || 0,
+    },
+  ]));
 }
 
 async function getLatestSessionDateMap(
@@ -304,9 +352,10 @@ async function getLatestSessionDateMap(
   const latestDates = new Map<string, string>();
   if (readingIds.length === 0) return latestDates;
 
+  const client = await getActionClient();
   const pageSize = 1000;
   for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from("reading_sessions")
       .select("reading_id, started_at, ended_at, created_at")
       .in("reading_id", readingIds)
@@ -315,8 +364,7 @@ async function getLatestSessionDateMap(
       .range(offset, offset + pageSize - 1);
 
     if (error) {
-      console.warn("Não foi possível consultar a última sessão por leitura:", error.message);
-      return latestDates;
+      throw new Error(`Não foi possível consultar a última sessão por leitura: ${error.message}`);
     }
 
     const rows = (data ?? []) as Array<Pick<ReadingSession, "reading_id" | "started_at" | "ended_at" | "created_at">>;
@@ -336,17 +384,25 @@ async function getLatestSessionDateMap(
 }
 
 export async function getReadings(subjectId?: string) {
-  let query = supabase
-    .from("readings")
-    .select("*, subject:subjects(*)")
-    .order("deadline", { ascending: true });
-  if (subjectId) query = query.eq("subject_id", subjectId);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  const rows = data ?? [];
-  warnIfTruncated(rows, "getReadings");
+  const client = await getActionClient();
+  const pageSize = 1000;
+  const rows: Reading[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    let query = client
+      .from("readings")
+      .select("*, subject:subjects(*)")
+      .order("deadline", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (subjectId) query = query.eq("subject_id", subjectId);
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as unknown as Reading[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
   const [progressByReading, speedStats] = await Promise.all([getReadingProgressMap(), getSpeedStats()]);
-  const readingsWithProgress = (rows as unknown as Reading[]).map((reading) => ({
+  const readingsWithProgress = rows.map((reading) => ({
     ...reading,
     pages_read: progressByReading.get(reading.id)?.pages_read ?? 0,
   }));
@@ -354,7 +410,8 @@ export async function getReadings(subjectId?: string) {
 }
 
 export async function getReadingById(id: string) {
-  const { data, error } = await supabase
+  const client = await getActionClient();
+  const { data, error } = await client
     .from("readings")
     .select("*, subject:subjects(*)")
     .eq("id", id)
@@ -364,7 +421,8 @@ export async function getReadingById(id: string) {
 }
 
 export async function getSpacedReviewsByReading(readingId: string) {
-  const { data, error } = await supabase
+  const client = await getActionClient();
+  const { data, error } = await client
     .from("spaced_reviews")
     .select("*")
     .eq("reading_id", readingId)
@@ -374,14 +432,12 @@ export async function getSpacedReviewsByReading(readingId: string) {
 }
 
 export async function getSpeedStats(): Promise<ReadingSpeedStat[]> {
-  const { data, error } = await supabase
+  const client = await getActionClient();
+  const { data, error } = await client
     .from("reading_speed_stats")
     .select("reading_type, sessions, total_pages, total_minutes, total_seconds");
 
-  if (error) {
-    console.warn("Não foi possível consultar reading_speed_stats:", error.message);
-    return [];
-  }
+  if (error) throw new Error(`Não foi possível consultar reading_speed_stats: ${error.message}`);
 
   return (data ?? []) as unknown as ReadingSpeedStat[];
 }
@@ -395,9 +451,10 @@ async function getTodayReadingSummary(): Promise<{
   const end = startOfDayUtcISO(addDaysISO(today, 1));
   const pageSize = 1000;
   const sessions: TodayReadingSession[] = [];
+  const client = await getActionClient();
 
   for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from("reading_sessions")
       .select("reading_id, pages_read, duration_minutes, duration_seconds, started_at, ended_at, created_at")
       .or(
@@ -406,10 +463,7 @@ async function getTodayReadingSummary(): Promise<{
       .order("created_at", { ascending: true })
       .range(offset, offset + pageSize - 1);
 
-    if (error) {
-      console.warn("Não foi possível consultar as sessões de hoje:", error.message);
-      return { minutes: 0, pagesByReading: new Map() };
-    }
+    if (error) throw new Error(`Não foi possível consultar as sessões de hoje: ${error.message}`);
 
     const rows = (data ?? []) as unknown as TodayReadingSession[];
     sessions.push(...rows);
@@ -418,9 +472,11 @@ async function getTodayReadingSummary(): Promise<{
 
   const pagesByReading = new Map<string, number>();
   for (const session of sessions) {
+    const pagesToday = sessionPagesOnDate(session, today);
+    if (pagesToday <= 0) continue;
     pagesByReading.set(
       session.reading_id,
-      (pagesByReading.get(session.reading_id) ?? 0) + session.pages_read,
+      (pagesByReading.get(session.reading_id) ?? 0) + pagesToday,
     );
   }
 
@@ -438,9 +494,10 @@ async function getConsistencyHeatmapSessions(
   const end = startOfDayUtcISO(addDaysISO(today, 1));
   const pageSize = 1000;
   const sessions: HeatmapSessionInput[] = [];
+  const client = await getActionClient();
 
   for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from("reading_sessions")
       .select("duration_minutes, duration_seconds, started_at, ended_at, created_at")
       .or(
@@ -449,10 +506,7 @@ async function getConsistencyHeatmapSessions(
       .order("created_at", { ascending: true })
       .range(offset, offset + pageSize - 1);
 
-    if (error) {
-      console.warn("Não foi possível consultar sessões do heatmap:", error.message);
-      return [];
-    }
+    if (error) throw new Error(`Não foi possível consultar sessões do heatmap: ${error.message}`);
 
     const rows = (data ?? []) as unknown as HeatmapSessionInput[];
     sessions.push(...rows);
@@ -463,18 +517,17 @@ async function getConsistencyHeatmapSessions(
 }
 
 export async function getDailyGoalMinutes(): Promise<number> {
-  const { data, error } = await supabase
+  const client = await getActionClient();
+  const { data, error } = await client
     .from("app_settings")
     .select("daily_goal_minutes")
     .eq("id", 1)
     .maybeSingle();
 
-  if (error) {
-    console.warn("Não foi possível consultar a meta diária; usando 60 minutos:", error.message);
-    return 60;
-  }
+  if (error) throw new Error(`Não foi possível consultar a meta diária: ${error.message}`);
 
-  return Number(data?.daily_goal_minutes) || 60;
+  if (!data) throw new Error("Meta diária não encontrada para a conta autenticada.");
+  return Number(data.daily_goal_minutes);
 }
 
 export async function updateDailyGoalMinutes(minutes: number): Promise<number> {
@@ -482,9 +535,11 @@ export async function updateDailyGoalMinutes(minutes: number): Promise<number> {
     throw new Error("A meta diária deve ser um número inteiro entre 1 e 1.440 minutos.");
   }
 
-  const { data, error } = await supabase
+  const client = await getActionClient();
+  const { data, error } = await client
     .from("app_settings")
-    .upsert({ id: 1, daily_goal_minutes: minutes })
+    .update({ daily_goal_minutes: minutes })
+    .eq("id", 1)
     .select("daily_goal_minutes")
     .single();
 
@@ -546,12 +601,13 @@ export async function createReading(input: ReadingInsert) {
   if (validationError) throw new Error(validationError);
 
   const currentSpeed = input.current_speed_pph ?? pickInitialSpeed(await getSpeedStats(), input.type);
+  const client = await getActionClient();
   const insert = {
     ...input,
     current_speed_pph: currentSpeed,
     ...(input.metadata_source ? { metadata_fetched_at: new Date().toISOString() } : {}),
   };
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from("readings")
     .insert(insert)
     .select()
@@ -580,7 +636,8 @@ type MetadataFields = {
 };
 
 export async function refreshReadingMetadata(readingId: string, options: { force?: boolean } = {}) {
-  const { data: reading, error: readingError } = await supabase.from("readings").select("id, type, isbn, doi, cover_url, publisher, published_year, metadata_source, metadata_fetched_at").eq("id", readingId).single();
+  const client = await getActionClient();
+  const { data: reading, error: readingError } = await client.from("readings").select("id, type, isbn, doi, cover_url, publisher, published_year, metadata_source, metadata_fetched_at").eq("id", readingId).single();
   if (readingError) throw new Error(readingError.message);
   if (!options.force && reading.metadata_fetched_at) return { status: "skipped" as const };
   const result = reading.type === "book" && reading.isbn ? await fetchBookMetadata(reading.isbn) : reading.type === "article" && reading.doi ? await fetchArticleMetadata(reading.doi) : { status: "not_found" as const };
@@ -588,7 +645,7 @@ export async function refreshReadingMetadata(readingId: string, options: { force
   const fields: MetadataFields = result.status === "not_found"
     ? { cover_url: reading.cover_url, publisher: reading.publisher, published_year: reading.published_year, metadata_source: reading.metadata_source, metadata_fetched_at: new Date().toISOString() }
     : { cover_url: result.data.coverUrl ?? reading.cover_url, publisher: result.data.publisher ?? reading.publisher, published_year: result.data.publishedYear ?? reading.published_year, metadata_source: result.data.source ?? reading.metadata_source, metadata_fetched_at: new Date().toISOString() };
-  const { error } = await supabase.from("readings").update(fields).eq("id", readingId);
+  const { error } = await client.from("readings").update(fields).eq("id", readingId);
   if (error) throw new Error(error.message);
   revalidatePath("/library");
   revalidatePath(`/library/${readingId}`);
@@ -596,7 +653,8 @@ export async function refreshReadingMetadata(readingId: string, options: { force
 }
 
 export async function backfillMissingMetadata() {
-  const { data: readings, error } = await supabase.from("readings").select("id, type, isbn, doi, metadata_fetched_at").is("metadata_fetched_at", null).or("isbn.not.is.null,doi.not.is.null").limit(6);
+  const client = await getActionClient();
+  const { data: readings, error } = await client.from("readings").select("id, type, isbn, doi, metadata_fetched_at").is("metadata_fetched_at", null).or("isbn.not.is.null,doi.not.is.null").limit(6);
   if (error) throw new Error(error.message);
   let updated = 0;
   let notFound = 0;
@@ -611,7 +669,8 @@ export async function backfillMissingMetadata() {
       if (result.reason === "rate_limited") break;
     }
   }
-  const { count } = await supabase.from("readings").select("id", { count: "exact", head: true }).is("metadata_fetched_at", null).or("isbn.not.is.null,doi.not.is.null");
+  const { count, error: countError } = await client.from("readings").select("id", { count: "exact", head: true }).is("metadata_fetched_at", null).or("isbn.not.is.null,doi.not.is.null");
+  if (countError) throw new Error(countError.message);
   return { updated, notFound, failed, remaining: count ?? 0 };
 }
 
@@ -619,7 +678,22 @@ export async function updateReading(id: string, input: ReadingUpdate) {
   const validationError = validateReadingUpdate(input);
   if (validationError) throw new Error(validationError);
 
-  const { data, error } = await supabase
+  const client = await getActionClient();
+  if (input.target_pages !== undefined) {
+    const { data: progress, error: progressError } = await client
+      .from("reading_progress")
+      .select("pages_read")
+      .eq("reading_id", id)
+      .maybeSingle();
+    if (progressError) throw new Error(progressError.message);
+    const progressValidation = validateTargetPagesAgainstProgress(
+      input.target_pages,
+      Number(progress?.pages_read) || 0,
+    );
+    if (progressValidation) throw new Error(progressValidation);
+  }
+
+  const { data, error } = await client
     .from("readings")
     .update(input)
     .eq("id", id)
@@ -634,8 +708,26 @@ export async function updateReading(id: string, input: ReadingUpdate) {
 }
 
 export async function deleteReading(id: string) {
-  const { error } = await supabase.from("readings").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  const client = await getActionClient();
+  const [
+    { count: sessions, error: sessionError },
+    { count: reviews, error: reviewError },
+    { count: summaries, error: summaryError },
+  ] = await Promise.all([
+    client.from("reading_sessions").select("id", { count: "exact", head: true }).eq("reading_id", id),
+    client.from("spaced_reviews").select("id", { count: "exact", head: true }).eq("reading_id", id),
+    client.from("milestone_summaries").select("id", { count: "exact", head: true }).eq("book_id", id),
+  ]);
+  if (sessionError) throw new Error(sessionError.message);
+  if (reviewError) throw new Error(reviewError.message);
+  if (summaryError) throw new Error(summaryError.message);
+  if ((sessions ?? 0) > 0 || (reviews ?? 0) > 0 || (summaries ?? 0) > 0) {
+    throw new Error("Não é possível excluir esta leitura enquanto houver sessões ou revisões vinculadas.");
+  }
+  const { error } = await client.from("readings").delete().eq("id", id);
+  if (error) throw new Error(error.code === "23503"
+    ? "Não é possível excluir esta leitura enquanto houver dados vinculados."
+    : error.message);
   revalidatePath("/");
   revalidatePath("/library");
   revalidatePath("/agenda");
@@ -646,47 +738,22 @@ export async function deleteReading(id: string) {
 // ============================================================
 
 export async function getReadingSessions(readingId: string) {
-  const { data, error } = await supabase
-    .from("reading_sessions")
-    .select("*")
-    .eq("reading_id", readingId)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-async function recalculateReadingSpeed(readingId: string) {
-  const [readingResult, progressResult, stats] = await Promise.all([
-    supabase.from("readings").select("type").eq("id", readingId).maybeSingle(),
-    supabase
-      .from("reading_progress")
-      .select("sessions, pages_read, total_seconds")
+  const client = await getActionClient();
+  const pageSize = 1000;
+  const sessions: ReadingSession[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
+      .from("reading_sessions")
+      .select("*")
       .eq("reading_id", readingId)
-      .maybeSingle(),
-    getSpeedStats(),
-  ]);
-  if (readingResult.error) throw new Error(readingResult.error.message);
-  if (!readingResult.data) throw new Error("Leitura não encontrada para recalcular a velocidade.");
-  if (progressResult.error) throw new Error(progressResult.error.message);
-
-  const progress = progressResult.data;
-  const newSpeedPph = speedFromTotals(
-    progress
-      ? {
-          sessions: Number(progress.sessions) || 0,
-          pages_read: Number(progress.pages_read) || 0,
-          total_seconds: Number(progress.total_seconds) || 0,
-        }
-      : null,
-    stats,
-    readingResult.data.type,
-  );
-  const { error } = await supabase
-    .from("readings")
-    .update({ current_speed_pph: newSpeedPph })
-    .eq("id", readingId);
-  if (error) throw new Error(error.message);
-  return newSpeedPph;
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as ReadingSession[];
+    sessions.push(...rows);
+    if (rows.length < pageSize) return sessions;
+  }
 }
 
 function revalidateReadingSessionPaths(readingId: string) {
@@ -696,15 +763,32 @@ function revalidateReadingSessionPaths(readingId: string) {
   revalidatePath(`/library/${readingId}`);
 }
 
-export async function getAllReadingSessions() {
-  const { data, error } = await supabase
-    .from("reading_sessions")
-    .select("*, reading:readings(title, chapter_title, author, type, target_pages, full_book_pages, segment_start_page, subject:subjects(name, theme_color))")
-    .order("created_at", { ascending: false });
+export async function getAllReadingSessions(offset = 0) {
+  if (!Number.isInteger(offset) || offset < 0) throw new Error("Página de histórico inválida.");
+  const client = await getActionClient();
+  const pageSize = 50;
+  const [{ data, error, count }, speedStats, heatmapSessions] = await Promise.all([
+    client
+      .from("reading_sessions")
+      .select("*, reading:readings(title, chapter_title, author, type, target_pages, full_book_pages, segment_start_page, subject:subjects(name, theme_color))", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + pageSize - 1),
+    getSpeedStats(),
+    offset === 0 ? getConsistencyHeatmapSessions() : Promise.resolve([]),
+  ]);
   if (error) throw new Error(error.message);
   const sessions = data ?? [];
-  const truncated = warnIfTruncated(sessions, "getAllReadingSessions");
-  return { sessions, truncated };
+  const nextOffset = offset + sessions.length;
+  return {
+    sessions,
+    nextOffset,
+    totalCount: count ?? nextOffset,
+    hasMore: nextOffset < (count ?? nextOffset),
+    totalPages: speedStats.reduce((total, item) => total + item.total_pages, 0),
+    totalSeconds: speedStats.reduce((total, item) => total + item.total_seconds, 0),
+    heatmapSessions,
+  };
 }
 
 /**
@@ -715,72 +799,32 @@ export async function getAllReadingSessions() {
 export async function createReadingSession(input: ReadingSessionInsert) {
   const validationError = validateSessionInput(input);
   if (validationError) throw new Error(validationError);
-
-  const { client: authenticatedClient, user } = await requireSupabaseUser();
-  const [readingResult, progressResult] = await Promise.all([
-    supabase
-      .from("readings")
-      .select("milestones, target_pages, segment_start_page")
-      .eq("id", input.reading_id)
-      .maybeSingle(),
-    supabase
-      .from("reading_progress")
-      .select("pages_read")
-      .eq("reading_id", input.reading_id)
-      .maybeSingle(),
-  ]);
-  if (readingResult.error) throw new Error(readingResult.error.message);
-  if (!readingResult.data) throw new Error("Leitura não encontrada.");
-  if (progressResult.error) throw new Error(progressResult.error.message);
-
-  const previousPage = Number(progressResult.data?.pages_read) || 0;
-  const nextPage = previousPage + input.pages_read;
-  const segmentMilestones = milestonesForSegment(
-    (readingResult.data.milestones ?? []) as ReadingMilestone[],
-    readingResult.data.segment_start_page,
-    readingResult.data.target_pages,
-  );
-  const crossedMilestones = getCrossedMilestones(
-    segmentMilestones,
-    previousPage,
-    nextPage,
-    readingResult.data.target_pages,
-  );
-
-  const durationSeconds = input.duration_seconds;
-  const { data: session, error: sessionError } = await supabase
-    .from("reading_sessions")
-    .insert({
-      ...input,
-      duration_minutes: secondsToMinutes(durationSeconds),
-      started_at: input.started_at ?? null,
-      ended_at: input.ended_at ?? null,
-    })
-    .select()
-    .single();
-  if (sessionError) throw new Error(sessionError.message);
-
-  if (crossedMilestones.length > 0) {
-    const summaries = crossedMilestones.map((milestone) => ({
-      user_id: user.id,
-      book_id: input.reading_id,
-      milestone_title: milestone.title,
-      milestone_page: milestone.originalPage ?? milestone.page,
-      content: null,
-      status: "pending" as const,
-    }));
-    const { error: summaryError } = await authenticatedClient
-      .from("milestone_summaries")
-      .upsert(summaries, {
-        onConflict: "user_id,book_id,milestone_page,milestone_title",
-        ignoreDuplicates: true,
-      });
-    if (summaryError) throw new Error(summaryError.message);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(input.request_id)) {
+    throw new Error("Identificador de envio da sessão inválido.");
   }
 
-  const newSpeedPph = await recalculateReadingSpeed(input.reading_id);
+  const { client } = await requireSupabaseUser();
+  const { data: result, error: sessionError } = await client.rpc("create_reading_session_atomic", {
+    p_request_id: input.request_id,
+    p_reading_id: input.reading_id,
+    p_pages_read: input.pages_read,
+    p_duration_seconds: input.duration_seconds,
+    p_started_at: input.started_at ?? null,
+    p_ended_at: input.ended_at ?? null,
+    p_source: input.source,
+  });
+  if (sessionError) throw new Error(sessionError.message);
+  const created = Array.isArray(result) ? result[0] : null;
+  if (!created?.session_id) throw new Error("O banco não confirmou o registro da sessão.");
+  const { data: session, error: readError } = await client
+    .from("reading_sessions")
+    .select("*")
+    .eq("id", created.session_id)
+    .single();
+  if (readError) throw new Error(readError.message);
+
   revalidateReadingSessionPaths(input.reading_id);
-  return { session, newSpeedPph };
+  return { session, newSpeedPph: Number(created.current_speed_pph) };
 }
 
 export async function getMilestoneSummaries(): Promise<MilestoneSummaryWithBook[]> {
@@ -949,7 +993,8 @@ export async function updateReadingSession(
   id: string,
   input: { pages_read: number; duration_seconds: number },
 ) {
-  const { data: original, error: findError } = await supabase
+  const client = await getActionClient();
+  const { data: original, error: findError } = await client
     .from("reading_sessions")
     .select("*")
     .eq("id", id)
@@ -969,26 +1014,26 @@ export async function updateReadingSession(
     Math.abs(input.duration_seconds - sessionSeconds(original)) > 5
     ? "timer_adjusted"
     : original.source;
-  const { data: session, error } = await supabase
-    .from("reading_sessions")
-    .update({
-      pages_read: input.pages_read,
-      duration_seconds: input.duration_seconds,
-      duration_minutes: secondsToMinutes(input.duration_seconds),
-      source: adjustedSource,
-    })
-    .eq("id", id)
-    .select()
-    .single();
+  const { data: newSpeedPph, error } = await client.rpc("update_reading_session_atomic", {
+    p_session_id: id,
+    p_pages_read: input.pages_read,
+    p_duration_seconds: input.duration_seconds,
+    p_source: adjustedSource,
+  });
   if (error) throw new Error(error.message);
-
-  const newSpeedPph = await recalculateReadingSpeed(original.reading_id);
+  const { data: session, error: sessionError } = await client
+    .from("reading_sessions")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (sessionError) throw new Error(sessionError.message);
   revalidateReadingSessionPaths(original.reading_id);
-  return { session, newSpeedPph };
+  return { session, newSpeedPph: Number(newSpeedPph) };
 }
 
 export async function deleteReadingSession(id: string) {
-  const { data: original, error: findError } = await supabase
+  const client = await getActionClient();
+  const { data: original, error: findError } = await client
     .from("reading_sessions")
     .select("reading_id")
     .eq("id", id)
@@ -996,12 +1041,12 @@ export async function deleteReadingSession(id: string) {
   if (findError) throw new Error(findError.message);
   if (!original) throw new Error("Sessão não encontrada.");
 
-  const { error } = await supabase.from("reading_sessions").delete().eq("id", id);
+  const { data: newSpeedPph, error } = await client.rpc("delete_reading_session_atomic", {
+    p_session_id: id,
+  });
   if (error) throw new Error(error.message);
-
-  const newSpeedPph = await recalculateReadingSpeed(original.reading_id);
   revalidateReadingSessionPaths(original.reading_id);
-  return { success: true, newSpeedPph };
+  return { success: true, newSpeedPph: Number(newSpeedPph) };
 }
 
 // ============================================================
@@ -1009,29 +1054,16 @@ export async function deleteReadingSession(id: string) {
 // ============================================================
 
 export async function markReadingAsRead(readingId: string) {
-  const { error: updateError } = await supabase
-    .from("readings")
-    .update({ is_read: true })
-    .eq("id", readingId);
-  if (updateError) throw new Error(updateError.message);
-
+  const client = await getActionClient();
   const today = todayISO();
-  const intervals = [1, 7, 21];
-
-  const reviews = intervals.map((days) => ({
-    reading_id: readingId,
-    review_date: addDaysISO(today, days),
-    status: "pending" as const,
-    type: "active_recall",
-  }));
-
-  const { error: reviewError } = await supabase
-    .from("spaced_reviews")
-    .upsert(reviews, {
-      onConflict: "reading_id,review_date,type",
-      ignoreDuplicates: true,
-    });
-  if (reviewError) throw new Error(reviewError.message);
+  const { error } = await client.rpc("set_reading_completion_atomic", {
+    p_reading_id: readingId,
+    p_is_read: true,
+    p_review_date_1: addDaysISO(today, 1),
+    p_review_date_7: addDaysISO(today, 7),
+    p_review_date_21: addDaysISO(today, 21),
+  });
+  if (error) throw new Error(error.message);
 
   revalidatePath("/");
   revalidatePath("/library");
@@ -1039,17 +1071,15 @@ export async function markReadingAsRead(readingId: string) {
 }
 
 export async function markReadingAsUnread(readingId: string) {
-  const { error: updateError } = await supabase
-    .from("readings")
-    .update({ is_read: false })
-    .eq("id", readingId);
-  if (updateError) throw new Error(updateError.message);
-
-  const { error: deleteError } = await supabase
-    .from("spaced_reviews")
-    .delete()
-    .eq("reading_id", readingId);
-  if (deleteError) throw new Error(deleteError.message);
+  const client = await getActionClient();
+  const { error } = await client.rpc("set_reading_completion_atomic", {
+    p_reading_id: readingId,
+    p_is_read: false,
+    p_review_date_1: null,
+    p_review_date_7: null,
+    p_review_date_21: null,
+  });
+  if (error) throw new Error(error.message);
 
   revalidatePath("/");
   revalidatePath("/library");
@@ -1061,7 +1091,8 @@ export async function markReadingAsUnread(readingId: string) {
 // ============================================================
 
 export async function getSpacedReviews(status?: "pending" | "done") {
-  let query = supabase
+  const client = await getActionClient();
+  let query = client
     .from("spaced_reviews")
     .select("*, reading:readings(*, subject:subjects(*))")
     .order("review_date", { ascending: true });
@@ -1072,7 +1103,8 @@ export async function getSpacedReviews(status?: "pending" | "done") {
 }
 
 export async function updateSpacedReview(id: string, input: SpacedReviewUpdate) {
-  const { data, error } = await supabase
+  const client = await getActionClient();
+  const { data, error } = await client
     .from("spaced_reviews")
     .update(input)
     .eq("id", id)
@@ -1092,39 +1124,50 @@ export async function markReviewAsDone(id: string) {
 // MÉTRICAS POR DISCIPLINA (Histórico e Dashboard Gamificado)
 // ============================================================
 
-export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncated: boolean }> {
+export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncated: boolean; error?: string }> {
   try {
-    const { data: subjects, error: e1 } = await supabase
-      .from("subjects")
-      .select("*")
-      .order("name");
-    if (e1) {
-      console.warn("Aviso ao carregar subjects para stats:", e1.message);
-      return { stats: [], truncated: false };
+    const client = await getActionClient();
+    const pageSize = 1000;
+    const subjects: Subject[] = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await client
+        .from("subjects")
+        .select("*")
+        .order("name")
+        .order("id")
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as Subject[];
+      subjects.push(...rows);
+      if (rows.length < pageSize) break;
     }
 
-    const { data: readings, error: e2 } = await supabase
-      .from("readings")
-      .select("id, subject_id, is_read, target_pages");
-    if (e2) {
-      console.warn("Aviso ao carregar readings para stats:", e2.message);
-      return { stats: [], truncated: false };
+    const readings: Array<Pick<Reading, "id" | "subject_id" | "is_read" | "target_pages">> = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await client
+        .from("readings")
+        .select("id, subject_id, is_read, target_pages")
+        .order("id")
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as typeof readings;
+      readings.push(...rows);
+      if (rows.length < pageSize) break;
     }
 
-    const { data: progress, error: e3 } = await supabase
-      .from("reading_progress")
-      .select("reading_id, total_seconds, pages_read");
-    if (e3) {
-      console.warn("Aviso ao carregar sessions para stats:", e3.message);
-      return { stats: [], truncated: false };
+    const progressRows: ReadingProgressViewRow[] = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await client
+        .from("reading_progress")
+        .select("reading_id, total_seconds, pages_read")
+        .order("reading_id")
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as unknown as ReadingProgressViewRow[];
+      progressRows.push(...rows);
+      if (rows.length < pageSize) break;
     }
 
-    const progressRows = progress ?? [];
-    const truncated = warnIfTruncated(progressRows, "getSubjectStats.reading_progress");
-
-    // Agregar estatísticas por disciplina
-    const subjectRows = (subjects ?? []) as Subject[];
-    const readingRows = (readings ?? []) as Pick<Reading, "id" | "subject_id" | "is_read" | "target_pages">[];
     const progressByReading = new Map(
       progressRows.map((row) => [
         row.reading_id,
@@ -1132,8 +1175,8 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
       ]),
     );
 
-    const stats: SubjectStat[] = subjectRows.map((sub) => {
-      const subReadings = readingRows.filter((reading) => reading.subject_id === sub.id);
+    const stats: SubjectStat[] = subjects.map((sub) => {
+      const subReadings = readings.filter((reading) => reading.subject_id === sub.id);
       const totalReadings = subReadings.length;
       const completedReadings = subReadings.filter((reading) => reading.is_read).length;
 
@@ -1161,10 +1204,12 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
       };
     });
 
-    return { stats, truncated };
+    return { stats, truncated: false };
   } catch (err) {
-    console.warn("Erro ao calcular subject stats:", err);
-    return { stats: [], truncated: false };
+    unstable_rethrow(err);
+    const message = err instanceof Error ? err.message : "Falha desconhecida ao calcular as métricas por disciplina.";
+    console.warn("Erro ao calcular subject stats:", message);
+    return { stats: [], truncated: false, error: message };
   }
 }
 
@@ -1175,16 +1220,17 @@ export async function getSubjectStats(): Promise<{ stats: SubjectStat[]; truncat
 export async function getDashboardData() {
   const today = todayISO();
   const sevenDaysStr = addDaysISO(today, 7);
+  const client = await getActionClient();
   const [
-    progressByReading,
+    progressResult,
     lastSessionResult,
-    speedStats,
-    todaySummary,
-    dailyGoalMinutes,
-    heatmapSessions,
-  ] = await Promise.all([
+    speedStatsResult,
+    todaySummaryResult,
+    dailyGoalResult,
+    heatmapResult,
+  ] = await Promise.allSettled([
     getReadingProgressMap(),
-    supabase
+    client
       .from("reading_sessions")
       .select("reading_id")
       .order("created_at", { ascending: false })
@@ -1195,19 +1241,35 @@ export async function getDashboardData() {
     getDailyGoalMinutes(),
     getConsistencyHeatmapSessions(today),
   ]);
-  const todayReadingMinutes = todaySummary.minutes;
+  const metricWarnings: string[] = [];
+  const progressAvailable = progressResult.status === "fulfilled";
+  const progressByReading = progressAvailable ? progressResult.value : new Map<string, ReadingProgressSummary>();
+  const todaySummary = todaySummaryResult.status === "fulfilled" ? todaySummaryResult.value : null;
+  const todayReadingMinutes = todaySummary?.minutes ?? null;
+  const speedStats = speedStatsResult.status === "fulfilled" ? speedStatsResult.value : [];
+  const dailyGoalMinutes = dailyGoalResult.status === "fulfilled" ? dailyGoalResult.value : 60;
+  const heatmapSessions = heatmapResult.status === "fulfilled" ? heatmapResult.value : [];
   const consistencyHeatmap = buildConsistencyHeatmap(heatmapSessions, today);
-  if (lastSessionResult.error) {
-    console.warn("Aviso ao buscar a leitura da sessão mais recente:", lastSessionResult.error.message);
+  if (!progressAvailable) metricWarnings.push("O progresso das leituras não pôde ser carregado; recomendações foram ocultadas.");
+  if (!todaySummary) metricWarnings.push("O tempo e as páginas de hoje estão indisponíveis; a meta diária não pode ser calculada.");
+  if (speedStatsResult.status === "rejected") metricWarnings.push("A velocidade média está indisponível.");
+  if (dailyGoalResult.status === "rejected") metricWarnings.push("A meta diária não pôde ser carregada.");
+  if (heatmapResult.status === "rejected") metricWarnings.push("O mapa de consistência está indisponível.");
+  if (lastSessionResult.status === "rejected") {
+    metricWarnings.push("A sessão mais recente não pôde ser identificada.");
+  } else if (lastSessionResult.value.error) {
+    metricWarnings.push("A sessão mais recente não pôde ser identificada.");
   }
-  const lastSessionReadingId = lastSessionResult.data?.reading_id ?? null;
+  const lastSessionReadingId = lastSessionResult.status === "fulfilled"
+    ? lastSessionResult.value.data?.reading_id ?? null
+    : null;
 
   let tier1: SpacedReviewWithReading[] = [];
   let milestoneReviews: AgendaMilestoneReviewEvent[] = [];
   let schemaError: string | null = null;
 
   try {
-    const { data, error: e1 } = await supabase
+    const { data, error: e1 } = await client
       .from("spaced_reviews")
       .select("*, reading:readings(*, subject:subjects(*))")
       .eq("status", "pending")
@@ -1265,35 +1327,39 @@ export async function getDashboardData() {
 
   let allPendingReadings: Array<ReadingWithSubject & { suggested_deadline: string | null }> = [];
   try {
-    const { data, error: e2 } = await supabase
-      .from("readings")
-      .select("*, subject:subjects(*)")
-      .eq("is_read", false)
-      .order("deadline", { ascending: true });
-    if (e2) {
-      console.warn("Aviso na busca de readings:", e2.message);
-      if (!schemaError) schemaError = e2.message;
-    } else {
-      const rows = data ?? [];
-      warnIfTruncated(rows, "getDashboardData.readings");
-      const readingsWithProgress = (rows as unknown as ReadingWithSubject[]).map((reading) => ({
+    if (progressAvailable && todaySummary) {
+      const pageSize = 1000;
+      const rows: ReadingWithSubject[] = [];
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await client
+          .from("readings")
+          .select("*, subject:subjects(*)")
+          .eq("is_read", false)
+          .order("deadline", { ascending: true })
+          .order("id", { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw new Error(error.message);
+        const page = (data ?? []) as unknown as ReadingWithSubject[];
+        rows.push(...page);
+        if (page.length < pageSize) break;
+      }
+      const readingsWithProgress = rows.map((reading) => ({
         ...reading,
         pages_read: progressByReading.get(reading.id)?.pages_read ?? 0,
       }));
       allPendingReadings = attachSuggestedDeadlines(readingsWithProgress, speedStats);
     }
   } catch (err: unknown) {
-    console.warn(
-      "Exceção na busca de readings:",
-      err instanceof Error ? err.message : undefined
-    );
+    unstable_rethrow(err);
+    metricWarnings.push("As leituras pendentes não puderam ser carregadas.");
+    console.warn("Exceção na busca de readings:", err instanceof Error ? err.message : undefined);
   }
 
   const latestSessionDatesPromise = getLatestSessionDateMap(allPendingReadings, progressByReading);
 
   let urgentDeliverables: Deliverable[] = [];
   try {
-    const { data, error: e3 } = await supabase
+    const { data, error: e3 } = await client
       .from("deliverables")
       .select("*")
       .lte("date", sevenDaysStr)
@@ -1313,7 +1379,7 @@ export async function getDashboardData() {
 
   let allDeliverables: Deliverable[] = [];
   try {
-    const { data, error: e4 } = await supabase
+    const { data, error: e4 } = await client
       .from("deliverables")
       .select("*")
       .order("date", { ascending: true });
@@ -1329,7 +1395,14 @@ export async function getDashboardData() {
     );
   }
 
-  const latestSessionDates = await latestSessionDatesPromise;
+  let latestSessionDates = new Map<string, string>();
+  try {
+    latestSessionDates = await latestSessionDatesPromise;
+  } catch (error) {
+    unstable_rethrow(error);
+    metricWarnings.push("A data da última sessão por leitura está indisponível.");
+    console.warn("Não foi possível carregar as últimas sessões:", error);
+  }
   allPendingReadings = allPendingReadings.map((reading) => ({
     ...reading,
     last_session_at: latestSessionDates.get(reading.id) ?? null,
@@ -1386,15 +1459,15 @@ export async function getDashboardData() {
 
   const userPacePagesPerDay = pickUserPacePagesPerDay(speedStats);
   const reviewCount = (tier1 ?? []).length + milestoneReviews.length;
-  const recommendedReading = getSuggestedReading(
+  const recommendedReading = todaySummary && progressAvailable ? getSuggestedReading(
     [...tier2, ...tier3, ...tier4],
     userPacePagesPerDay,
     today,
     {
       todayPagesByReading: todaySummary.pagesByReading,
-      dailyGoalReached: todayReadingMinutes >= dailyGoalMinutes,
+      dailyGoalReached: todayReadingMinutes !== null && todayReadingMinutes >= dailyGoalMinutes,
     },
-  );
+  ) : null;
   const budgetAware = recommendedReading
     ? calculateBudgetAwareSuggestedPages({
       reading: recommendedReading,
@@ -1425,8 +1498,8 @@ export async function getDashboardData() {
       userPacePagesPerDay,
       today,
       {
-        todayPagesByReading: todaySummary.pagesByReading,
-        dailyGoalReached: todayReadingMinutes >= dailyGoalMinutes,
+        todayPagesByReading: todaySummary!.pagesByReading,
+        dailyGoalReached: todayReadingMinutes !== null && todayReadingMinutes >= dailyGoalMinutes,
       },
     )
     : null;
@@ -1451,6 +1524,7 @@ export async function getDashboardData() {
     urgentDeliverables: urgentDeliverables ?? [],
     allDeliverables: allDeliverables ?? [],
     schemaError,
+    metricWarnings,
     lastSessionReadingId,
     todayReadingMinutes,
     dailyGoalMinutes,
@@ -1480,14 +1554,15 @@ export async function getDashboardData() {
 // ============================================================
 
 export async function getReadingProjection(readingId: string) {
-  const { data: reading, error: readingError } = await supabase
+  const client = await getActionClient();
+  const { data: reading, error: readingError } = await client
     .from("readings")
     .select("*")
     .eq("id", readingId)
     .single();
   if (readingError) throw new Error(readingError.message);
 
-  const { data: sessions, error: sessionsError } = await supabase
+  const { data: sessions, error: sessionsError } = await client
     .from("reading_sessions")
     .select("pages_read")
     .eq("reading_id", readingId);

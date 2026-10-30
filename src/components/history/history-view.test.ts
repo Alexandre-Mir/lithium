@@ -17,6 +17,7 @@ import { HistoryView } from "@/components/history/history-view";
 const session: ReadingSessionWithReading = {
   id: "session-1",
   reading_id: "reading-1",
+  request_id: null,
   duration_minutes: 45,
   duration_seconds: 2700,
   started_at: "2026-10-27T12:00:00.000Z",

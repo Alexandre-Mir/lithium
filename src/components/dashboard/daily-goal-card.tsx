@@ -11,7 +11,7 @@ import { computeDailyGoalProjection } from "@/lib/projection";
 const GOAL_SAVE_DEBOUNCE_MS = 600;
 
 interface DailyGoalCardProps {
-  todayReadingMinutes: number;
+  todayReadingMinutes: number | null;
   goalMinutes: number;
   averageSpeedPph: number;
 }
@@ -56,9 +56,13 @@ export function DailyGoalCard({ todayReadingMinutes, goalMinutes, averageSpeedPp
 
   useEffect(() => clearSaveTimer, [clearSaveTimer]);
 
-  const progressPercent = Math.min(100, (todayReadingMinutes / goalMinutes) * 100);
-  const goalReached = todayReadingMinutes >= goalMinutes;
-  const goalProjection = computeDailyGoalProjection(todayReadingMinutes, goalMinutes, averageSpeedPph);
+  const progressPercent = todayReadingMinutes === null
+    ? 0
+    : Math.min(100, (todayReadingMinutes / goalMinutes) * 100);
+  const goalReached = todayReadingMinutes !== null && todayReadingMinutes >= goalMinutes;
+  const goalProjection = todayReadingMinutes === null
+    ? null
+    : computeDailyGoalProjection(todayReadingMinutes, goalMinutes, averageSpeedPph);
   const parsedDraft = Number(draft);
   const draftIsValid = Number.isInteger(parsedDraft) && parsedDraft >= 1 && parsedDraft <= 1440;
 
@@ -96,25 +100,31 @@ export function DailyGoalCard({ todayReadingMinutes, goalMinutes, averageSpeedPp
 
           <div className="flex items-baseline gap-1.5 font-mono tabular-nums">
             <span className={`text-xl font-bold ${goalReached ? "text-emerald-700 dark:text-emerald-400" : "text-gray-900 dark:text-gray-100"}`}>
-              {formatMinutes(todayReadingMinutes)}
+              {todayReadingMinutes === null ? "Indisponível" : formatMinutes(todayReadingMinutes)}
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400">/ {goalMinutes} min</span>
           </div>
 
-          <div
-            className="h-2 w-full overflow-hidden rounded-sm border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
-            role="progressbar"
-            aria-label="Progresso da meta diária de leitura"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(progressPercent)}
-          >
+          {todayReadingMinutes === null ? (
+            <p role="status" className="text-[11px] text-amber-700 dark:text-amber-300">
+              Não foi possível consultar o tempo de leitura de hoje.
+            </p>
+          ) : (
             <div
-              className={`h-full transition-[width] ${goalReached ? "bg-emerald-600" : "bg-indigo-600"}`}
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          {!goalReached && (
+              className="h-2 w-full overflow-hidden rounded-sm border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800"
+              role="progressbar"
+              aria-label="Progresso da meta diária de leitura"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progressPercent)}
+            >
+              <div
+                className={`h-full transition-[width] ${goalReached ? "bg-emerald-600" : "bg-indigo-600"}`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          )}
+          {todayReadingMinutes !== null && !goalReached && goalProjection && (
             <p className="text-[11px] text-gray-600 dark:text-gray-400">
               Faltam aprox. {Math.ceil(goalProjection.estimatedMinutesRemaining)} min para bater a meta
               <span className="ml-1 text-gray-500 dark:text-gray-500">
