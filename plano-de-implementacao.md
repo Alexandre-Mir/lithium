@@ -94,6 +94,12 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - **Arquivos-chave:** `src/app/actions.ts`, `src/components/library/library-view.tsx`, `src/components/setup/subjects-table.tsx`.
   - *Resolução:* Leituras, disciplinas, sessões e dados usados pelas métricas são buscados em páginas completas; a validação de dias de aula também pagina a lista de disciplinas.
 
+- [x] **`BUG-20` — Atualização Antecipada da Store do Cronômetro Durante a Hidratação**
+  - **Contexto:** A assinatura de `useSyncExternalStore` lia o cronômetro do `localStorage` e notificava assinantes imediatamente. Com um cronômetro persistido, isso podia atualizar a raiz antes da hidratação e causar o erro React #441.
+  - **Ação:** Manter o snapshot inicial compatível com o servidor e carregar o estado persistido após a montagem; cobrir a ordem de inscrição e hidratação com teste.
+  - **Arquivos-chave:** `src/lib/reading-timer-store.ts`, `src/lib/reading-timer-store-hydration.test.ts`.
+  - *Resolução:* A inscrição agora só registra listeners; a leitura inicial do storage ocorre em `useEffect`, e eventos de outras abas são ignorados até essa leitura terminar.
+
 ### Concluídos
 - [x] **`BUG-01` — Conclusão de Leitura Destrutiva sem Toast de "Desfazer" no Dashboard**
   - *Resolução:* Implementado `addToast` com temporizador e ação `[Desfazer]` acionando `markReadingAsUnread(id)` em `reading-tier-card.tsx` e `tier1-card.tsx`.
@@ -408,3 +414,4 @@ As propostas abaixo foram analisadas e **rejeitadas da forma em que foram formul
 | 2026-10-30 | `DOC-10` | Revisão visual do login em desktop e mobile; anotado o excesso de espaço abaixo do formulário em viewports observados | `plano-de-implementacao.md` |
 | 2026-10-30 | `DOC-11` | Revisão visual autenticada em desktop e mobile; UX-20 detalhado com o corte da tabela de disciplinas e registrados os atritos UX-24/25; Agenda e Histórico mobile sem problemas evidentes nas telas revistas | `plano-de-implementacao.md` |
 | 2026-10-30 | `BUG-07; BUG-10 a BUG-19` | Paginação do Histórico e listas, rateio por data local, validações de progresso, exclusões restritivas, métricas degradadas e RPCs transacionais; migração v1.12 preparada, não aplicada | `src/app/actions.ts`, `src/lib/session-time.ts`, `src/lib/consistency-heatmap.ts`, componentes de Histórico/Dashboard, `supabase/migration-v1.12.sql`, `supabase/schema.sql` |
+| 2026-11-09 | `BUG-20` | Adiar leitura da store persistida até depois da hidratação para evitar atualização antecipada da raiz | `src/lib/reading-timer-store.ts`, `src/lib/reading-timer-store-hydration.test.ts` |

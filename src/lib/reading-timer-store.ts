@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import {
   pauseTimer,
   parse,
@@ -81,7 +81,6 @@ function syncFromStorage() {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  if (typeof window !== "undefined" && !hydratedFromStorage) syncFromStorage();
   if (typeof window !== "undefined" && listeners.size === 1) {
     window.addEventListener("storage", handleStorage);
   }
@@ -94,6 +93,7 @@ function subscribe(listener: () => void) {
 }
 
 function handleStorage(event: StorageEvent) {
+  if (!hydratedFromStorage) return;
   if (event.key !== READING_TIMER_STORAGE_KEY && event.key !== null) return;
   snapshot = parse(event.newValue);
   hydratedFromStorage = true;
@@ -108,7 +108,11 @@ function commit(next: TimerState | null) {
 }
 
 export function useReadingTimer(): TimerState | null {
-  return useSyncExternalStore(subscribe, () => snapshot, () => null);
+  const timer = useSyncExternalStore(subscribe, () => snapshot, () => null);
+  useEffect(() => {
+    if (!hydratedFromStorage) syncFromStorage();
+  }, []);
+  return timer;
 }
 
 export function getReadingTimerSnapshot(): TimerState | null {
