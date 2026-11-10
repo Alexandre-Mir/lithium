@@ -537,8 +537,12 @@ BEGIN
     RAISE EXCEPTION 'Session end cannot be earlier than its start';
   END IF;
 
-  SELECT id, milestones, target_pages, segment_start_page, type, current_speed_pph
-    INTO v_reading FROM public.readings WHERE id = p_reading_id FOR UPDATE;
+  SELECT r.id, r.milestones, r.target_pages, r.segment_start_page, r.type,
+         r.current_speed_pph
+    INTO v_reading
+    FROM public.readings AS r
+   WHERE r.id = p_reading_id
+   FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Reading not found'; END IF;
 
   INSERT INTO public.reading_sessions
