@@ -76,7 +76,7 @@ export function QuickSessionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-md border border-gray-200 dark:border-gray-800">
+      <DialogContent className="rounded-md border border-gray-200 dark:border-gray-800 sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-sm font-bold">Sessão Rápida</DialogTitle>
           <DialogDescription className="text-xs">

@@ -100,11 +100,17 @@ Registre aqui ideias acionáveis identificadas durante o trabalho que ainda prec
   - **Arquivos-chave:** `src/lib/reading-timer-store.ts`, `src/lib/reading-timer-store-hydration.test.ts`.
   - *Resolução:* A inscrição agora só registra listeners; a leitura inicial do storage ocorre em `useEffect`, e eventos de outras abas são ignorados até essa leitura terminar.
 
-- [ ] **`BUG-21` — Registro de Sessão Falha por Coluna Ambígua na RPC**
+- [X] **`BUG-21` — Registro de Sessão Falha por Coluna Ambígua na RPC**
   - **Contexto:** Após aplicar v1.12, `create_reading_session_atomic` falha com `column reference "current_speed_pph" is ambiguous`, pois o nome de saída da função colide com a coluna lida de `readings`.
   - **Ação:** Qualificar a coluna na consulta e aplicar uma nova migração sem editar a v1.12 já aplicada.
   - **Arquivos-chave:** `supabase/migration-v1.13.sql`, `supabase/schema.sql`.
   - *Correção preparada:* A consulta de leitura usa o alias `r.current_speed_pph`; aplicar a migração v1.13 para atualizar a função e recarregar o cache do PostgREST.
+
+- [x] **`BUG-22` — Rodapé da Sessão Rápida Transborda em Viewports Intermediários**
+  - **Contexto:** Os três botões do rodapé ficam em uma única linha em telas com breakpoint `sm`, mas a largura máxima pequena do diálogo não comporta o conteúdo e gera rolagem horizontal.
+  - **Ação:** Aumentar a largura máxima do diálogo para acomodar os botões sem alterar o layout compacto em telas menores.
+  - **Arquivos-chave:** `src/components/dashboard/quick-session-dialog.tsx`.
+  - *Resolução:* O diálogo usa `sm:max-w-md`, oferecendo mais espaço horizontal quando o rodapé passa a exibir os botões em linha.
 
 ### Concluídos
 - [x] **`BUG-01` — Conclusão de Leitura Destrutiva sem Toast de "Desfazer" no Dashboard**
@@ -422,3 +428,4 @@ As propostas abaixo foram analisadas e **rejeitadas da forma em que foram formul
 | 2026-10-30 | `BUG-07; BUG-10 a BUG-19` | Paginação do Histórico e listas, rateio por data local, validações de progresso, exclusões restritivas, métricas degradadas e RPCs transacionais; migração v1.12 preparada, não aplicada | `src/app/actions.ts`, `src/lib/session-time.ts`, `src/lib/consistency-heatmap.ts`, componentes de Histórico/Dashboard, `supabase/migration-v1.12.sql`, `supabase/schema.sql` |
 | 2026-11-09 | `BUG-20` | Adiar leitura da store persistida até depois da hidratação para evitar atualização antecipada da raiz | `src/lib/reading-timer-store.ts`, `src/lib/reading-timer-store-hydration.test.ts` |
 | 2026-11-09 | `BUG-21` | Qualificar `current_speed_pph` na RPC transacional e preparar a migração corretiva v1.13 | `supabase/migration-v1.13.sql`, `supabase/schema.sql` |
+| 2026-11-09 | `BUG-22` | Ampliar modal de Sessão Rápida para evitar rolagem horizontal no rodapé | `src/components/dashboard/quick-session-dialog.tsx` |
